@@ -137,7 +137,7 @@ def tprofiles_gc_too_func(data, clue_gene):
     Function preparing the gctoo dataframe to extract from gctx file, choosing only landmark genes
     
     Input:
-    L1000: column meta data from clue.io that only includes training/test data
+    data: column meta data from clue.io that only includes training/test data
     clue_gene: row meta data from clue.io transcriptomic profiles
     
     Output:
@@ -260,6 +260,10 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
         Prints the accuracy, F1 score and confusion matrix for each of the ML algorithms.
         Save unique numpy array. 
     '''
+    # shuffling training and validation data
+    L1000_training = L1000_training.sample(frac = 1, random_state = 1)
+    L1000_validation = L1000_validation.sample(frac = 1, random_state = 1)
+    print(L1000_training.head())
     # extracting training transcriptomes
     profiles_gc_too_train = tprofiles_gc_too_func(L1000_training, clue_gene)
     if npy_exists:
@@ -311,8 +315,8 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
 if __name__ == "__main__":  
     # train_filename = input('Training Data Set Filename: ')
     #valid_filename = input('Validation Data Set Filename: ')
-    train_filename = 'L1000_training_set_cyclo_adr_2_cell_APC2.csv'
-    valid_filename = 'L1000_test_set_cyclo_adr_2_cell_APC2.csv'
+    train_filename = 'L1000_training_set_train_2APC1.csv'
+    valid_filename = 'L1000_test_set_train_2APC1.csv'
     #train_filename = 'L1000_training_set.csv'
     #valid_filename = 'L1000_valid_set.csv'
     
@@ -323,5 +327,5 @@ if __name__ == "__main__":
          L1000_validation = L1000_validation, 
          clue_gene= clue_gene, 
          npy_exists = False,
-         apply_class_weight= True)
+         apply_class_weight= False)
 
