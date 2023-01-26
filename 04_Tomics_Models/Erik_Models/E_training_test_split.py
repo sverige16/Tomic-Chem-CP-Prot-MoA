@@ -194,12 +194,12 @@ def create_splits(moas, filename_mod, perc_test, cc_q75, need_val = True, cell_l
 
 if __name__ == "__main__":  
     #moas = list(input('List of moas (lst with strs) (ex: ["cyclooxygenase inhibitor", "adrenergic receptor antagonist"]): ') )
-    moas = ["cyclooxygenase inhibitor", "adrenergic receptor antagonist"]
+    moas = ["cyclooxygenase inhibitor", "dopamine receptor antagonist"]
     filename_mod = input('filename modifier (ex :cyclo_adr_2): ' )            
     perc_test = float(input ('Perc in test/val data (ex: 0.2): '))
     need_val = False
     cc_q75 = float(input('Threshold for 75th quantile of pairwise spearman correlation (ex: 0.2; zero -> no threshold): '))
-    cell_lines = {"cyclooxygenase inhibitor": ["A375", "HA1E", "HCC515", "PC3", "VCAP", "HEPG2", "HT29", "MCF7", "A549"], 
- "adrenergic receptor antagonist" : ["A375", "HA1E", "HCC515", "VCAP", "HT29", "MCF7", "A549"] }
+    cell_lines = {"cyclooxygenase inhibitor": ["PC3"], 
+ "dopamine receptor antagonist" : ["PC3"] }
 
     create_splits(moas,filename_mod, perc_test, cc_q75, need_val, cell_lines)

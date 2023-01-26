@@ -28,6 +28,7 @@ import torchinfo
 from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier, BaggingClassifier
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_curve,log_loss, accuracy_score, f1_score
 from sklearn.metrics import average_precision_score,roc_auc_score
 import os
@@ -293,7 +294,7 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
         class_weight = None
 
     # battery of classifiers
-    for class_alg in [RandomForestClassifier(class_weight= class_weight), GradientBoostingClassifier(), AdaBoostClassifier(), KNeighborsClassifier(n_neighbors = 5), BaggingClassifier()]:
+    for class_alg in [LogisticRegression(class_weight = class_weight, solver= "liblinear", penalty = "l2"), RandomForestClassifier(class_weight= class_weight), GradientBoostingClassifier(), AdaBoostClassifier(), KNeighborsClassifier(n_neighbors = 5), BaggingClassifier()]:
         classifier = class_alg
         # use variance threshold
         if use_variance_threshold:
@@ -315,17 +316,17 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
 if __name__ == "__main__":  
     # train_filename = input('Training Data Set Filename: ')
     #valid_filename = input('Validation Data Set Filename: ')
-    train_filename = 'L1000_training_set_train_2APC1.csv'
-    valid_filename = 'L1000_test_set_train_2APC1.csv'
+    train_filename = 'L1000_training_set_cyclo_dop_2.csv'
+    valid_filename = 'L1000_test_set_cyclo_dop_2.csv'
     #train_filename = 'L1000_training_set.csv'
     #valid_filename = 'L1000_valid_set.csv'
     
     L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
-    main(use_variance_threshold = False, 
+    main(use_variance_threshold = True, 
          normalize= True, 
          L1000_training = L1000_training, 
          L1000_validation = L1000_validation, 
          clue_gene= clue_gene, 
          npy_exists = False,
-         apply_class_weight= False)
+         apply_class_weight= True)
 
