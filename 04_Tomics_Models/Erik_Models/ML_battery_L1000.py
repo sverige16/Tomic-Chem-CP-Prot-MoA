@@ -58,7 +58,9 @@ from sklearn.feature_selection import VarianceThreshold
 import os
 import pandas as pd
 import numpy as np
-
+import torch
+import pytorch_tabnet
+from pytorch_tabnet.tab_model import TabNetClassifier
 
 # Downloading all relevant data frames and csv files ----------------------------------------------------------
 
@@ -294,17 +296,17 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
         class_weight = None
 
     # battery of classifiers
-    for class_alg in [LogisticRegression(class_weight = class_weight, solver= "liblinear", penalty = "l2"), RandomForestClassifier(class_weight= class_weight), GradientBoostingClassifier(), AdaBoostClassifier(), KNeighborsClassifier(n_neighbors = 5), BaggingClassifier()]:
+    for class_alg in [LogisticRegression(class_weight = class_weight, solver= "liblinear", penalty = "l2"), RandomForestClassifier(class_weight= class_weight), GradientBoostingClassifier(), AdaBoostClassifier(), KNeighborsClassifier(n_neighbors = 5), BaggingClassifier(), TabNetClassifier()]:
         classifier = class_alg
         # use variance threshold
         if use_variance_threshold:
             df_train_vs, df_val_vs = variance_threshold(df_train, df_val)
-            classifier.fit(df_train_vs, labels_train)
-            predictions = classifier.predict(df_val_vs)
+            classifier.fit(df_train_vs.values, labels_train.values)
+            predictions = classifier.predict(df_val_vs.values)
 
         else:
-            classifier.fit(df_train, labels_train)
-            predictions = classifier.predict(df_val)
+            classifier.fit(df_train.values, labels_train.values)
+            predictions = classifier.predict(df_val.values)
 
         print('----------------------------------------------------------------------')
         print(class_alg)
@@ -316,8 +318,8 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
 if __name__ == "__main__":  
     # train_filename = input('Training Data Set Filename: ')
     #valid_filename = input('Validation Data Set Filename: ')
-    train_filename = 'L1000_training_set_cyclo_dop_2.csv'
-    valid_filename = 'L1000_test_set_cyclo_dop_2.csv'
+    train_filename = 'L1000_traininghey_set_cyclo_adr_2.csv'
+    valid_filename = 'L1000_test_set_cyclo_adr_2.csv'
     #train_filename = 'L1000_training_set.csv'
     #valid_filename = 'L1000_valid_set.csv'
     
