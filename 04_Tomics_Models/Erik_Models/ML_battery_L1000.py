@@ -31,6 +31,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_curve,log_loss, accuracy_score, f1_score
 from sklearn.metrics import average_precision_score,roc_auc_score
+from sklearn.ensemble import VotingClassifier
 import os
 import time
 from time import time
@@ -61,6 +62,8 @@ import numpy as np
 import torch
 import pytorch_tabnet
 from pytorch_tabnet.tab_model import TabNetClassifier
+nn._estimator_type = "classifier"
+
 
 # Downloading all relevant data frames and csv files ----------------------------------------------------------
 
@@ -245,8 +248,46 @@ def save_npy(dataset):
     file_name = input("Give filename for numpy array: ")
     np.save(path + file_name, dataset)
 
+def get_models(class_weight):
+    '''
+    Input:
+        class weight: including or not including class weight.
+    Output:
+        A list of tuples, with a str with a descriptor followed by the classifier function)
+    '''
+    TNC = TabNetClassifier()
+    TNC._estimator_type = "classifier"
+    models = list()
+    #models.append(('logreg', LogisticRegression(class_weight = class_weight, solver= "liblinear", penalty = "l2"))) 
+    #models.append(('RFC',RandomForestClassifier(class_weight= class_weight))) 
+    models.append(('gradboost', GradientBoostingClassifier()))
+    models.append(('Ada', AdaBoostClassifier()))
+    #models.append(('KNN', KNeighborsClassifier(n_neighbors = 5)))
+    models.append(('Bagg',BaggingClassifier()))
+    models.append(('Tab', TNC))
+    return models
+
+def printing_results(class_alg, labels_val, predictions): 
+    '''
+    Printing the results from the 
+    Input:
+        class_alg: name of the model
+        labels_val: the correct guesses
+        predictions: the predictions made by the model
+    Output:
+        Printed results of accuracy, F1 score, and confusion matrix
+    '''
+    print('----------------------------------------------------------------------')
+    print(class_alg)
+    anders = f1_score(labels_val, predictions, labels = ["0","1"], average = 'macro')
+    print(f' Accuracy score: {accuracy_score(labels_val, predictions)}')
+    print(f' F1 Score: {     anders   }')
+    print(f' Confusion Matrix: {confusion_matrix(labels_val, predictions)}')
+    print('----------------------------------------------------------------------')
+
+
 # ------------------------------------------------------------------------------------------------------------------------------
-def main(use_variance_threshold, normalize, L1000_training, L1000_validation, clue_gene, npy_exists, apply_class_weight):
+def main(use_variance_threshold, normalize, L1000_training, L1000_validation, clue_gene, npy_exists, apply_class_weight, ensemble):
     '''
     Tests a series of ML algorithms after optional pre-processing of the data in order to make predictions on the MoA class based on
     chosen transcriptomic profiles. 
@@ -259,6 +300,7 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
         clue_gene: Row metadata fro the transcriptomic profiles
         npy_exists: True/False: whether or not the numpy array with transcriptomic profiles has already been created (can save time if many moas are used.)
         apply_class_weight: True/False. Whether to apply class weights for the random forest classifier.
+        ensemble: True/False. Whether to apply to do an ensemble classifier with a select number of classifiers.
     Output:
         Prints the accuracy, F1 score and confusion matrix for each of the ML algorithms.
         Save unique numpy array. 
@@ -294,10 +336,12 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
         class_weight = "balanced"
     else:
         class_weight = None
-
+    
+    models = get_models(class_weight)
+    scores = list()
     # battery of classifiers
-    for class_alg in [LogisticRegression(class_weight = class_weight, solver= "liblinear", penalty = "l2"), RandomForestClassifier(class_weight= class_weight), GradientBoostingClassifier(), AdaBoostClassifier(), KNeighborsClassifier(n_neighbors = 5), BaggingClassifier(), TabNetClassifier()]:
-        classifier = class_alg
+    for class_alg in models:
+        classifier = class_alg[1]
         # use variance threshold
         if use_variance_threshold:
             df_train_vs, df_val_vs = variance_threshold(df_train, df_val)
@@ -307,18 +351,29 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
         else:
             classifier.fit(df_train.values, labels_train.values)
             predictions = classifier.predict(df_val.values)
+        f1_score_from_model = f1_score(labels_val, predictions, average= "macro") 
+        scores.append(f1_score_from_model)
+        printing_results(class_alg, labels_val, predictions)
 
-        print('----------------------------------------------------------------------')
-        print(class_alg)
-        print(f' Accuracy score: {accuracy_score(labels_val, predictions)}')
-        print(f' F1 Score: {     f1_score(labels_val, predictions, average= "macro")   }')
-        print(f' Confusion Matrix: {confusion_matrix(labels_val, predictions)}')
-        print('----------------------------------------------------------------------')
+    if ensemble:
+        ensemble = VotingClassifier(estimators = models, voting = 'soft', weights = scores)
+        
+        if use_variance_threshold:
+                df_train_vs, df_val_vs = variance_threshold(df_train, df_val)
+                ensemble.fit(df_train_vs.values, labels_train.values)
+                predictions = ensemble.predict(df_val_vs.values)
+
+        else:
+            ensemble.fit(df_train.values, labels_train.values)
+            predictions = ensemble.predict(df_val.values)
+        
+        printing_results('ensemble', labels_val, predictions)
+        
 
 if __name__ == "__main__":  
     # train_filename = input('Training Data Set Filename: ')
     #valid_filename = input('Validation Data Set Filename: ')
-    train_filename = 'L1000_traininghey_set_cyclo_adr_2.csv'
+    train_filename = 'L1000_training_set_cyclo_adr_2.csv'
     valid_filename = 'L1000_test_set_cyclo_adr_2.csv'
     #train_filename = 'L1000_training_set.csv'
     #valid_filename = 'L1000_valid_set.csv'
@@ -330,5 +385,6 @@ if __name__ == "__main__":
          L1000_validation = L1000_validation, 
          clue_gene= clue_gene, 
          npy_exists = False,
-         apply_class_weight= True)
+         apply_class_weight= True,
+         ensemble = True)
 
