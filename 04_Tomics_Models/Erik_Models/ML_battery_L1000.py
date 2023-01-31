@@ -260,10 +260,10 @@ def get_models(class_weight):
     models = list()
     #models.append(('logreg', LogisticRegression(class_weight = class_weight, solver= "liblinear", penalty = "l2"))) 
     #models.append(('RFC',RandomForestClassifier(class_weight= class_weight))) 
-    models.append(('gradboost', GradientBoostingClassifier()))
-    models.append(('Ada', AdaBoostClassifier()))
+    #models.append(('gradboost', GradientBoostingClassifier()))
+    #models.append(('Ada', AdaBoostClassifier()))
     #models.append(('KNN', KNeighborsClassifier(n_neighbors = 5)))
-    models.append(('Bagg',BaggingClassifier()))
+    #models.append(('Bagg',BaggingClassifier()))
     models.append(('Tab', TNC))
     return models
 
@@ -285,6 +285,15 @@ def printing_results(class_alg, labels_val, predictions):
     print(f' Confusion Matrix: {confusion_matrix(labels_val, predictions)}')
     print('----------------------------------------------------------------------')
 
+def write_list(a_list, file_type):
+    with open('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/pickles/tabnet_pickles/' + file_type + '.pickle', 'wb') as fp:
+        pickle.dump(a_list, fp)
+    print('Done writing binary file')
+
+def save_val(a_list, file_type):
+    with open('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/pickles/val_order_pickles/' + file_type + '.pickle', 'wb') as fp:
+        pickle.dump(a_list, fp)
+    print('Done writing binary file')
 
 # ------------------------------------------------------------------------------------------------------------------------------
 def main(use_variance_threshold, normalize, L1000_training, L1000_validation, clue_gene, npy_exists, apply_class_weight, ensemble):
@@ -326,6 +335,7 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
         df_val = np_array_transform(profiles_gc_too_valid)
         save_npy(df_val)
     input_df_val, labels_val = splitting(L1000_validation) 
+
     
     # to normalize
     if normalize:
@@ -347,15 +357,28 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
             df_train_vs, df_val_vs = variance_threshold(df_train, df_val)
             classifier.fit(df_train_vs.values, labels_train.values)
             predictions = classifier.predict(df_val_vs.values)
+            if class_alg[0] == 'Tab':
+                save_val(labels_val, 'tab_val')
+                class_probs= classifier.predict_proba(df_val_vs.values)
+                write_list(predictions, 'predictions')
+                write_list(class_probs, 'class_probs')
 
         else:
             classifier.fit(df_train.values, labels_train.values)
             predictions = classifier.predict(df_val.values)
+            if class_alg[0] == 'Tab':
+                save_val(labels_val, 'tab_val')
+                class_probs = classifier.predict_proba(df_val_vs.values)
+                write_list(predictions, 'predictions')
+                write_list(class_probs, 'class_probs')
         f1_score_from_model = f1_score(labels_val, predictions, average= "macro") 
         scores.append(f1_score_from_model)
         printing_results(class_alg, labels_val, predictions)
+       
+
 
     if ensemble:
+        # 'soft':  predict the class labels based on the predicted probabilities p for classifier 
         ensemble = VotingClassifier(estimators = models, voting = 'soft', weights = scores)
         
         if use_variance_threshold:

@@ -79,6 +79,10 @@ clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_d
 
 # In[40]:
 
+def save_val(val_tensor, file_type):
+    torch.save(val_tensor, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/pickles/val_order_pickles/' + file_type )
+    print('Done writing binary file')
+
 
 def splitting_into_tensor(df, num_classes):
     '''Splitting data into two parts:
@@ -128,7 +132,6 @@ learning_rate = 5e-3
 # parameters
 params = {'batch_size' : batch_size,
          'num_workers' : 3,
-         'shuffle' : True,
          'prefetch_factor' : 2} 
           
 if using_cuda:
@@ -164,12 +167,6 @@ profiles_gc_too_train = tprofiles_gc_too_func(L1000_training, clue_gene)
 profiles_gc_too_valid = tprofiles_gc_too_func(L1000_validation, clue_gene)
 
 
-# In[46]:
-
-
-L1000_training.columns
-
-
 # In[47]:
 
 
@@ -184,7 +181,7 @@ num_classes
 input_df_val, labels_train = splitting_into_tensor(L1000_training, num_classes) 
 input_df_val, labels_val = splitting_into_tensor(L1000_validation, num_classes) 
 
-
+save_val(labels_val, '1DCNN_val')
 # In[49]:
 
 
@@ -391,6 +388,8 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
     loss_val = 0.0
     correct = 0
     total = 0
+    predict_proba = []
+    predictions = []
     with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
         for tprofiles, labels in valid_loader:
             # Move to device MAY NOT BE NECESSARY
@@ -398,17 +397,22 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             labels = labels.to(device= device)
             # Assessing outputs
             outputs = model(tprofiles)
+            #probs = torch.nn.Softmax(outputs)
             loss = loss_fn(outputs,labels)
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
             labels = torch.argmax(labels,1)
             total += labels.shape[0]
-            correct += int((predicted == labels).sum())
+            correct += int((predicted == labels).sum()) # saving best 
+            predict_proba.append(outputs)
+            predictions.append(predicted)
         avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
         if best_val_loss > avg_val_loss:
             best_val_loss = avg_val_loss
+            m = torch.nn.Softmax(dim=1)
             torch.save(
-                {
+                {   'predict_proba' : m(torch.cat(predict_proba)),
+                    'predictions' : torch.cat(predictions),
                     'model_state_dict' : model.state_dict(),
                     'valid_loss' : loss_val
             },  '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'Tomics_1DCNN'
