@@ -22,7 +22,7 @@ def csv_image_path_constructor(compounds_csv,project_name, moa_min = 3, neg_con 
     
     Input:
         compounds_csv: give path name to compounds file that you want
-        project_name: give name of project a
+        project_name: give name of project 
         moa_min: hyperparameter; minimum number of moas
         neg_con: hyperparameter choosing which negative controls to include (negcon is all, [dmso], sorb, are the other options)
     Output:

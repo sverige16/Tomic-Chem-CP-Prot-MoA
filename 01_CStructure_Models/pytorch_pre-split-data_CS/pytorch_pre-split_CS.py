@@ -3,9 +3,6 @@
 
 # !pip install rdkit-pypi
 
-# In[2]:
-
-
 # import statements
 from rdkit import Chem
 from rdkit.Chem import DataStructs, AllChem
@@ -14,6 +11,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split # Functipn to split data into training, validation and test sets
+from sklearn.metrics import classification_report, confusion_matrix
 import pickle
 import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
 import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
@@ -21,44 +19,28 @@ import random
 from tqdm import tqdm 
 from tqdm.notebook import tqdm_notebook
 import datetime
+import time
+from tabulate import tabulate
 
 # Torch
 import torch
 from torchvision import transforms
 import torchvision.models as models
 import torch.nn as nn
+# ----------------------------------------- hyperparameters ---------------------------------------#
+# Hyperparameters
+testing = False # decides if we take a subset of the data
+max_epochs = 250 # number of epochs we are going to run 
+apply_class_weights = True # weight the classes based on number of compounds
+using_cuda = True # to use available GPUs
+world_size = torch.cuda.device_count()
 
-
-# # Pseudo Code
-# 1. download train, validation and test data
-# 2. keep only columns with relevant data (compound name, smile strings, moa)
-#     1. assert that dmso not in all data values
-# 3. create function that gets produces a dictionary with all relevant moas and assigns a number to them
-#     1. extract unique values
-#     2. enumerate loop, add to growing dictionary, where name is the key.
-# 4. set these values as moa
-# 5. do one hot encoding
-# 6. Fix torch_set so that it can handle pandas instead of an extra dictionary 
-
-# In[3]:
-
-
-compounds_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/compounds_v1v2.csv', delimiter = ",")
-    
-
-
-# In[5]:
-
-
-# testing using pandas dataframe
-training_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_training_set_cyclo_adr_2.csv')
-validation_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_valid_set_cyclo_adr_2.csv')
-test_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_test_set_cyclo_adr_2.csv')
-
-
-# In[14]:
-
-
+#----------------------------------------- pre-processing -----------------------------------------#
+start = time.time()
+now = datetime.datetime.now()
+now = now.strftime("%d_%m_%Y-%H:%M:%S")
+print("Begin Training")
+#---------------------------------------------------------------------------------------------------------------------------------------#
 def splitting_into_tensor(df, num_classes):
     '''Splitting data into two parts:
     1. input : the pointer showing where the transcriptomic profile is  
@@ -70,304 +52,12 @@ def splitting_into_tensor(df, num_classes):
 
     # For each row, take the index of the target label
     # (which coincides with the score in our case) and use it as the column index to set the value 1.0.” 
-    target_onehot = torch.zeros(target.shape[0], num_classes)
-    target_onehot.scatter_(1, target.unsqueeze(1), 1.0)
+    #target_onehot = torch.zeros(target.shape[0], num_classes)
+    #target_onehot.scatter_(1, target.unsqueeze(1), 1.0)
     
     input =  df.drop('moa', axis = 1)
     
-    return input, target_onehot
-
-
-# In[15]:
-
-
-assert training_set.moa.unique().all() == validation_set.moa.unique().all() == test_set.moa.unique().all()
-
-
-# In[16]:
-
-
-input, labels = splitting_into_tensor(training_set, 2)
-
-
-# In[20]:
-
-
-input.columns
-
-
-# In[19]:
-
-
-labels
-
-
-# In[8]:
-
-
-# Limiting the data to the first 2000 rows
-testing = False
-if testing == True:
-    all_data = all_data[0:1000]
-
-
-# In[ ]:
-
-
-
-
-
-# In[9]:
-
-
-# drop random previous index in table above
-all_data.drop(all_data.columns[[0,11, 12]], axis=1, inplace=True) # Check that reading the data worked 
-all_data.head(10)
-
-
-# In[10]:
-
-
-print(len(all_data))
-# Drop the lines with DMSO 
-all_data = all_data[all_data.moa != 'dmso']
-assert 'dmso' not in all_data.values
-print(len(all_data))
-
-
-# In[11]:
-
-
-dictionary = {'ATPase inhibitor': 7, 'Aurora kinase inhibitor': 0,
- 'HDAC inhibitor': 4, 'HSP inhibitor': 9, 'JAK inhibitor': 2, 'PARP inhibitor': 6,
- 'protein synthesis inhibitor': 3, 'retinoid receptor agonist': 8,
- 'topoisomerase inhibitor': 5, 'tubulin polymerization inhibitor': 1}
-
-
-# In[12]:
-
-
-num_classes = len(dictionary) 
-num_classes
-
-
-# In[129]:
-
-
-'''# change moa to classes 
-all_data['classes'] = None
-for i in range(all_data.shape[0]):
-    all_data.iloc[i, 10] = dictionary[all_data.iloc[i, 9]]
-# create dictionary for labels, using PyTorch
-# creating tensor from all_data.df
-target = torch.tensor(all_data['classes'].values.astype(np.int64))
-target, target.shape
-target_onehot = torch.zeros(target.shape[0], num_classes)
-target_onehot.scatter_(1, target.unsqueeze(1), 1.0)
-
-labels = {}
-for index,compound in zip(all_data.index.tolist(), target_onehot):
-    labels[index] = compound
-
-
-all_data['one_hot'] = None
-for i in range(all_data.shape[0]):
-    all_data.iloc[i, 11] = labels[all_data.iloc[i, 10]]'''
-
-
-# In[130]:
-
-
-all_data
-
-
-# In[13]:
-
-
-# get the compound-MoA pair 
-compound_moa = all_data.drop_duplicates(subset = ['compound']).reset_index()
-compound_moa = compound_moa[["compound", "moa"]]
-
-
-# In[14]:
-
-
-compound_moa
-
-
-# In[15]:
-
-
-# got to put the labels into the same array as compounds_moa in order for the indexing to work. Biggest problem is I only have
-# have 250 compounds to train, not 120000, which probabilty artificially gives a bunch of extra compounds I don't have
-
-
-# In[16]:
-
-
-# change moa to classes 
-compound_moa['classes'] = None
-for i in range(compound_moa.shape[0]):
-    compound_moa.iloc[i, 2] =dictionary[compound_moa.iloc[i, 1]] 
-# create dictionary for labels, using PyTorch
-# creating tensor from all_data.df
-target = torch.tensor(compound_moa['classes'].values.astype(np.int64))
-target, target.shape
-target_onehot = torch.zeros(target.shape[0], num_classes)
-target_onehot.scatter_(1, target.unsqueeze(1), 1.0)
-
-labels = {}
-for index,compound in zip(all_data.index.tolist(), target_onehot):
-    labels[index] = compound
-#print(compound_moa.iloc[3,2])
-
-
-# In[17]:
-
-
-# split dataset into test and training/validation sets (10-90 split)
-compound_train_valid, compound_test, moa_train_valid, moa_test = train_test_split(
-  compound_moa.compound, compound_moa.moa, test_size = 0.10, stratify = compound_moa.moa, 
-  shuffle = True, random_state = 1)
-
-
-# In[18]:
-
-
-compound_train_valid
-
-
-# In[19]:
-
-
-# Split data set into training and validation sets (1 to 9)
-# Same as above, but does split of only training data into training and validation data (in order to take advantage of stratification parameter)
-compound_train, compound_valid, moa_train, moa_valid = train_test_split(
-  compound_train_valid, moa_train_valid, test_size = 10/90, stratify = moa_train_valid,
-  shuffle = True, random_state = 62757)
-
-
-# In[20]:
-
-
-# get the train, valid and test set by for every compound in data set, if it is in train, valid or test, return all info from all_data in new df.
-train = all_data[all_data['compound'].isin(compound_train)]
-valid = all_data[all_data['compound'].isin(compound_valid)]
-# test  = all_data[all_data['compound'].isin(compound_test)]
-''' Explanation
-reset_index = create new index starting from zero 
-drop: drop previous index.
-'''
-
-
-# In[21]:
-
-
-# create dictionary for parition
-partition = {"train": [], "valid": [], "test": []}
-
-train = compound_train.index.tolist()
-valid = compound_valid.index.tolist()
-test = compound_test.index.tolist()
-
-# place index into correct bin
-for index in compound_moa.index.tolist():
-#for index in compound_moa.index.tolist():
-    if index in train:
-        partition["train"] = train
-    elif index in valid:
-        partition["valid"]   = valid
-    else:
-        partition["test"]  = test
-        
-
-
-# In[22]:
-
-
-# FUck this was dumb. 
-
-
-# In[23]:
-
-
-print( partition["train"])
-partition["valid"]
-
-
-# In[24]:
-
-
-'''# create dictionary for parition
-partition = {"train": [], "valid": [], "test": []}
-
-# create lists with indexes in splits
-tr_list = train.index.tolist()
-va_list = valid.index.tolist()
-
-# place index into correct bin
-for index in all_data.index.tolist():
-#for index in compound_moa.index.tolist():
-    if index in tr_list:
-        partition["train"] += [index]
-    elif index in va_list:
-        partition["valid"]   += [index]
-    else:
-        partition["test"]  += [index]'''
-
-
-# In[25]:
-
-
-'''# create dictionary for labels, using PyTorch
-labels = {}
-for index,compound in zip(compound_moa.index.tolist(), target_onehot):
-    labels[index] = compound'''
-
-
-# In[26]:
-
-
-'''# create dictionary for labels, using PyTorch
-all_data['hot_encoded'] = None
-for i in range(0, len(all_data.index.tolist())):
-    all_data.iloc[i, 11] = labels[i]
-#for index,compound in zip(all_data.index.tolist(), target_onehot):
-#    labels[index] = compounew
-all_data.head()
-#all_data[0:10, ["classes", "hot_encoded"]]
-print(all_data.iloc[ 1:20, 10:12])'''
-
-
-# In[ ]:
-
-
-batch_size = 200
-# parameters
-params = {'batch_size' : 200,
-         'num_workers' : 3,
-         'shuffle' : True,
-         'prefetch_factor' : 1} 
-          
-# shuffle isn't working
-
-# Datasets
-#partition = partition
-#labels = labels
-
-# maxepochs
-max_epochs = 500
-
-
-# In[ ]:
-
-
-device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
-#device = torch.device('cpu')
-print(f'Training on device {device}. ' )
-
-
-# In[ ]:
+    return input, target #target_onehot
 
 
 # A function changing SMILES to Morgan fingerprints 
@@ -383,24 +73,64 @@ def smiles_to_array(smiles):
     x_array = torch.from_numpy(x_array)
     return x_array                  
 
+def val_vs_train_loss(epochs, train_loss, val_loss):
+    ''' 
+    Plotting validation versus training loss over time
+    epochs: number of epochs that the model ran (int. hyperparameter)
+    train_loss: training loss per epoch (python list)
+    val_loss: validation loss per epoch (python list)
+    ''' 
+    loss_path_to_save = '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split'
+    plt.figure()
+    x_axis = list(range(1, epochs +1)) # create x axis with number of
+    plt.plot(x_axis, train_loss, label = "train_loss")
+    plt.plot(x_axis, val_loss, label = "val_loss")
+    # Figure description
+    plt.xlabel('# of Epochs')
+    plt.ylabel('Loss')
+    plt.title('Validation versus Training Loss: CP Image Model')
+    plt.legend()
+    # plot
+    plt.savefig(loss_path_to_save + '/' + 'loss_train_val_' + now)
 
-# In[ ]:
+def val_vs_train_accuracy(epochs, train_acc, val_acc):
+    '''
+    Plotting validation versus training loss over time
+    epochs: number of epochs that the model ran (int. hyperparameter)
+    train_acc: accuracy loss per epoch (python list)
+    val_acc: accuracy loss per epoch (python list)
+    '''
+    acc_path_to_save = '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split'
+    plt.figure()
+    x_axis = list(range(1, epochs +1)) # create x axis with number of
+    plt.plot(x_axis, train_acc, label = "train_acc")
+    plt.plot(x_axis, val_acc, label = "val_acc")
+    # Figure description
+    plt.xlabel('# of Epochs')
+    plt.ylabel('Accuracy')
+    plt.title('Validation versus Training Accuracy: CP Image Model')
+    plt.legend()
+    # plot
+    plt.savefig(acc_path_to_save + '/' + 'acc_train_val_' + now)
 
+def results_assessment(y_true, y_pred, dict_moa):
+    target= [None]*len(dict_moa)
+    for i in dict_moa.items():
+        target[i[1]] = i[0]
+    save_path =  '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/'
+    class_report_output = classification_report(y_true, y_pred, target_names=target)
+    try:
+        chem_struc_file= open(save_path + 'saved_classification_reports/pre_split/' + now + '_classif_report.txt', 'a')
+        chem_struc_file.write((class_report_output))
+        chem_struc_file.close()
+    except:
+        print("Unable to append to file")
+    
+    conf_matrix = confusion_matrix(y_true, y_pred)
+    np.save((save_path + 'saved_confusion_matrices/pre_split/'  + now + '_confusion_matrix.npy'), conf_matrix)
 
-# split into training, validation and test data
-
-
-# In[ ]:
-
-
-nrow = all_data.iloc[4]
-nrow
-a = nrow['compound']
-
-
-# In[ ]:
-
-
+   
+#---------------------------------------------------------------------------------------------------------------------------------------#
 # create Torch.dataset
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, compound_df, labels, transform=None):
@@ -415,7 +145,9 @@ class Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         '''Retrieving the compound '''
-        smile_string = self.compound_df.SMILES[idx]      # returns smiles by using compound as keys
+        #print(idx)
+        smile_string = self.compound_df["SMILES"][idx]      # returns smiles by using compound as keys
+        #print(smile_string)
         compound_array = smiles_to_array(smile_string)
         #print(f' return from function: {compound}')
         #print(f' matrix: {compound_array}')
@@ -424,98 +156,87 @@ class Dataset(torch.utils.data.Dataset):
         #label = torch.tensor(label, dtype=torch.float)
         if self.transform:                         # uses Albumentations image pipeline to return an augmented image
             compound = self.transform(compound)
-        return compound_array.float(), label.float()
+        return compound_array.float(), label.long()
+
+#---------------------------------------------------------------------------------------------------------------------------------------#
+
+now = datetime.datetime.now()
+now = now.strftime("%d_%m_%Y-%H:%M:%S")
 
 
-# ## Generators
+# # Pseudo Code
+# 1. download train, validation and test data
+# 2. keep only columns with relevant data (compound name, smile strings, moa)
+#     1. assert that dmso not in all data values
+# 3. create function that gets produces a dictionary with all relevant moas and assigns a number to them
+#     1. extract unique values
+#     2. enumerate loop, add to growing dictionary, where name is the key.
+# 4. set these values as moa
+# 5. do one hot encoding
+# 6. Fix torch_set so that it can handle pandas instead of an extra dictionary 
 
-# In[ ]:
+# donwload compound list for both v1 and v2
+compounds_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/compounds_v1v2.csv', delimiter = ",")
+
+# download csvs with all the data pre split
+training_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_training_set_cyclo_adr_2.csv')
+validation_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_valid_set_cyclo_adr_2.csv')
+test_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_test_set_cyclo_adr_2.csv')
+
+# download dictionary which associates moa with a number
+with open('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/cyclo_adr_2_moa_dict.pickle', 'rb') as handle:
+        moa_dict = pickle.load(handle)
+
+assert training_set.moa.unique().all() == validation_set.moa.unique().all() == test_set.moa.unique().all()
 
 
-# Create a dataset with all indices and labels
-everything = Dataset(partition["train"]+partition['valid']+partition['test'], labels)
+num_classes = len(training_set.moa.unique())
 
 
-# In[ ]:
+# split data into labels and inputs
+training_df, train_labels = splitting_into_tensor(training_set, num_classes)
+validation_df, validation_labels = splitting_into_tensor(validation_set, num_classes)
+test_df, test_labels = splitting_into_tensor(test_set, num_classes)
 
 
-# generator for training data
+
+batch_size = 50
+# parameters
+params = {'batch_size' : batch_size,
+         'num_workers' : 3,
+         'shuffle' : True,
+         'prefetch_factor' : 1} 
 
 
-# In[ ]:
+device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
+#device = torch.device('cpu')
+print(f'Training on device {device}. ' )
 
 
-# generator: training
-# create a subset with only train indices
-training_set = torch.utils.data.Subset(everything, partition["train"])
+# Create datasets with relevant data and labels
+training_dataset = Dataset(training_df, train_labels)
+valid_dataset = Dataset(validation_df, validation_labels)
+test_dataset = Dataset(test_df, test_labels)
+
+# make sure that the number of labels is equal to the number of inputs
+assert len(training_df) == len(train_labels)
+assert len(validation_df) == len(validation_labels)
+assert len(test_df) == len(test_labels)
+
 
 # create generator that randomly takes indices from the training set
-training_generator = torch.utils.data.DataLoader(training_set, **params)
-# training_set = Dataset(partition["train"], labels)
-
-
-# In[ ]:
-
-
-#partition["train"]
-
-
-# In[ ]:
-
-
-# training data loader
-# Display image and label   # functional
-train_features, train_labels = next(iter(training_generator))
-print(f"Feature batch shape: {train_features.size()}")
-print(f"Labels batch shape: {train_labels.size()}")
-
-
-# In[ ]:
-
-
-# Validation Set
-# create a subset with only valid indices
-valid_set = torch.utils.data.Subset(everything, partition["valid"])
-    
-# create generator that randomly takes indices from the validation set
-valid_generator = torch.utils.data.DataLoader(valid_set, **params)
-
-
-# In[ ]:
-
-
-valid_features, valid_labels = next(iter(valid_generator))
-print(f"Feature batch shape: {train_features.size()}")
-print(f"Labels batch shape: {train_labels.size()}")
-
-
-# In[ ]:
-
-
-# Test set
-# create a subset with only test indices
-test_set = torch.utils.data.Subset(everything, partition["test"])
-
-# create generator that randomly takes indices from the test set
-test_generator = torch.utils.data.DataLoader(test_set, **params)# generator for validation data
-
-
-# In[ ]:
-
-
-# dir(torch.nn)
-
-
-# In[ ]:
+training_generator = torch.utils.data.DataLoader(training_dataset, **params)
+validation_generator = torch.utils.data.DataLoader(valid_dataset, **params)
+test_generator = torch.utils.data.DataLoader(test_dataset, **params)
 
 
 # If applying class weights
 apply_class_weights = True
 if apply_class_weights:     # if we want to apply class weights
-    counts = compound_moa.moa.value_counts()  # count the number of moa in each class for the ENTiRE dataset
+    counts = training_set.moa.value_counts()  # count the number of moa in each class for the ENTiRE dataset
     print(counts)
     class_weights = []   # create list that will hold class weights
-    for moa in compound_moa.moa.unique():       # for each moa   
+    for moa in training_set.moa.unique():       # for each moa   
         #print(moa)
         counts[moa]
         class_weights.append(counts[moa])  # add counts to class weights
@@ -528,9 +249,6 @@ if apply_class_weights:     # if we want to apply class weights
 print(class_weights)
 
 
-# In[ ]:
-
-
 # Creating Architecture
 units = 64
 drop  = 0.7
@@ -541,17 +259,7 @@ seq_model = nn.Sequential(
     nn.Dropout(p = drop),
     nn.Linear(128,64),
     nn.ReLU(),
-    nn.Linear(64, 10))
-
-
-# In[ ]:
-
-
-seq_model
-
-
-# In[ ]:
-
+    nn.Linear(64, num_classes))
 
 # optimizer_algorithm
 #cnn_optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
@@ -561,32 +269,6 @@ if apply_class_weights == True:
     loss_function = torch.nn.CrossEntropyLoss(class_weights)
 else:
     loss_function = torch.nn.CrossEntropyLoss()
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-'''# complete the architecture of MLP and compile MLP 
-
-units = 64  
-drop = 0.89  
-
-model_mlp = Sequential()
-model_mlp.add(Dense(units, input_dim = 2048, activation = 'relu'))
-model_mlp.add(Dropout(drop))
-model_mlp.add(Dense(10, activation = 'softmax'))
-model_mlp.compile(optimizer = tf.keras.optimizers.Adam(learning_rate = 1e-4),
-         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits = True),
-         metrics = ['accuracy'])'''
-
-
-# In[ ]:
 
 
 def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader):
@@ -633,12 +315,12 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             train_predicted = torch.argmax(outputs, 1)
             #print(f' train_predicted {train_predicted}')
             # NEW
-            labels = torch.argmax(labels,1)
+            #labels = torch.argmax(labels,1)
             #print(labels)
             train_total += labels.shape[0]
             train_correct += int((train_predicted == labels).sum())
         # validation metrics from batch
-        val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
+        val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss, epoch)
         val_accuracy = val_correct/val_total
         # printing results for epoch
         if epoch == 1 or epoch %2 == 0:
@@ -652,10 +334,10 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
 
 
-# In[ ]:
+# In[494]:
 
 
-def validation_loop(model, loss_fn, valid_loader, best_val_loss):
+def validation_loop(model, loss_fn, valid_loader, best_val_loss, epoch):
     '''
     Assessing trained model on valiidation dataset 
     model: deep learning architecture getting updated by model
@@ -674,12 +356,12 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             labels = labels.to(device= device)
             # Assessing outputs
             outputs = model(compounds)
-            # print(f' Outputs : {outputs}') # tensor with 10 elements
-            # print(f' Labels : {labels}') # tensor that is a number
+            #print(f' Outputs : {outputs}') # tensor with 10 elements
+            #print(f' Labels : {labels}') # tensor that is a number
             loss = loss_fn(outputs,labels)
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
-            labels = torch.argmax(labels,1)
+            #labels = torch.argmax(labels,1)
             #print(predicted)
             #print(labels)
             total += labels.shape[0]
@@ -688,16 +370,13 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
         if best_val_loss > loss_val:
             best_val_loss = loss_val
             torch.save(
-                {
+                {'epoch': epoch,
                     'model_state_dict' : model.state_dict(),
                     'valid_loss' : loss_val
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/Compound_structure_based_models' +'/' + 'ChemStruc_least_loss_model'
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_models/pre_split/' + 'ChemStruc_least_loss_model'
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss
-
-
-# In[ ]:
 
 
 def test_loop(model, loss_fn, test_loader):
@@ -707,12 +386,17 @@ def test_loop(model, loss_fn, test_loader):
     loss_fn: loss function
     test_loader: generator creating batches of test data
     '''
+    model.eval()
     loss_test = 0.0
     correct = 0
     total = 0
-    model.eval()
+    all_predictions = []
+    all_labels = []
     with torch.no_grad():  # does not keep track of gradients so as to not train on test data.
-        for compounds, labels in tqdm_notebook(test_loader):
+        for compounds, labels in tqdm(test_loader,
+                                            desc = "Test Batches w/in Epoch",
+                                              position = 0,
+                                              leave = True):
             # Move to device MAY NOT BE NECESSARY
             model = model.to(device)
             compounds = compounds.to(device = device)
@@ -724,113 +408,52 @@ def test_loop(model, loss_fn, test_loader):
             loss = loss_fn(outputs,labels)
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
-            labels = torch.argmax(labels,1)
+            #labels = torch.argmax(labels,1)
             #print(predicted)
             #print(labels)
             total += labels.shape[0]
             correct += int((predicted == labels).sum())
+            #print(f' Predicted: {predicted.tolist()}')
+            #print(f' Labels: {predicted.tolist()}')
+            all_predictions = all_predictions + predicted.tolist()
+            all_labels = all_labels + labels.tolist()
         avg_test_loss = loss_test/len(test_loader)  # average loss over batch
-    return correct, total, avg_test_loss
-
-
-# In[ ]:
-
-
+    return correct, total, avg_test_loss, all_predictions, all_labels
+#----------------------------------------------------- Training and validation ----------------------------------#
 train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch = training_loop(n_epochs = max_epochs,
               optimizer = optimizer,
               model = seq_model,
               loss_fn = loss_function,
               train_loader=training_generator, 
-              valid_loader=valid_generator)
-
-
-# In[115]:
-
-
-#print(train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch)
-
-
-# In[170]:
-
-
-def val_vs_train_loss(epochs, train_loss, val_loss):
-    ''' 
-    Plotting validation versus training loss over time
-    epochs: number of epochs that the model ran (int. hyperparameter)
-    train_loss: training loss per epoch (python list)
-    val_loss: validation loss per epoch (python list)
-    ''' 
-    plt.figure()
-    x_axis = list(range(1, epochs +1)) # create x axis with number of
-    plt.plot(x_axis, train_loss, label = "train_loss")
-    plt.plot(x_axis, val_loss, label = "val_loss")
-    # Figure description
-    plt.xlabel('# of Epochs')
-    plt.ylabel('Loss')
-    plt.title('Validation versus Training Loss: CP Image Model')
-    plt.legend()
-    # plot
-    plt.show()
-
-
-# In[171]:
-
-
-def val_vs_train_accuracy(epochs, train_acc, val_acc):
-    '''
-    Plotting validation versus training loss over time
-    epochs: number of epochs that the model ran (int. hyperparameter)
-    train_acc: accuracy loss per epoch (python list)
-    val_acc: accuracy loss per epoch (python list)
-    '''
-    plt.figure()
-    x_axis = list(range(1, epochs +1)) # create x axis with number of
-    plt.plot(x_axis, train_acc, label = "train_acc")
-    plt.plot(x_axis, val_acc, label = "val_acc")
-    # Figure description
-    plt.xlabel('# of Epochs')
-    plt.ylabel('Accuracy')
-    plt.title('Validation versus Training Accuracy: CP Image Model')
-    plt.legend()
-    # plot
-    plt.show()
-
-
-# In[172]:
-
-
-val_vs_train_loss(max_epochs,train_loss_per_epoch, val_loss_per_epoch)
-
-
-# In[173]:
-
-
-val_vs_train_accuracy(max_epochs, train_acc_per_epoch, val_acc_per_epoch)
-
-
-# In[175]:
-
-
-correct, total, avg_test_loss = test_loop(model = seq_model,
+              valid_loader=validation_generator)
+#----------------------------------------- Assessing model on test data -----------------------------------------#
+correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = seq_model,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator)
 
+# ----------------------------------------- Plotting loss, accuracy, visualization of results ---------------------#
+val_vs_train_loss(max_epochs,train_loss_per_epoch, val_loss_per_epoch)
 
-# In[176]:
+val_vs_train_accuracy(max_epochs, train_acc_per_epoch, val_acc_per_epoch)
 
+results_assessment(all_predictions, all_labels, moa_dict)
+#-------------------------------- Writing interesting info into terminal ----------------------------------# 
+end = time.time()
+def program_elapsed_time(start, end):
+    program_time = round(end - start, 2) 
+    print(program_time)
+    if program_time > float(60) and program_time < 60*60:
+        program_time =  program_time/60
+        time_elapsed = str(program_time) + ' min'
+    elif program_time > 60*60:
+        program_time = program_time/3600
+        time_elapsed = str(program_time) + ' hrs'
+    else:
+        time_elapsed = str(program_time) + ' sec'
+    return time_elapsed
+program_elapsed_time = program_elapsed_time(start, end)
 
-correct/total
-# create PyTorch architecture
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
+test_set_acc = f' {round(correct/total*100, 2)} %'
+table = [["Time to Run Program", program_elapsed_time],
+['Accuracy of Test Set', test_set_acc]]
+print(tabulate(table, tablefmt='fancy_grid'))

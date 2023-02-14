@@ -25,7 +25,7 @@ import torch
 from torchvision import transforms
 import torchvision.models as models
 import torch.nn as nn
-import torchinfo
+
 import torch.nn.functional as F
 
 

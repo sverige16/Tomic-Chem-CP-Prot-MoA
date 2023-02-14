@@ -12,6 +12,7 @@ from tqdm import tqdm
 from tqdm.notebook import tqdm_notebook
 import datetime
 import time
+import pickle
 
 
 # Torch
@@ -65,6 +66,25 @@ def save_to_csv(df, file_name, filename_mod, compress = None):
         os.mkdir(dir_path)
     df.to_csv(dir_path + file_name + '_'+ filename_mod + ".csv", index = False, compression = compress)
 
+def save_to_pickle(dictionary, filename_mod):
+    '''Saving train, test or valid set to specific directory with or without compression
+    Input:
+        dictionary: the dictionary to be saved
+        file_name: standardized naming depending on if its a training/validation/test set
+        file_name_mod: the unique input by user to identify the saved csv file in the directory
+        compress: compress the resulting csv file if desired.
+    Output:
+        CSV file in the dir_path directory
+    '''
+    
+    dir_path = "/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/"
+    
+    if not os.path.exists(dir_path):
+        print("Making path")
+        os.mkdir(dir_path)
+    with open(dir_path + '/'+ filename_mod + ".pickle", 'wb') as handle:
+        pickle.dump(dictionary, handle)
+
 
 def create_splits(moas, filename_mod, perc_test, need_val = True):
     '''
@@ -97,6 +117,7 @@ def create_splits(moas, filename_mod, perc_test, need_val = True):
     dictionary = {}
     for i,j in enumerate(moas):
         dictionary[j] = i
+    save_to_pickle(dictionary, filename_mod + "_moa_dict")
 
     moa_col = data_set.columns.get_loc("moa")
     # change moa to classes using the above dictionary

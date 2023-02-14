@@ -22,7 +22,6 @@ import torch
 from torchvision import transforms
 import torchvision.models as models
 import torch.nn as nn
-import torchinfo
 
 
 from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer

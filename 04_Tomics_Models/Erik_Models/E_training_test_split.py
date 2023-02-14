@@ -19,7 +19,7 @@ import torch
 from torchvision import transforms
 import torchvision.models as models
 import torch.nn as nn
-import torchinfo
+
 
 # ----------------------------------------------------------------------------------------------------------------#
 
@@ -122,14 +122,6 @@ def create_splits(moas, filename_mod, perc_test, cc_q75, need_val = True, cell_l
         profile_ids = clue_sig_in_SPECS[["Compound ID", "sig_id", "moa", 'cell_iname']][clue_sig_in_SPECS["moa"].isin(moas)]
 
 #--------------------------------------------- #2 ------------------------------------------------------------------------
-    # create dictionary where moas are associated with a number
-    dictionary = {}
-    for i,j in enumerate(moas):
-        dictionary[j] = i
-
-    # change moa to classes using the above dictionary
-    for i in range(profile_ids.shape[0]):
-        profile_ids.iloc[i, 2] = dictionary[profile_ids.iloc[i, 2]]
 
 
 
