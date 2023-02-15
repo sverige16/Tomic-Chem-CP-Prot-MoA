@@ -22,13 +22,17 @@ import torch
 from torchvision import transforms
 import torchvision.models as models
 import torch.nn as nn
+# Neptune
+import neptune.new as neptune
 
 
 from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier, BaggingClassifier
+from sklearn.linear_model import RidgeClassifierCV
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_curve,log_loss, accuracy_score, f1_score
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis,  QuadraticDiscriminantAnalysis
+from sklearn.metrics import precision_recall_curve,log_loss, accuracy_score, f1_score, classification_report
 from sklearn.metrics import average_precision_score,roc_auc_score
 from sklearn.ensemble import VotingClassifier
 import os
@@ -88,7 +92,7 @@ def load_train_valid_data(train_data, valid_data):
     L1000_validation =pd.read_csv(path + valid_data, delimiter = ",")
     return L1000_training, L1000_validation
 
-def variance_threshold(x_train, x_val):
+def variance_threshold(x_train, x_val, var_threshold ):
     """
     This function perform feature selection on the data, i.e. removes all low-variance features below the
     given 'threshold' parameter.
@@ -108,10 +112,10 @@ def variance_threshold(x_train, x_val):
     inspired by https://github.com/broadinstitute/lincs-profiling-complementarity/tree/master/2.MOA-prediction
     
     """
-    var_thresh = VarianceThreshold(threshold = 0.8) # sets a variance threshold
+    var_thresh = VarianceThreshold(threshold = var_threshold) # sets a variance threshold
     var_thresh.fit(x_train) # learn empirical variances from X
-    x_train = x_train.loc[:,var_thresh.variances_ > 0.8] # locate all variance thresholds above 0.8, keep those columns
-    x_val = x_val.loc[:,var_thresh.variances_ > 0.8]
+    x_train = x_train.loc[:,var_thresh.variances_ > var_threshold] # locate all variance thresholds above 0.8, keep those columns
+    x_val = x_val.loc[:,var_thresh.variances_ > var_threshold]
     return x_train, x_val
 
 def normalize_func(trn, test):
@@ -134,7 +138,7 @@ def normalize_func(trn, test):
     # norm_model = StandardScaler()
     trn_norm = pd.DataFrame(norm_model.fit_transform(trn),index = trn.index,columns = trn.columns)
     tst_norm = pd.DataFrame(norm_model.transform(test),index = test.index,columns = test.columns)
-    return trn_norm, tst_norm
+    return trn_norm, tst_norm, str(norm_model)
 
 
 def tprofiles_gc_too_func(data, clue_gene):
@@ -233,24 +237,25 @@ def acquire_npy(dataset):
     if dataset == 'train':
         #filename = input('Give name of npy file (str): ')
         #npy_set = np.load(path + filename)
-        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/data_splits_npy2_moas_train.npy')
+        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_train.npy', allow_pickle=True)
     elif dataset == 'val':
         #filename = input('Give name of npy file (str): ')
         #npy_set = np.load(path + filename)
-        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/data_splits_npy2_moas_valid.npy')
+        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_val.npy', allow_pickle=True)
     else:
         filename =  input('Give name of npy file (str): ')
         npy_set = np.load(path + filename)
-    return pd.DataFrame(npy_set)
+    df = pd.DataFrame(npy_set)
+    return df.set_axis([*df.columns[:-1], 'sig_id'], axis=1, inplace=False)
 
-def save_npy(dataset):
+def save_npy(dataset, split_type):
     '''Save the numpy array of the selected transcriptomics profiles
     Input:
         dataset: the numpy array to be saved
     '''
     path = '/scratch2-shared/erikep/data_splits_npy/'
     file_name = input("Give filename for numpy array: ")
-    np.save(path + file_name, dataset)
+    np.save(path + file_name + '_' + split_type, dataset)
 
 def get_models(class_weight):
     '''
@@ -262,7 +267,10 @@ def get_models(class_weight):
     TNC = TabNetClassifier()
     TNC._estimator_type = "classifier"
     models = list()
-    models.append(('logreg', LogisticRegression(class_weight = class_weight, solver= "liblinear", penalty = "l2"))) 
+    models.append(('logreg', LogisticRegression(class_weight = class_weight, solver= "liblinear", penalty = "l2")))
+    models.append(("LDAC",  LinearDiscriminantAnalysis()))
+    models.append(('QDA', QuadraticDiscriminantAnalysis()))
+    models.append(('Ridge', RidgeClassifierCV(class_weight = class_weight)))
     models.append(('RFC',RandomForestClassifier(class_weight= class_weight))) 
     models.append(('gradboost', GradientBoostingClassifier()))
     models.append(('Ada', AdaBoostClassifier()))
@@ -270,7 +278,14 @@ def get_models(class_weight):
     models.append(('Bagg',BaggingClassifier()))
     models.append(('Tab', TNC))
     return models
-
+def E_conf_matrix(cf_matrix):
+    #cf_matrix = np.load('/home/jovyan/Tomics-CP-Chem-MoA/Compound_structure_based_models/saved_confusion_matrices/12_12_2022-13:19:41_confusion_matrix.npy')
+    cf_matrix = cf_matrix.astype('float') / cf_matrix.sum()
+    '''group_names = ['True Neg', 'False Pos', 'False Neg', 'True Pos']'''
+    #group_counts = ['{0:0.0f}'.format(value) for value in
+                #cf_matrix.flatten()]
+    
+    
 def printing_results(class_alg, labels_val, predictions): 
     '''
     Printing the results from the 
@@ -285,11 +300,24 @@ def printing_results(class_alg, labels_val, predictions):
     print(class_alg)
     labels_unique = np.unique(labels_val)
     anders = f1_score(labels_val, predictions, labels = labels_unique.tolist(), average = 'macro')
-    print(f' Accuracy score: {accuracy_score(labels_val, predictions)}')
+    accuracy = accuracy_score(labels_val, predictions)
+    print(f' Accuracy score: {accuracy}')
     print(f' F1 Score: {     anders   }')
-    print(f' Confusion Matrix: {confusion_matrix(labels_val, predictions)}')
+    cf_matrix = confusion_matrix(labels_val, predictions)
+    print(f' Confusion Matrix: {cf_matrix}')
+    plt.figure()
+    sns.heatmap(cf_matrix, annot = True, fmt='d').set(title = class_alg[0] + ' Confusion Matrix')
+    plt.savefig("Conf_matrix.png")
+   
+    class_report = classification_report(labels_val, predictions)
+    print(class_report)
+    f = open("class_info.txt","w")
+    # write file
+    f.write( str(class_report) )
+    # close file
+    f.close()
     print('----------------------------------------------------------------------')
-
+    return anders, accuracy
 def write_list(a_list, file_type):
     with open('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/pickles/tabnet_pickles/' + file_type + '.pickle', 'wb') as fp:
         pickle.dump(a_list, fp)
@@ -301,7 +329,7 @@ def save_val(a_list, file_type):
     print('Done writing binary file')
 
 # ------------------------------------------------------------------------------------------------------------------------------
-def main(use_variance_threshold, normalize, L1000_training, L1000_validation, clue_gene, npy_exists, apply_class_weight, ensemble):
+def main(train_filename, L1000_training, L1000_validation, clue_gene, npy_exists, apply_class_weight = False , use_variance_threshold = 0, normalize = False, ensemble = False):
     '''
     Tests a series of ML algorithms after optional pre-processing of the data in order to make predictions on the MoA class based on
     chosen transcriptomic profiles. 
@@ -322,13 +350,14 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
     # shuffling training and validation data
     L1000_training = L1000_training.sample(frac = 1, random_state = 1)
     L1000_validation = L1000_validation.sample(frac = 1, random_state = 1)
-    # extracting training transcriptomes
+    
+    print("extracting training transcriptomes")
     profiles_gc_too_train = tprofiles_gc_too_func(L1000_training, clue_gene)
     if npy_exists:
         df_train = acquire_npy('train')
     else:    
         df_train = np_array_transform(profiles_gc_too_train)
-        save_npy(df_train)
+        #save_npy(df_train, "train")
     
     #
     print("extracting validation transcriptomes") 
@@ -337,40 +366,44 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
         df_val = acquire_npy('val')
     else:    
         df_val = np_array_transform(profiles_gc_too_valid)
-        save_npy(df_val)
+        #save_npy(df_val, "val")
     
 
-    # to normalize
-    if normalize:
-        df_train, df_val = normalize_func(df_train, df_val)
-    
+   
+    # merging the transcriptomic profiles with the corresponding MoA class using the sig_id as a key
     df_train = pd.merge(df_train, L1000_training[["sig_id", "moa"]], how = "outer", on ="sig_id")
     df_val = pd.merge(df_val, L1000_validation[["sig_id", "moa"]], how = "outer", on ="sig_id")
+    # dropping the sig_id column
     df_train.drop(columns = ["sig_id"], inplace = True)
     df_val.drop(columns = ["sig_id"], inplace = True)
-
+     # separating the features from the labels
     df_train_features = df_train[df_train.columns[: -1]]
     df_val_features = df_val[df_val.columns[: -1]]
     df_train_labels = df_train["moa"]
     df_val_labels = df_val["moa"]
+
+     # to normalize
+    if normalize:
+        df_train_features, df_val_features, norm_type = normalize_func(df_train_features, df_val_features)
     # applying class weights
     if apply_class_weight:
         class_weight = "balanced"
     else:
         class_weight = None
     
+    # -----------------------------------------------------------------------------------------------------------------------------#
+    print("starting modelling")
     models = get_models(class_weight)
     scores = list()
     # battery of classifiers
     for class_alg in models:
         classifier = class_alg[1]
         # use variance threshold
-        if use_variance_threshold:
-            pass
+        if use_variance_threshold > 0:
+            df_train_features_vs, df_val_features_vs = variance_threshold(df_train_features, df_val_features, use_variance_threshold)
+            classifier.fit(df_train_features_vs.values, df_train_labels.values)
+            predictions = classifier.predict(df_val_features_vs.values)
             '''
-            df_train_vs, df_val_vs = variance_threshold(df_train_features, df_val_features)
-            classifier.fit(df_train_features.values, df_train["moa"].values)
-            predictions = classifier.predict(df_val_features.values)
             if class_alg[0] == 'Tab':
                 save_val(df_val[df_val.columns[-1]].values, 'tab_val')
                 class_probs= classifier.predict_proba(df_val_vs.values)
@@ -388,40 +421,63 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
             predictions = classifier.predict(df_val_features.values)
         f1_score_from_model = f1_score(df_val_labels, predictions, average= "macro") 
         scores.append(f1_score_from_model)
-        printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
-       
-'''
+        run = neptune.init_run(project='erik-everett-palm/Tomics-Models')
+        run['model'] = class_alg[0]
+        run["filename"] = train_filename
+        run['parameters/normalize'] = norm_type
+        run['parameters/class_weight'] = class_weight
+        run['parameters/use_variance_threshold'] = use_variance_threshold
+        f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
+        run['metrics/f1_score'] = f1_score_p
+        run['metrics/accuracy'] = accuracy_p
+        import matplotlib.image as mpimg
+        conf_img = mpimg.imread('Conf_matrix.png')
+        run["files/classification_info"].upload("class_info.txt")
+        run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
+        run.stop()
     if ensemble:
         # 'soft':  predict the class labels based on the predicted probabilities p for classifier 
         ensemble = VotingClassifier(estimators = models, voting = 'soft', weights = scores)
         
         if use_variance_threshold:
-                df_train_vs, df_val_vs = variance_threshold(df_train, df_val)
-                ensemble.fit(df_train_vs.values, labels_train.values)
-                predictions = ensemble.predict(df_val_vs.values)
+                ensemble.fit(df_train_features_vs.values, df_train_labels.values)
+                predictions = ensemble.predict(df_val_features_vs.values)
 
         else:
-            ensemble.fit(df_train.values, labels_train.values)
+            ensemble.fit(df_train_features.values, df_train_labels.values)
             predictions = ensemble.predict(df_val.values)
         
-        printing_results('ensemble', labels_val, predictions)
-'''
+        run = neptune.init_run(project='erik-everett-palm/Tomics-Models')
+        run['model'] = str(models)
+        run["filename"] = train_filename
+        run['parameters/normalize'] = norm_type
+        run['parameters/class_weight'] = class_weight
+        run['parameters/use_variance_threshold'] = use_variance_threshold
+        f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
+        run['metrics/f1_score'] = f1_score_p
+        run['metrics/accuracy'] = accuracy_p
+        import matplotlib.image as mpimg
+        conf_img = mpimg.imread('Conf_matrix.png')
+
+        run["files/class_info"].upload("class_info.txt")
+        run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
 
 if __name__ == "__main__":  
     # train_filename = input('Training Data Set Filename: ')
-    #valid_filename = input('Validation Data Set Filename: ')
-    train_filename = 'L1000_training_set_cyclo_adr_2_moa.csv'
-    valid_filename = 'L1000_test_set_cyclo_adr_2_moa.csv'
-    #train_filename = 'L1000_training_set.csv'
-    #valid_filename = 'L1000_valid_set.csv'
+    # valid_filename = input('Validation Data Set Filename: ')
+    train_filename = 'L1000_training_set_nv_my10.csv'
+    valid_filename = 'L1000_test_set_nv_my10.csv'
+    #train_filename = 'L1000_training_set_nv_my10.csv'
+    #valid_filename = 'L1000_test_set_nv_my10.csv'
     
     L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
-    main(use_variance_threshold = False, 
-         normalize= False,
+    main(train_filename,
          L1000_training = L1000_training, 
          L1000_validation = L1000_validation, 
          clue_gene= clue_gene, 
-         npy_exists = False,
+         npy_exists = True,
          apply_class_weight= True,
+         use_variance_threshold = 0, 
+         normalize= True,
          ensemble = False)
 

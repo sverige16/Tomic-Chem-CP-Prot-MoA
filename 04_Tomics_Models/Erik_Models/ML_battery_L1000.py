@@ -395,8 +395,8 @@ def main(use_variance_threshold, normalize, L1000_training, L1000_validation, cl
 if __name__ == "__main__":  
     # train_filename = input('Training Data Set Filename: ')
     #valid_filename = input('Validation Data Set Filename: ')
-    train_filename = 'L1000_training_set_cyclo_adr_2.csv'
-    valid_filename = 'L1000_test_set_cyclo_adr_2.csv'
+    train_filename = 'L1000_training_set_nv_cyc_adr.csv'
+    valid_filename = 'L1000_test_set_nv_cyc_adr.csv'
     #train_filename = 'L1000_training_set.csv'
     #valid_filename = 'L1000_valid_set.csv'
     
