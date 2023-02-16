@@ -55,7 +55,8 @@ import time
 # In[37]:
 
 
-from ML_battery_L1000 import tprofiles_gc_too_func, extract_tprofile, load_train_valid_data, variance_threshold, normalize_func
+from ML_battery_L1000_dim_reduc import tprofiles_gc_too_func, extract_tprofile, load_train_valid_data, 
+from ML_battery_L1000_dim_reduc import variance_threshold, normalize_func
 
 
 # In[63]:
@@ -83,7 +84,7 @@ def save_val(val_tensor, file_type):
     print('Done writing binary file')
 
 
-def splitting_into_tensor(df, num_classes):
+def dict_splitting_into_tensor(df, num_classes):
     '''Splitting data into two parts:
     1. input : the pointer showing where the transcriptomic profile is  
     2. target one hot : labels (the correct MoA) '''
@@ -100,15 +101,13 @@ def splitting_into_tensor(df, num_classes):
     input =  df.drop('moa', axis = 1)
     
     return input, target_onehot
-
-
-# In[41]:
-
+ 
 
 class Transcriptomic_Profiles(torch.utils.data.Dataset):
-    def __init__(self, labels, gc_too):
+    def __init__(self, labels, gc_too, split):
         self.tprofile_labels = labels
         self.profiles_gc_too = gc_too
+        self.split_sets = split
         
     def __len__(self):
         ''' The number of data points '''
@@ -117,8 +116,10 @@ class Transcriptomic_Profiles(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         '''Retreiving the transcriptomic profile and label'''
         t_profile = extract_tprofile(self.profiles_gc_too, idx)          # extract image from csv using index
-        t_profile = torch.tensor(t_profile)       # turn t profile into a floating torch tensor
-        label = self.tprofile_labels[idx]          # extract calssification using index
+        t_profile = pd.merge(t_profile, self.split_sets[['sig_id', 'moa']], on='sig_id', how='outer')
+        t_profile.drop(columns = ["sig_id"], inplace = True)
+        t_profile_features = torch.tensor(t_profile[t_profile.columns[: -1]])       # turn t profile into a floating torch tensor
+        label = t_profile["moa"]          # extract calssification using index
         return torch.squeeze(t_profile), torch.squeeze(label) 
 
 
@@ -140,22 +141,32 @@ else:
 print(f'Training on device {device}. ' )
 
 
-train_filename = 'L1000_training_set_cyclo_adr_2.csv'
-valid_filename = 'L1000_test_set_cyclo_adr_2.csv'
+train_filename = 'L1000_training_set_nv_cyc_adr.csv'
+valid_filename = 'L1000_test_set_nv_cyc_adr.csv'
 L1000_training, L1000_validation = load_train_valid_data(train_filename, valid_filename)
 
-
-# In[44]:
-
-
-# shuffling training and validation data 
-# May not be necessary given params
+# shuffling training and validation data
 L1000_training = L1000_training.sample(frac = 1, random_state = 1)
 L1000_validation = L1000_validation.sample(frac = 1, random_state = 1)
 
+print("extracting training transcriptomes")
 profiles_gc_too_train = tprofiles_gc_too_func(L1000_training, clue_gene)
+print("extracting validation transcriptomes")
 profiles_gc_too_valid = tprofiles_gc_too_func(L1000_validation, clue_gene)
 
+L1000_training["moa"].unique()
+
+# merging the transcriptomic profiles with the corresponding MoA class using the sig_id as a key
+df_train = pd.merge(df_train, L1000_training[["sig_id", "moa"]], how = "outer", on ="sig_id")
+df_val = pd.merge(df_val, L1000_validation[["sig_id", "moa"]], how = "outer", on ="sig_id")
+# dropping the sig_id column
+df_train.drop(columns = ["sig_id"], inplace = True)
+df_val.drop(columns = ["sig_id"], inplace = True)
+    # separating the features from the labels
+df_train_features = df_train[df_train.columns[: -1]]
+df_val_features = df_val[df_val.columns[: -1]]
+df_train_labels = df_train["moa"]
+df_val_labels = df_val["moa"]
 
 # In[47]:
 
@@ -180,7 +191,7 @@ save_val(labels_val, 'simpleNN_val')
 # create a subset with only train indices
 
 # create generator that randomly takes indices from the training set
-training_dataset = Transcriptomic_Profiles(labels_train, profiles_gc_too_train)
+training_dataset = Transcriptomic_Profiles(labels_train, profiles_gc_too_train, L1000_training)
 
 
 

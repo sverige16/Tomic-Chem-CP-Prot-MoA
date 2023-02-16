@@ -135,7 +135,7 @@ def normalize_func(trn, test):
     inspired by  https://github.com/broadinstitute/lincs-profiling-complementarity/tree/master/2.MOA-prediction
     """
     norm_model = QuantileTransformer(n_quantiles=100,random_state=0, output_distribution="normal")
-    # norm_model = StandardScaler()
+    #norm_model = StandardScaler()
     trn_norm = pd.DataFrame(norm_model.fit_transform(trn),index = trn.index,columns = trn.columns)
     tst_norm = pd.DataFrame(norm_model.transform(test),index = test.index,columns = test.columns)
     return trn_norm, tst_norm, str(norm_model)
@@ -197,7 +197,33 @@ def splitting(df):
     input =  df.drop('moa', axis = 1)
     
     return input, target
-
+def feature_selection(df_train_feat, df_val_feat, num_feat):
+    Ridge_top_index_cof = np.array([676, 363, 742, 629, 590,  38, 612, 873, 448, 364, 844, 940, 914,
+       400, 958, 288, 468, 827, 799, 639, 812, 298, 133,  59, 556, 586,
+       398, 569, 491, 113, 709, 927, 190, 912,  35, 230, 945,  13,  58,
+       168, 802, 162,  24, 826, 213, 686, 757, 124,  89, 534, 831, 353,
+       235, 480,  50, 347, 471, 752, 374, 973,  10,  21, 850, 280, 658,
+       574, 281, 624, 860, 202, 274, 913, 523, 762,  26, 601, 905, 191,
+       362, 420, 451,   0, 129,  47, 393, 745, 439, 766, 582, 603, 506,
+       446, 380, 103, 390, 733, 367, 939, 855, 772, 463, 732, 929, 149,
+       641, 272, 145, 706,  41, 879, 295, 829, 160, 597,  18, 535, 898,
+       832, 970,  65, 889, 627, 595, 701, 884, 901, 258, 297, 328, 293,
+       332, 857, 203,  46, 350, 667,  29, 716,  83, 809, 524, 956, 383,
+       730, 868, 704, 257, 659, 405,  27, 880, 792, 459, 714, 604, 690,
+       148, 685, 397, 608, 114, 859,  45, 223, 560, 418, 415, 662, 101,
+         8, 964, 452, 936, 728, 407, 231,  74, 504, 764, 888,  33, 773,
+       689, 244, 441, 388, 406, 727, 656, 163, 540, 937, 618, 587, 327,
+       354, 530, 414, 632, 867, 904, 804,  73, 170, 222,  85, 207,  22,
+        96, 882, 487, 538, 580, 261, 687,  52, 536, 541, 893, 245, 562,
+       503, 547, 469, 911,   2, 566,  48, 692,  81, 110, 746,  87, 607,
+       754,  92, 571, 643, 915,  94, 856, 195, 321, 660, 318, 126, 592,
+       819, 351,  99])
+    if num_feat > 0:
+        Ridge_top_index_cof = Ridge_top_index_cof[:num_feat]
+        df_train_feat = df_train_feat.iloc[:,Ridge_top_index_cof]
+        df_val_feat = df_val_feat.iloc[:,Ridge_top_index_cof]
+   
+    return df_train_feat, df_val_feat
 
 def np_array_transform(profiles_gc_too):
     '''
@@ -237,11 +263,13 @@ def acquire_npy(dataset):
     if dataset == 'train':
         #filename = input('Give name of npy file (str): ')
         #npy_set = np.load(path + filename)
-        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_train.npy', allow_pickle=True)
+        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_train.npy', allow_pickle=True)
+        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrtrain.npy', allow_pickle=True)
     elif dataset == 'val':
         #filename = input('Give name of npy file (str): ')
         #npy_set = np.load(path + filename)
-        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_val.npy', allow_pickle=True)
+        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_val.npy', allow_pickle=True)
+        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrval.npy', allow_pickle=True)
     else:
         filename =  input('Give name of npy file (str): ')
         npy_set = np.load(path + filename)
@@ -269,23 +297,16 @@ def get_models(class_weight):
     models = list()
     models.append(('logreg', LogisticRegression(class_weight = class_weight, solver= "liblinear", penalty = "l2")))
     models.append(("LDAC",  LinearDiscriminantAnalysis()))
-    models.append(('QDA', QuadraticDiscriminantAnalysis()))
+    #models.append(('QDA', QuadraticDiscriminantAnalysis()))
     models.append(('Ridge', RidgeClassifierCV(class_weight = class_weight)))
-    models.append(('RFC',RandomForestClassifier(class_weight= class_weight))) 
+    #models.append(('RFC',RandomForestClassifier(class_weight= class_weight))) 
     models.append(('gradboost', GradientBoostingClassifier()))
-    models.append(('Ada', AdaBoostClassifier()))
-    models.append(('KNN', KNeighborsClassifier(n_neighbors = 5)))
-    models.append(('Bagg',BaggingClassifier()))
-    models.append(('Tab', TNC))
+    #models.append(('Ada', AdaBoostClassifier()))
+    #models.append(('KNN', KNeighborsClassifier(n_neighbors = 5)))
+    #models.append(('Bagg',BaggingClassifier()))
+    #models.append(('Tab', TNC))
     return models
-def E_conf_matrix(cf_matrix):
-    #cf_matrix = np.load('/home/jovyan/Tomics-CP-Chem-MoA/Compound_structure_based_models/saved_confusion_matrices/12_12_2022-13:19:41_confusion_matrix.npy')
-    cf_matrix = cf_matrix.astype('float') / cf_matrix.sum()
-    '''group_names = ['True Neg', 'False Pos', 'False Neg', 'True Pos']'''
-    #group_counts = ['{0:0.0f}'.format(value) for value in
-                #cf_matrix.flatten()]
-    
-    
+
 def printing_results(class_alg, labels_val, predictions): 
     '''
     Printing the results from the 
@@ -329,7 +350,11 @@ def save_val(a_list, file_type):
     print('Done writing binary file')
 
 # ------------------------------------------------------------------------------------------------------------------------------
-def main(train_filename, L1000_training, L1000_validation, clue_gene, npy_exists, apply_class_weight = False , use_variance_threshold = 0, normalize = False, ensemble = False):
+def main(train_filename, L1000_training, L1000_validation, 
+         clue_gene, npy_exists, apply_class_weight = False, 
+         use_variance_threshold = 0, normalize = False, 
+         ensemble = False,
+         feat_sel = 0):
     '''
     Tests a series of ML algorithms after optional pre-processing of the data in order to make predictions on the MoA class based on
     chosen transcriptomic profiles. 
@@ -381,10 +406,15 @@ def main(train_filename, L1000_training, L1000_validation, clue_gene, npy_exists
     df_val_features = df_val[df_val.columns[: -1]]
     df_train_labels = df_train["moa"]
     df_val_labels = df_val["moa"]
+    
+  
+    df_train_features, df_val_features = feature_selection(df_train_features, df_val_features, feat_sel)
 
      # to normalize
     if normalize:
         df_train_features, df_val_features, norm_type = normalize_func(df_train_features, df_val_features)
+    else:
+        norm_type = None
     # applying class weights
     if apply_class_weight:
         class_weight = "balanced"
@@ -401,8 +431,9 @@ def main(train_filename, L1000_training, L1000_validation, clue_gene, npy_exists
         # use variance threshold
         if use_variance_threshold > 0:
             df_train_features_vs, df_val_features_vs = variance_threshold(df_train_features, df_val_features, use_variance_threshold)
-            classifier.fit(df_train_features_vs.values, df_train_labels.values)
-            predictions = classifier.predict(df_val_features_vs.values)
+            classifier.fit(df_train_features_vs.values.astype("float64"), df_train_labels.values)
+            predictions = classifier.predict(df_val_features_vs.values.astype("float64"))
+            input_shape = df_train_features_vs.shape[1]
             '''
             if class_alg[0] == 'Tab':
                 save_val(df_val[df_val.columns[-1]].values, 'tab_val')
@@ -411,6 +442,7 @@ def main(train_filename, L1000_training, L1000_validation, clue_gene, npy_exists
                 write_list(class_probs, 'class_probs')'''
         else:
             classifier.fit(df_train_features.values, df_train_labels.values)
+            input_shape = df_train_features.shape[1]
             '''
             if class_alg[0] == 'Tab':
                 save_val( df_val[df_val.columns[-1]].values, 'tab_val')
@@ -424,9 +456,14 @@ def main(train_filename, L1000_training, L1000_validation, clue_gene, npy_exists
         run = neptune.init_run(project='erik-everett-palm/Tomics-Models')
         run['model'] = class_alg[0]
         run["filename"] = train_filename
+        run["feat_selec/feat_sel"] = feat_sel
         run['parameters/normalize'] = norm_type
         run['parameters/class_weight'] = class_weight
         run['parameters/use_variance_threshold'] = use_variance_threshold
+        run['feat_selec/input_shape'] = input_shape
+        if class_alg[0] == 'Ridge':
+            run['parameters/alpha'] = classifier.alpha_
+            run['feat_selec/n_features_in'] =  classifier.n_features_in_ 
         f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
         run['metrics/f1_score'] = f1_score_p
         run['metrics/accuracy'] = accuracy_p
@@ -449,6 +486,7 @@ def main(train_filename, L1000_training, L1000_validation, clue_gene, npy_exists
         
         run = neptune.init_run(project='erik-everett-palm/Tomics-Models')
         run['model'] = str(models)
+        run["feat_selec/feat_sel"] = feat_sel
         run["filename"] = train_filename
         run['parameters/normalize'] = norm_type
         run['parameters/class_weight'] = class_weight
@@ -462,22 +500,23 @@ def main(train_filename, L1000_training, L1000_validation, clue_gene, npy_exists
         run["files/class_info"].upload("class_info.txt")
         run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
 
-if __name__ == "__main__":  
-    # train_filename = input('Training Data Set Filename: ')
-    # valid_filename = input('Validation Data Set Filename: ')
-    train_filename = 'L1000_training_set_nv_my10.csv'
-    valid_filename = 'L1000_test_set_nv_my10.csv'
-    #train_filename = 'L1000_training_set_nv_my10.csv'
-    #valid_filename = 'L1000_test_set_nv_my10.csv'
-    
-    L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
-    main(train_filename,
-         L1000_training = L1000_training, 
-         L1000_validation = L1000_validation, 
-         clue_gene= clue_gene, 
-         npy_exists = True,
-         apply_class_weight= True,
-         use_variance_threshold = 0, 
-         normalize= True,
-         ensemble = False)
-
+if __name__ == "__main__": 
+    for i in np.arange(0.5, 1.2, 0.1 ):
+        # train_filename = input('Training Data Set Filename: ')
+        # valid_filename = input('Validation Data Set Filename: ')
+        train_filename = 'L1000_training_set_nv_cyc_adr.csv' # 2
+        valid_filename = 'L1000_test_set_nv_cyc_adr.csv'     # 2
+        #train_filename = 'L1000_training_set_nv_my10.csv' #10
+        #valid_filename = 'L1000_test_set_nv_my10.csv'  #10
+        
+        L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
+        main(train_filename,
+            L1000_training = L1000_training, 
+            L1000_validation = L1000_validation, 
+            clue_gene= clue_gene, 
+            npy_exists = True,
+            apply_class_weight= True,
+            use_variance_threshold = i, 
+            normalize= False,
+            ensemble = False,
+            feat_sel= 0)
