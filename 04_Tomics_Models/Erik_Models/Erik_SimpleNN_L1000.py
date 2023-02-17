@@ -27,11 +27,13 @@ import torchvision.models as models
 import torch.nn as nn
 
 import torch.nn.functional as F
+import neptune.new as neptune
 
 
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import precision_recall_curve,log_loss
+from sklearn.metrics import precision_recall_curve,log_loss, f1_score, accuracy_score
 from sklearn.metrics import average_precision_score,roc_auc_score
+from sklearn.preprocessing import OneHotEncoder
 import os
 import time
 from time import time
@@ -55,8 +57,8 @@ import time
 # In[37]:
 
 
-from ML_battery_L1000_dim_reduc import tprofiles_gc_too_func, extract_tprofile, load_train_valid_data, 
-from ML_battery_L1000_dim_reduc import variance_threshold, normalize_func
+from ML_battery_L1000_dim_reduc import tprofiles_gc_too_func, extract_tprofile, load_train_valid_data 
+from ML_battery_L1000_dim_reduc import variance_threshold, normalize_func, feature_selection
 
 
 # In[63]:
@@ -84,43 +86,47 @@ def save_val(val_tensor, file_type):
     print('Done writing binary file')
 
 
-def dict_splitting_into_tensor(df, num_classes):
+def dict_splitting_into_tensor(df):
     '''Splitting data into two parts:
     1. input : the pointer showing where the transcriptomic profile is  
     2. target one hot : labels (the correct MoA) '''
     
-    # one-hot encoding labels
-     # creating tensor from all_data.df
-    target = torch.tensor(df['moa'].values.astype(np.int64))
-
-    # For each row, take the index of the target label
-    # (which coincides with the score in our case) and use it as the column index to set the value 1.0.” 
-    target_onehot = torch.zeros(target.shape[0], num_classes)
-    target_onehot.scatter_(1, target.unsqueeze(1), 1.0)
-    
-    input =  df.drop('moa', axis = 1)
-    
-    return input, target_onehot
- 
+    enc = OneHotEncoder(handle_unknown='ignore')
+    enc.fit(df["moa"].unique().reshape(-1,1))
+    one_hot_encoded = enc.transform(enc.categories_[0].reshape(-1,1)).toarray()
+    dicti = {}
+    for i in range(0, len(enc.categories_[0])):
+        dicti[str(enc.categories_[0][i])] = one_hot_encoded[i]
+    return dicti
 
 class Transcriptomic_Profiles(torch.utils.data.Dataset):
-    def __init__(self, labels, gc_too, split):
-        self.tprofile_labels = labels
+    def __init__(self, gc_too, split, dict_moa):
+        #self.tprofile_labels = labels
         self.profiles_gc_too = gc_too
         self.split_sets = split
+        self.dict_moa = dict_moa
         
     def __len__(self):
         ''' The number of data points '''
-        return len(self.tprofile_labels)
+        return len(self.split_sets)
 
     def __getitem__(self, idx):
-        '''Retreiving the transcriptomic profile and label'''
+        '''Retreiving the transcriptomic profile and label
+        Pseudocode:
+        1. Extract the transcriptomic profile using the index along with sig_id
+        2. Extract the label from t_profile
+        3. Use sig_id to extract the label from split_sets
+        4. Convert label to one hot encoding using function
+        5. Convert to torch tensors and return'''
+
         t_profile = extract_tprofile(self.profiles_gc_too, idx)          # extract image from csv using index
-        t_profile = pd.merge(t_profile, self.split_sets[['sig_id', 'moa']], on='sig_id', how='outer')
-        t_profile.drop(columns = ["sig_id"], inplace = True)
-        t_profile_features = torch.tensor(t_profile[t_profile.columns[: -1]])       # turn t profile into a floating torch tensor
-        label = t_profile["moa"]          # extract calssification using index
-        return torch.squeeze(t_profile), torch.squeeze(label) 
+        t_sig_id = t_profile[0][0]
+        moa_key = self.split_sets["moa"][self.split_sets["sig_id"] == t_sig_id]
+        moa_key = moa_key.iloc[0]
+        t_moa = torch.tensor(self.dict_moa[moa_key])
+        t_profile_features = torch.tensor(t_profile[1])       # turn t profile into a floating torch tensor
+        
+        return torch.squeeze(t_profile_features), t_moa 
 
 
 # In[65]:
@@ -128,7 +134,8 @@ class Transcriptomic_Profiles(torch.utils.data.Dataset):
 
 batch_size = 50
 WEIGHT_DECAY = 1e-5
-learning_rate = 5e-3 
+learning_rate = 5e-3
+num_feat = 0
 # parameters
 params = {'batch_size' : batch_size,
          'num_workers' : 3,
@@ -144,6 +151,8 @@ print(f'Training on device {device}. ' )
 train_filename = 'L1000_training_set_nv_cyc_adr.csv'
 valid_filename = 'L1000_test_set_nv_cyc_adr.csv'
 L1000_training, L1000_validation = load_train_valid_data(train_filename, valid_filename)
+# Creating a  dictionary of the one hot encoded labels
+dict_moa = dict_splitting_into_tensor(L1000_training)
 
 # shuffling training and validation data
 L1000_training = L1000_training.sample(frac = 1, random_state = 1)
@@ -154,35 +163,19 @@ profiles_gc_too_train = tprofiles_gc_too_func(L1000_training, clue_gene)
 print("extracting validation transcriptomes")
 profiles_gc_too_valid = tprofiles_gc_too_func(L1000_validation, clue_gene)
 
-L1000_training["moa"].unique()
+# ------------------------------------- Feature Selection -------------------------------------#
+# select features based on most useful features for linear models
+#feature_selection()
+# select features based on variance threshold
 
-# merging the transcriptomic profiles with the corresponding MoA class using the sig_id as a key
-df_train = pd.merge(df_train, L1000_training[["sig_id", "moa"]], how = "outer", on ="sig_id")
-df_val = pd.merge(df_val, L1000_validation[["sig_id", "moa"]], how = "outer", on ="sig_id")
-# dropping the sig_id column
-df_train.drop(columns = ["sig_id"], inplace = True)
-df_val.drop(columns = ["sig_id"], inplace = True)
-    # separating the features from the labels
-df_train_features = df_train[df_train.columns[: -1]]
-df_val_features = df_val[df_val.columns[: -1]]
-df_train_labels = df_train["moa"]
-df_val_labels = df_val["moa"]
+# ------------------------------------- Normalization -------------------------------------#
+# normalize the data
 
-# In[47]:
 
 
 num_classes = len(L1000_training["moa"].unique())
-num_classes
 
 
-# In[48]:
-
-
-# splitting
-input_df_val, labels_train = splitting_into_tensor(L1000_training, num_classes) 
-input_df_val, labels_val = splitting_into_tensor(L1000_validation, num_classes) 
-
-save_val(labels_val, 'simpleNN_val')
 
 # In[49]:
 
@@ -191,12 +184,11 @@ save_val(labels_val, 'simpleNN_val')
 # create a subset with only train indices
 
 # create generator that randomly takes indices from the training set
-training_dataset = Transcriptomic_Profiles(labels_train, profiles_gc_too_train, L1000_training)
+training_dataset = Transcriptomic_Profiles(profiles_gc_too_train, L1000_training, dict_moa)
 
 
 
 training_generator = torch.utils.data.DataLoader(training_dataset, **params)
-train_profile, train_labels = next(iter(training_generator))
 
 # In[50]:
 
@@ -205,7 +197,7 @@ train_profile, train_labels = next(iter(training_generator))
 # create a subset with only valid indices
 
 # create generator that randomly takes indices from the validation set
-validation_dataset = Transcriptomic_Profiles(labels_val, profiles_gc_too_valid)
+validation_dataset = Transcriptomic_Profiles(profiles_gc_too_valid, L1000_validation, dict_moa)
 
 
 
@@ -224,15 +216,15 @@ class SimpleNN_Model(nn.Module):
     def __init__(self, num_features = None, num_targets = None, hidden_size = None):
         super(SimpleNN_Model, self).__init__()
         self.batch_norm1 = nn.BatchNorm1d(num_features)
-        self.dropout1 = nn.Dropout(0.5)
+        self.dropout1 = nn.Dropout(0.2)
         self.dense1 = nn.utils.weight_norm(nn.Linear(num_features, hidden_size))
         
         self.batch_norm2 = nn.BatchNorm1d(hidden_size)
-        self.dropout2 = nn.Dropout(0.5)
+        self.dropout2 = nn.Dropout(0.3)
         self.dense2 = nn.Linear(hidden_size, hidden_size)
         
         self.batch_norm3 = nn.BatchNorm1d(hidden_size)
-        self.dropout3 = nn.Dropout(0.5)
+        self.dropout3 = nn.Dropout(0.2)
         self.dense3 = nn.utils.weight_norm(nn.Linear(hidden_size, num_targets))
     
     def forward(self, x):
@@ -254,7 +246,7 @@ class SimpleNN_Model(nn.Module):
 # In[66]:
 
 
-model = SimpleNN_Model(num_features = train_profile.shape[1], num_targets= num_classes, hidden_size= hidden_size)
+model = SimpleNN_Model(num_features = 978, num_targets= num_classes, hidden_size= hidden_size)
 optimizer = torch.optim.Adam(model.parameters(),  weight_decay=WEIGHT_DECAY, lr=learning_rate)
 loss_fn = torch.nn.BCEWithLogitsLoss()
 
@@ -264,8 +256,7 @@ loss_fn = torch.nn.BCEWithLogitsLoss()
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
-testing = False # decides if we take a subset of the data
-max_epochs = 10 # number of epochs we are going to run 
+max_epochs = 15 # number of epochs we are going to run 
 # apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
@@ -331,7 +322,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
-        if epoch == 1 or epoch %5 == 0:
+        if epoch == 1 or epoch %2 == 0:
             print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
@@ -356,6 +347,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
     total = 0
     predict_proba = []
     predictions = []
+    all_labels = []
     with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
         for tprofiles, labels in valid_loader:
             # Move to device MAY NOT BE NECESSARY
@@ -370,17 +362,22 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             labels = torch.argmax(labels,1)
             total += labels.shape[0]
             correct += int((predicted == labels).sum()) # saving best 
+            all_labels.append(labels)
             predict_proba.append(outputs)
             predictions.append(predicted)
         avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
         if best_val_loss > avg_val_loss:
             best_val_loss = avg_val_loss
             m = torch.nn.Softmax(dim=1)
+            pred_cpu = torch.cat(predictions).cpu()
+            labels_cpu =  torch.cat(all_labels).cpu()
             torch.save(
                 {   'predict_proba' : m(torch.cat(predict_proba)),
-                    'predictions' : torch.cat(predictions),
+                    'predictions' : pred_cpu,
                     'model_state_dict' : model.state_dict(),
-                    'valid_loss' : loss_val
+                    'valid_loss' : loss_val,
+                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'weighted'),
+                    'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
             },  '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'Tomics_SimpleNN'
             )
     model.train()
@@ -459,12 +456,31 @@ def program_elapsed_time(start, end):
     else:
         time_elapsed = str(program_time) + ' sec'
     return time_elapsed
-program_elapsed_time = program_elapsed_time(start, end)
+elapsed_time = program_elapsed_time(start, end)
 
 #test_set_acc = f' {round(correct/total*100, 2)} %'
-table = [["Time to Run Program", program_elapsed_time]]
+table = [["Time to Run Program", elapsed_time]]
 #['Accuracy of Test Set', test_set_acc]]
 print(tabulate(table, tablefmt='fancy_grid'))
 
 
+run = neptune.init_run(project='erik-everett-palm/Tomics-Models')
+run['model'] = str(model)
+#run["feat_selec/feat_sel"] = feat_sel
+run["filename"] = train_filename
+run['parameters/normalize'] = None
+# run['parameters/class_weight'] = class_weight
+run['parameters/learning_rate'] = learning_rate
+run['parameters/loss_function'] = str(loss_fn)
+#run['parameters/use_variance_threshold'] = use_variance_threshold
+#f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
+state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'Tomics_SimpleNN')
+run['metrics/f1_score'] = state["f1_score"]
+run['metrics/accuracy'] = state["accuracy"]
+run['metrics/loss'] = state["valid_loss"]
+run['metrics/time'] = elapsed_time
+run['metrics/epochs'] = max_epochs
 
+# Upload plots
+run["images/loss"].upload("/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images"+ '/' + 'loss_train_val_simpleNN' + now + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'acc_train_val_simpleNN' + now + '.png')

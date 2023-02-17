@@ -295,12 +295,12 @@ def get_models(class_weight):
     TNC = TabNetClassifier()
     TNC._estimator_type = "classifier"
     models = list()
-    models.append(('logreg', LogisticRegression(class_weight = class_weight, solver= "liblinear", penalty = "l2")))
-    models.append(("LDAC",  LinearDiscriminantAnalysis()))
+    models.append(('logreg', LogisticRegression(class_weight = class_weight, solver= "saga", penalty = "l2")))
+    #models.append(("LDAC",  LinearDiscriminantAnalysis()))
     #models.append(('QDA', QuadraticDiscriminantAnalysis()))
-    models.append(('Ridge', RidgeClassifierCV(class_weight = class_weight)))
+    #models.append(('Ridge', RidgeClassifierCV(class_weight = class_weight)))
     #models.append(('RFC',RandomForestClassifier(class_weight= class_weight))) 
-    models.append(('gradboost', GradientBoostingClassifier()))
+    #models.append(('gradboost', GradientBoostingClassifier()))
     #models.append(('Ada', AdaBoostClassifier()))
     #models.append(('KNN', KNeighborsClassifier(n_neighbors = 5)))
     #models.append(('Bagg',BaggingClassifier()))
@@ -501,22 +501,22 @@ def main(train_filename, L1000_training, L1000_validation,
         run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
 
 if __name__ == "__main__": 
-    for i in np.arange(0.5, 1.2, 0.1 ):
-        # train_filename = input('Training Data Set Filename: ')
-        # valid_filename = input('Validation Data Set Filename: ')
-        train_filename = 'L1000_training_set_nv_cyc_adr.csv' # 2
-        valid_filename = 'L1000_test_set_nv_cyc_adr.csv'     # 2
-        #train_filename = 'L1000_training_set_nv_my10.csv' #10
-        #valid_filename = 'L1000_test_set_nv_my10.csv'  #10
-        
-        L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
-        main(train_filename,
-            L1000_training = L1000_training, 
-            L1000_validation = L1000_validation, 
-            clue_gene= clue_gene, 
-            npy_exists = True,
-            apply_class_weight= True,
-            use_variance_threshold = i, 
-            normalize= False,
-            ensemble = False,
-            feat_sel= 0)
+    
+    # train_filename = input('Training Data Set Filename: ')
+    # valid_filename = input('Validation Data Set Filename: ')
+    train_filename = 'L1000_training_set_nv_cyc_adr.csv' # 2
+    valid_filename = 'L1000_test_set_nv_cyc_adr.csv'     # 2
+    #train_filename = 'L1000_training_set_nv_my10.csv' #10
+    #valid_filename = 'L1000_test_set_nv_my10.csv'  #10
+    
+    L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
+    main(train_filename,
+        L1000_training = L1000_training, 
+        L1000_validation = L1000_validation, 
+        clue_gene= clue_gene, 
+        npy_exists = True,
+        apply_class_weight= True,
+        use_variance_threshold = 0, 
+        normalize= False,
+        ensemble = False,
+        feat_sel= 0)
