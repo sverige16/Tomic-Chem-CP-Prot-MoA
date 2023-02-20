@@ -25,6 +25,8 @@ import torch.nn as nn
 # Neptune
 import neptune.new as neptune
 
+import optuna
+
 
 from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier, BaggingClassifier
@@ -285,7 +287,7 @@ def save_npy(dataset, split_type):
     file_name = input("Give filename for numpy array: ")
     np.save(path + file_name + '_' + split_type, dataset)
 
-def get_models(class_weight):
+def get_models():
     '''
     Input:
         class weight: including or not including class weight.
@@ -295,50 +297,22 @@ def get_models(class_weight):
     TNC = TabNetClassifier()
     TNC._estimator_type = "classifier"
     models = list()
-    models.append(('logreg', LogisticRegression(class_weight = class_weight, solver= "liblinear", penalty = "l2")))
-    models.append(("LDAC",  LinearDiscriminantAnalysis()))
     #models.append(('QDA', QuadraticDiscriminantAnalysis()))
-    models.append(('Ridge', RidgeClassifierCV(class_weight = class_weight)))
     #models.append(('RFC',RandomForestClassifier(class_weight= class_weight))) 
-    models.append(('gradboost', GradientBoostingClassifier()))
-    #models.append(('Ada', AdaBoostClassifier()))
     #models.append(('KNN', KNeighborsClassifier(n_neighbors = 5)))
     #models.append(('Bagg',BaggingClassifier()))
+    # --------# 
+    models.append(('logreg', LogisticRegression()))
+    models.append(("LDAC",  LinearDiscriminantAnalysis()))
+    
+    models.append(('Ridge', RidgeClassifierCV()))
+    
+    models.append(('gradboost', GradientBoostingClassifier()))
+    models.append(('Ada', AdaBoostClassifier()))
+   
     #models.append(('Tab', TNC))
     return models
 
-def printing_results(class_alg, labels_val, predictions): 
-    '''
-    Printing the results from the 
-    Input:
-        class_alg: name of the model
-        labels_val: the correct guesses
-        predictions: the predictions made by the model
-    Output:
-        Printed results of accuracy, F1 score, and confusion matrix
-    '''
-    print('----------------------------------------------------------------------')
-    print(class_alg)
-    labels_unique = np.unique(labels_val)
-    anders = f1_score(labels_val, predictions, labels = labels_unique.tolist(), average = 'macro')
-    accuracy = accuracy_score(labels_val, predictions)
-    print(f' Accuracy score: {accuracy}')
-    print(f' F1 Score: {     anders   }')
-    cf_matrix = confusion_matrix(labels_val, predictions)
-    print(f' Confusion Matrix: {cf_matrix}')
-    plt.figure()
-    sns.heatmap(cf_matrix, annot = True, fmt='d').set(title = class_alg[0] + ' Confusion Matrix')
-    plt.savefig("Conf_matrix.png")
-   
-    class_report = classification_report(labels_val, predictions)
-    print(class_report)
-    f = open("class_info.txt","w")
-    # write file
-    f.write( str(class_report) )
-    # close file
-    f.close()
-    print('----------------------------------------------------------------------')
-    return anders, accuracy
 def write_list(a_list, file_type):
     with open('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/pickles/tabnet_pickles/' + file_type + '.pickle', 'wb') as fp:
         pickle.dump(a_list, fp)
@@ -351,9 +325,8 @@ def save_val(a_list, file_type):
 
 # ------------------------------------------------------------------------------------------------------------------------------
 def main(train_filename, L1000_training, L1000_validation, 
-         clue_gene, npy_exists, apply_class_weight = False, 
+         clue_gene, npy_exists,
          use_variance_threshold = 0, normalize = False, 
-         ensemble = False,
          feat_sel = 0):
     '''
     Tests a series of ML algorithms after optional pre-processing of the data in order to make predictions on the MoA class based on
@@ -409,114 +382,154 @@ def main(train_filename, L1000_training, L1000_validation,
     
   
     df_train_features, df_val_features = feature_selection(df_train_features, df_val_features, feat_sel)
+    
+    # pre-processing using variance threshold
+    if use_variance_threshold > 0:
+        df_train_features, df_val_features = variance_threshold(df_train_features, df_val_features, use_variance_threshold)
 
      # to normalize
     if normalize:
         df_train_features, df_val_features, norm_type = normalize_func(df_train_features, df_val_features)
     else:
         norm_type = None
-    # applying class weights
-    if apply_class_weight:
-        class_weight = "balanced"
-    else:
-        class_weight = None
-    
+
+    input_shape = df_train_features.shape[1]
     # -----------------------------------------------------------------------------------------------------------------------------#
     print("starting modelling")
-    models = get_models(class_weight)
-    scores = list()
+    models = get_models()
+
     # battery of classifiers
     for class_alg in models:
-        classifier = class_alg[1]
-        # use variance threshold
-        if use_variance_threshold > 0:
-            df_train_features_vs, df_val_features_vs = variance_threshold(df_train_features, df_val_features, use_variance_threshold)
-            classifier.fit(df_train_features_vs.values.astype("float64"), df_train_labels.values)
-            predictions = classifier.predict(df_val_features_vs.values.astype("float64"))
-            input_shape = df_train_features_vs.shape[1]
-            '''
-            if class_alg[0] == 'Tab':
-                save_val(df_val[df_val.columns[-1]].values, 'tab_val')
-                class_probs= classifier.predict_proba(df_val_vs.values)
-                write_list(predictions, 'predictions')
-                write_list(class_probs, 'class_probs')'''
+        
+        if class_alg[0] == 'Ridge':
+            def ridge_objective(trial):
+                alphas = trial.suggest_float('alpha', 0.1, 15)
+                class_weight = trial.suggest_categorical('class_weight', ['balanced', None])
+                classifier = RidgeClassifierCV(alphas = alphas, class_weight= class_weight)
+                classifier.fit(df_train_features.values, df_train_labels.values)
+                predictions = classifier.predict(df_val_features.values)
+                return f1_score(df_val_labels, predictions, average= "macro")
+            study = optuna.create_study(pruner=optuna.pruners.MedianPruner(), direction='maximize')
+            study.optimize(ridge_objective, n_trials=25)
+        elif class_alg[0] == 'gradboost':
+            def gradboost_objective(trial):
+                loss = trial.suggest_categorical('loss', ['log_loss', 'exponential'])
+                learning_rate = trial.suggest_float('learning_rate', 0.01, 1)
+                n_estimators = trial.suggest_int('n_estimators', 100, 1000)
+                max_depth = trial.suggest_int('max_depth', 1, 10)
+                max_features = trial.suggest_categorical('max_features', [1.0, 'sqrt', 'log2'])
+                classifier = GradientBoostingClassifier(loss=loss, learning_rate=learning_rate, n_estimators=n_estimators, max_depth=max_depth, max_features=max_features)
+                classifier.fit(df_train_features.values, df_train_labels.values)
+                predictions = classifier.predict(df_val_features.values)
+                return f1_score(df_val_labels, predictions, average= "macro")
+            study = optuna.create_study(pruner=optuna.pruners.MedianPruner(), direction='maximize')
+            study.optimize(gradboost_objective, n_trials=25)
+        elif class_alg[0] == 'LDAC':
+            def lda_objective(trial):
+                solver = trial.suggest_categorical('solver', ['svd', 'lsqr', 'eigen'])
+                classifier = LinearDiscriminantAnalysis(solver=solver)
+                classifier.fit(df_train_features.values, df_train_labels.values)
+                predictions = classifier.predict(df_val_features.values)
+                return f1_score(df_val_labels, predictions, average= "macro")
+            study = optuna.create_study(pruner=optuna.pruners.MedianPruner(), direction='maximize')
+            study.optimize(lda_objective, n_trials=3)
+        elif class_alg[0] == 'Ada':
+            def ada_objective(trail):
+                learning_rate = trail.suggest_float('learning_rate', 0.01, 1)
+                n_estimators = trail.suggest_int('n_estimators', 100, 1000)
+                algorithm = trail.suggest_categorical('algorithm', ['SAMME', 'SAMME.R'])
+                classifier = AdaBoostClassifier(learning_rate=learning_rate, n_estimators=n_estimators, algorithm=algorithm)
+                classifier.fit(df_train_features.values, df_train_labels.values)
+                predictions = classifier.predict(df_val_features.values)
+                return f1_score(df_val_labels, predictions, average= "macro")
+            study = optuna.create_study(pruner=optuna.pruners.MedianPruner(), direction='maximize')
+            study.optimize(ada_objective, n_trials=25)
+        elif class_alg[0] == 'logreg':
+            def logreg_objective(trial):
+                solver = trial.suggest_categorical('solver', ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga'])
+                penalty = trial.suggest_categorical('penalty', ['l2'])
+                class_weight = trial.suggest_categorical('class_weight', ['balanced', None])
+                classifier = LogisticRegression(solver=solver, penalty=penalty, class_weight=class_weight)
+                classifier.fit(df_train_features.values, df_train_labels.values)
+                predictions = classifier.predict(df_val_features.values)
+                return f1_score(df_val_labels, predictions, average= "macro")
+
+            study = optuna.create_study(pruner=optuna.pruners.MedianPruner(), direction='maximize')
+            study.optimize(logreg_objective, n_trials=10)
+            
+
+        elif class_alg[0] == 'Tab':
+            def tab_objective(trial):
+                n_steps = trial.suggest_int('n_steps', 3, 10)
+                n_d = trial.suggest_int('n_d', 8, 64)
+                n_a = trial.suggest_int('n_a', 8, 64)
+                gamma = trial.suggest_float('gamma', 1.0, 2.0)
+                classifier = TabNetClassifier(n_steps=n_steps, n_d=n_d, n_a=n_a, gamma=gamma)
+                classifier.fit(df_train_features.values, df_train_labels.values)
+                predictions = classifier.predict(df_val_features.values)
+                return f1_score(df_val_labels, predictions, average= "macro")
+            study = optuna.create_study(pruner=optuna.pruners.MedianPruner(), direction='maximize')
+            study.optimize(tab_objective, n_trials=25)
         else:
-            classifier.fit(df_train_features.values, df_train_labels.values)
-            input_shape = df_train_features.shape[1]
-            '''
-            if class_alg[0] == 'Tab':
-                save_val( df_val[df_val.columns[-1]].values, 'tab_val')
-                class_probs = classifier.predict_proba(df_val[df_val.columns[: -1]].values)
-                write_list(predictions, 'predictions')
-                write_list(class_probs, 'class_probs')
-                '''
-            predictions = classifier.predict(df_val_features.values)
-        f1_score_from_model = f1_score(df_val_labels, predictions, average= "macro") 
-        scores.append(f1_score_from_model)
+            raise ValueError("Model not found")
+        
+        
+
+        
+       
+        
         run = neptune.init_run(project='erik-everett-palm/Tomics-Models')
+        if class_alg[0] == 'logreg':
+            run['parameters/class_weight'] = study.best_params['class_weight']
+            run['parameters/penalty'] = study.best_params['penalty']
+            run['parameters/solver'] = study.best_params['solver']
+        elif class_alg[0] == 'Ridge':
+            run['parameters/class_weight'] = study.best_params['class_weight']
+            run['parameters/alpha'] = study.best_params['alpha']
+        elif class_alg[0] == 'gradboost':
+            run['parameters/loss'] = study.best_params['loss']
+            run['parameters/learning_rate'] = study.best_params['learning_rate']
+            run['parameters/n_estimators'] = study.best_params['n_estimators']
+            run['parameters/max_depth'] = study.best_params['max_depth']
+            run['parameters/max_features'] = study.best_params['max_features']
+        elif class_alg[0] == 'LDAC':
+            run['parameters/solver'] = study.best_params['solver']
+        elif class_alg[0] == 'Ada':
+            run['parameters/learning_rate'] = study.best_params['learning_rate']
+            run['parameters/n_estimators'] = study.best_params['n_estimators']
+            run['parameters/algorithm'] = study.best_params['algorithm']
+        else:
+            run["parameters/n_steps"] = study.best_params["n_steps"]
+            run["parameters/n_d"] = study.best_params["n_d"]
+            run["parameters/n_a"] = study.best_params["n_a"]
+            run["parameters/gamma"] = study.best_params["gamma"]
+
         run['model'] = class_alg[0]
         run["filename"] = train_filename
         run["feat_selec/feat_sel"] = feat_sel
         run['parameters/normalize'] = norm_type
-        run['parameters/class_weight'] = class_weight
         run['parameters/use_variance_threshold'] = use_variance_threshold
         run['feat_selec/input_shape'] = input_shape
-        if class_alg[0] == 'Ridge':
-            run['parameters/alpha'] = classifier.alpha_
-            run['feat_selec/n_features_in'] =  classifier.n_features_in_ 
-        f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
-        run['metrics/f1_score'] = f1_score_p
-        run['metrics/accuracy'] = accuracy_p
-        import matplotlib.image as mpimg
-        conf_img = mpimg.imread('Conf_matrix.png')
-        run["files/classification_info"].upload("class_info.txt")
-        run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
+        run['metrics/f1_score'] = study.best_trial.value
         run.stop()
-    if ensemble:
-        # 'soft':  predict the class labels based on the predicted probabilities p for classifier 
-        ensemble = VotingClassifier(estimators = models, voting = 'soft', weights = scores)
-        
-        if use_variance_threshold:
-                ensemble.fit(df_train_features_vs.values, df_train_labels.values)
-                predictions = ensemble.predict(df_val_features_vs.values)
-
-        else:
-            ensemble.fit(df_train_features.values, df_train_labels.values)
-            predictions = ensemble.predict(df_val.values)
-        
-        run = neptune.init_run(project='erik-everett-palm/Tomics-Models')
-        run['model'] = str(models)
-        run["feat_selec/feat_sel"] = feat_sel
-        run["filename"] = train_filename
-        run['parameters/normalize'] = norm_type
-        run['parameters/class_weight'] = class_weight
-        run['parameters/use_variance_threshold'] = use_variance_threshold
-        f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
-        run['metrics/f1_score'] = f1_score_p
-        run['metrics/accuracy'] = accuracy_p
-        import matplotlib.image as mpimg
-        conf_img = mpimg.imread('Conf_matrix.png')
-
-        run["files/class_info"].upload("class_info.txt")
-        run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
-
+        print(f' Model: {class_alg[0]}, F1 Score: {study.best_trial.value}')
 if __name__ == "__main__": 
-    for i in np.arange(0.5, 1.2, 0.1 ):
-        # train_filename = input('Training Data Set Filename: ')
-        # valid_filename = input('Validation Data Set Filename: ')
-        train_filename = 'L1000_training_set_nv_cyc_adr.csv' # 2
-        valid_filename = 'L1000_test_set_nv_cyc_adr.csv'     # 2
-        #train_filename = 'L1000_training_set_nv_my10.csv' #10
-        #valid_filename = 'L1000_test_set_nv_my10.csv'  #10
-        
-        L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
-        main(train_filename,
-            L1000_training = L1000_training, 
-            L1000_validation = L1000_validation, 
-            clue_gene= clue_gene, 
-            npy_exists = True,
-            apply_class_weight= True,
-            use_variance_threshold = i, 
-            normalize= False,
-            ensemble = False,
-            feat_sel= 0)
+    for var in [0, 0.9, 1, 1.1]:
+        feat_sel = 0
+        for norm in [True, False]:
+                # train_filename = input('Training Data Set Filename: ')
+                # valid_filename = input('Validation Data Set Filename: ')
+                train_filename = 'L1000_training_set_nv_cyc_adr.csv' # 2
+                valid_filename = 'L1000_test_set_nv_cyc_adr.csv'     # 2
+                #train_filename = 'L1000_training_set_nv_my10.csv' #10
+                #valid_filename = 'L1000_test_set_nv_my10.csv'  #10
+                
+                L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
+                main(train_filename,
+                    L1000_training = L1000_training, 
+                    L1000_validation = L1000_validation, 
+                    clue_gene= clue_gene, 
+                    npy_exists = True,
+                    use_variance_threshold = var, 
+                    normalize= norm,
+                    feat_sel= feat_sel)
