@@ -76,7 +76,21 @@ def splitting_into_tensor(df, num_classes, moa_dict):
     
     return input, target #target_onehot
 
-def channel_5_numpy(df, idx):
+def image_normalization(image, channel, plate, pd_imgnorm):
+    '''
+    Normalizes the image by the mean and standard deviation 
+    Pseudocode:
+    1. using plate and channel, extract mean and standard deviation from pd_imgnorm
+    2. use torch.transform.Normalize to normalize the image
+    3. return normalized image
+    '''
+    mean = pd_imgnorm[plate][channel]['m']
+    var = pd_imgnorm[plate][channel]['std']
+    trans_norm = transforms.Normalize(mean, var)
+    image_np = trans_norm(image)
+    return image_np
+
+def channel_5_numpy(df, idx, pd_image_norm):
     '''
     Puts together all channels from CP imaging into a single 5 x 256 x 256 tensor (c x h x w) from all_data.csv
     Input
@@ -98,8 +112,10 @@ def channel_5_numpy(df, idx):
         
         # directly resize down to 256 by 256
         local_im = cv2.resize(local_im, (256, 256), interpolation = cv2.INTER_LINEAR)
+        local_im_norm = image_normalization(local_im, c, row['plate'], pd_image_norm)
         # adds to array to the image vector 
-        im.append(local_im)
+        im.append(local_im_norm)
+
 
     # once we have all the channels, we covert it to a np.array, transpose so it has the correct dimensions and change the type for some reason
     im = np.array(im).astype("int16")
@@ -166,11 +182,12 @@ def results_assessment(y_true, y_pred, dict_moa):
 
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, paths_df, labels, transform=None):
+    def __init__(self, paths_df, labels, transform=None, image_normalization=None):
         self.img_labels = labels
         # print(self.img_labels)
         self.paths_df = paths_df
         self.transform = transform
+        self.im_norm  = image_normalization
 
     def __len__(self):
         ''' The number of data points '''
@@ -179,7 +196,7 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         '''Retreiving the image '''
         # ID = self.list_ID[idx]
-        image = channel_5_numpy(self.paths_df, idx) # extract image from csv using index
+        image = channel_5_numpy(self.paths_df, idx, self.im_norm) # extract image from csv using index
         #print(image)
         #print(f' return from function: {image}')
         label = self.img_labels[idx]          # extract calssification using index
@@ -253,6 +270,8 @@ test_df, test_labels = splitting_into_tensor(test_df, num_classes, moa_dict)
 world_size = torch.cuda.device_count()
 # print(world_size)
 
+# importing data normalization pandas dataframe
+pd_image_norm = pd.read('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/dmso_stats_v1v2.csv')
 
 
 batch_size = 12 
@@ -276,9 +295,9 @@ else:
 print(f'Training on device {device}. ' )
 
 # Create datasets with relevant data and labels
-training_dataset = Dataset(training_df, train_labels, transform = train_transforms)
-valid_dataset = Dataset(validation_df, validation_labels)
-test_dataset = Dataset(test_df, test_labels)
+training_dataset = Dataset(training_df, train_labels, transform = train_transforms, image_normalization= pd_image_norm)
+valid_dataset = Dataset(validation_df, validation_labels, image_normalization= pd_image_norm)
+test_dataset = Dataset(test_df, test_labels, image_normalization= pd_image_norm)
 
 # make sure that the number of labels is equal to the number of inputs
 assert len(training_df) == len(train_labels)
