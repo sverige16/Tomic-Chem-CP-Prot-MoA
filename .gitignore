@@ -1,0 +1,26 @@
+# Ignore all pngs
+*.png
+# Ignore all npys
+*.npy
+# Ignore all csvs
+*.csv
+# Ignore all txt files
+*.txt
+# Ignore all pickles files
+*.pickles
+*.pickle
+# Ignore specific directories with models
+/home/jovyan/Tomics-CP-Chem-Prot-Moa-3/01_CStructure_Models/saved_models/
+/home/jovyan/Tomics-CP-Chem-Prot-Moa-3/02_CP_Models/saved_models/
+/home/jovyan/Tomics-CP-Chem-Prot-Moa-3/03_Global_CStructure_CP_Models/saved_models/
+/home/jovyan/Tomics-CP-Chem-Prot-Moa-3/04_Tomics_Models/Best_Tomics_Model/saved_models/
+/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models
+/home/jovyan/Tomics-CP-Chem-Moa-3/01_CStructure_Models/saved_models/
+/home/jovyan/Tomics-CP-Chem-Moa-3/02_CP_Models/saved_models/
+/home/jovyan/Tomics-CP-Chem-Moa-3/03_Global_CStructure_CP_Models/saved_models/
+/home/jovyan/Tomics-CP-Chem-Moa-3/04_Tomics_Models/Best_Tomics_Model/saved _models/
+# Ignore downloaded lincs-profiling complementarity 
+/home/jovyan/Tomics-CP-Chem-Prot-Moa-3/04_Tomics_Models/lincs-profiling-complementarity/
+04_Tomics_Models/lincs-profiling-complementarity/
+
+

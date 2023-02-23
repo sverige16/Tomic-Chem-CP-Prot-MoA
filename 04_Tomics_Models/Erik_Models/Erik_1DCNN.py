@@ -222,25 +222,25 @@ class CNN_Model(nn.Module):
         self.cha_po_2 = cha_po_2
         
         self.batch_norm1 = nn.BatchNorm1d(num_features)
-        self.dropout1 = nn.Dropout(0.2)
+        self.dropout1 = nn.Dropout(0.340206)
         self.dense1 = nn.utils.weight_norm(nn.Linear(num_features, hidden_size))
         self.batch_norm_c1 = nn.BatchNorm1d(cha_1)
-        self.dropout_c1 = nn.Dropout(0.2)
+        self.dropout_c1 = nn.Dropout(0.366118)
         self.conv1 = nn.utils.weight_norm(nn.Conv1d(cha_1,cha_2, kernel_size = 5, stride = 1, padding=2,  bias=False),dim=None)
         self.ave_po_c1 = nn.AdaptiveAvgPool1d(output_size = cha_po_1)
         self.batch_norm_c2 = nn.BatchNorm1d(cha_2)
-        self.dropout_c2 = nn.Dropout(0.2)
+        self.dropout_c2 = nn.Dropout(0.246443)
         self.conv2 = nn.utils.weight_norm(nn.Conv1d(cha_2,cha_2, kernel_size = 3, stride = 1, padding=1, bias=True),dim=None)
         self.batch_norm_c2_1 = nn.BatchNorm1d(cha_2)
-        self.dropout_c2_1 = nn.Dropout(0.3)
+        self.dropout_c2_1 = nn.Dropout(0.391251)
         self.conv2_1 = nn.utils.weight_norm(nn.Conv1d(cha_2,cha_2, kernel_size = 3, stride = 1, padding=1, bias=True),dim=None)
         self.batch_norm_c2_2 = nn.BatchNorm1d(cha_2)
-        self.dropout_c2_2 = nn.Dropout(0.2)
+        self.dropout_c2_2 = nn.Dropout(0.270753)
         self.conv2_2 = nn.utils.weight_norm(nn.Conv1d(cha_2,cha_3, kernel_size = 5, stride = 1, padding=2, bias=True),dim=None)
         self.max_po_c2 = nn.MaxPool1d(kernel_size=4, stride=2, padding=1)
         self.flt = nn.Flatten()
         self.batch_norm3 = nn.BatchNorm1d(cha_po_2)
-        self.dropout3 = nn.Dropout(0.1)
+        self.dropout3 = nn.Dropout(0.26093)
         self.dense3 = nn.utils.weight_norm(nn.Linear(cha_po_2, num_targets))
         
     ##commented out some of the batch_norms because the loss gradients returns nan values
@@ -282,7 +282,7 @@ loss_fn = torch.nn.BCEWithLogitsLoss()
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
 testing = False # decides if we take a subset of the data
-max_epochs = 1 # number of epochs we are going to run 
+max_epochs = 50 # number of epochs we are going to run 
 # apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()

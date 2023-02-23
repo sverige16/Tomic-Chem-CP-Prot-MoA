@@ -478,7 +478,7 @@ def main(train_filename, L1000_training, L1000_validation,
         
        
         
-        run = neptune.init_run(project='erik-everett-palm/Tomics-Models')
+        run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
         if class_alg[0] == 'logreg':
             run['parameters/class_weight'] = study.best_params['class_weight']
             run['parameters/penalty'] = study.best_params['penalty']
@@ -514,7 +514,7 @@ def main(train_filename, L1000_training, L1000_validation,
         run.stop()
         print(f' Model: {class_alg[0]}, F1 Score: {study.best_trial.value}')
 if __name__ == "__main__": 
-    for var in [0, 0.9, 1, 1.1]:
+    for var in [1.1]:
         feat_sel = 0
         for norm in [True, False]:
                 # train_filename = input('Training Data Set Filename: ')

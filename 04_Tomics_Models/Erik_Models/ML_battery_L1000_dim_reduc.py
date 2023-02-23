@@ -295,7 +295,7 @@ def get_models(class_weight):
     TNC = TabNetClassifier()
     TNC._estimator_type = "classifier"
     models = list()
-    models.append(('logreg', LogisticRegression(class_weight = class_weight, solver= "saga", penalty = "l2")))
+    #models.append(('logreg', LogisticRegression(class_weight = class_weight, solver= "saga", penalty = "l2")))
     #models.append(("LDAC",  LinearDiscriminantAnalysis()))
     #models.append(('QDA', QuadraticDiscriminantAnalysis()))
     #models.append(('Ridge', RidgeClassifierCV(class_weight = class_weight)))
@@ -304,7 +304,7 @@ def get_models(class_weight):
     #models.append(('Ada', AdaBoostClassifier()))
     #models.append(('KNN', KNeighborsClassifier(n_neighbors = 5)))
     #models.append(('Bagg',BaggingClassifier()))
-    #models.append(('Tab', TNC))
+    models.append(('Tab', TNC))
     return models
 
 def printing_results(class_alg, labels_val, predictions): 
@@ -501,6 +501,48 @@ def main(train_filename, L1000_training, L1000_validation,
         run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
 
 if __name__ == "__main__": 
+    '''
+    for var in [0.8, 0.9, 1, 1.1]:
+        if var == -1:
+            for i in [0, 250]:
+                for norm in [True, False]:
+                    # train_filename = input('Training Data Set Filename: ')
+                    # valid_filename = input('Validation Data Set Filename: ')
+                    train_filename = 'L1000_training_set_nv_cyc_adr.csv' # 2
+                    valid_filename = 'L1000_test_set_nv_cyc_adr.csv'     # 2
+                    #train_filename = 'L1000_training_set_nv_my10.csv' #10
+                    #valid_filename = 'L1000_test_set_nv_my10.csv'  #10
+                    
+                    L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
+                    main(train_filename,
+                        L1000_training = L1000_training, 
+                        L1000_validation = L1000_validation, 
+                        clue_gene= clue_gene, 
+                        npy_exists = True,
+                        use_variance_threshold = var, 
+                        normalize= norm,
+                        feat_sel= i)
+
+        else:
+            feat_sel = 0
+            for norm in [True, False]:
+                    # train_filename = input('Training Data Set Filename: ')
+                    # valid_filename = input('Validation Data Set Filename: ')
+                    train_filename = 'L1000_training_set_nv_cyc_adr.csv' # 2
+                    valid_filename = 'L1000_test_set_nv_cyc_adr.csv'     # 2
+                    #train_filename = 'L1000_training_set_nv_my10.csv' #10
+                    #valid_filename = 'L1000_test_set_nv_my10.csv'  #10
+                    
+                    L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
+                    main(train_filename,
+                        L1000_training = L1000_training, 
+                        L1000_validation = L1000_validation, 
+                        clue_gene= clue_gene, 
+                        npy_exists = True,
+                        use_variance_threshold = var, 
+                        normalize= norm,
+                        feat_sel= feat_sel)
+                        '''
     
     # train_filename = input('Training Data Set Filename: ')
     # valid_filename = input('Validation Data Set Filename: ')
@@ -508,7 +550,7 @@ if __name__ == "__main__":
     valid_filename = 'L1000_test_set_nv_cyc_adr.csv'     # 2
     #train_filename = 'L1000_training_set_nv_my10.csv' #10
     #valid_filename = 'L1000_test_set_nv_my10.csv'  #10
-    
+
     L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
     main(train_filename,
         L1000_training = L1000_training, 
@@ -516,7 +558,8 @@ if __name__ == "__main__":
         clue_gene= clue_gene, 
         npy_exists = True,
         apply_class_weight= True,
-        use_variance_threshold = 0, 
+        use_variance_threshold = 0.5, 
         normalize= False,
         ensemble = False,
         feat_sel= 0)
+    

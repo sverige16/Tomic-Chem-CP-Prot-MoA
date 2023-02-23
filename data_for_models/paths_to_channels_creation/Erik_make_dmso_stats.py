@@ -20,6 +20,7 @@ df_dmso = df_dmso[df_dmso["neg_control_type"] == '[dmso]']
 
 # extract all unique plates
 all_plates = df_dmso.plate.unique()
+all_plates = all_plates[35:37]
 
 '''
 Pseudocode:
@@ -40,8 +41,10 @@ for plate in tqdm.tqdm(all_plates):
         im = []
         for i in range(len(rows)):
             path = rows[c].iloc[i]
-            im.append(cv2.imread(path, -1))
-        
+            try:
+                im.append(cv2.imread(path, -1))
+            except:
+                print('error with path: ', path)
         dmso_stats[plate][c] = {'m': np.mean(im), 'std':np.std(im)}
 
 

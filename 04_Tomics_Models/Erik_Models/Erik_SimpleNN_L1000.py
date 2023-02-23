@@ -134,7 +134,7 @@ class Transcriptomic_Profiles(torch.utils.data.Dataset):
 
 batch_size = 50
 WEIGHT_DECAY = 1e-5
-learning_rate = 5e-3
+learning_rate = 0.0020009202086758936
 num_feat = 0
 # parameters
 params = {'batch_size' : batch_size,
@@ -216,16 +216,17 @@ class SimpleNN_Model(nn.Module):
     def __init__(self, num_features = None, num_targets = None, hidden_size = None):
         super(SimpleNN_Model, self).__init__()
         self.batch_norm1 = nn.BatchNorm1d(num_features)
-        self.dropout1 = nn.Dropout(0.2)
-        self.dense1 = nn.utils.weight_norm(nn.Linear(num_features, hidden_size))
+        self.dropout1 = nn.Dropout(0.4656118427901917)
+        self.dense1 = nn.utils.weight_norm(nn.Linear(num_features, 101))
         
-        self.batch_norm2 = nn.BatchNorm1d(hidden_size)
-        self.dropout2 = nn.Dropout(0.3)
-        self.dense2 = nn.Linear(hidden_size, hidden_size)
+        self.batch_norm2 = nn.BatchNorm1d(101)
+        self.dropout2 = nn.Dropout(0.4308499633129614)
+        self.dense2 = nn.Linear(101, 110)
         
-        self.batch_norm3 = nn.BatchNorm1d(hidden_size)
-        self.dropout3 = nn.Dropout(0.2)
-        self.dense3 = nn.utils.weight_norm(nn.Linear(hidden_size, num_targets))
+        self.batch_norm3 = nn.BatchNorm1d(110)
+        self.dropout3 = nn.Dropout(0.30281246021042596)
+        self.dense3 = nn.Linear(110,48)
+        self.dense4 = nn.utils.weight_norm(nn.Linear(48, num_targets))
     
     def forward(self, x):
         x = self.batch_norm1(x)
@@ -239,6 +240,8 @@ class SimpleNN_Model(nn.Module):
         x = self.batch_norm3(x)
         x = self.dropout3(x)
         x = self.dense3(x)
+        x = self.dense4(x)
+
         
         return x
 
@@ -247,7 +250,7 @@ class SimpleNN_Model(nn.Module):
 
 
 model = SimpleNN_Model(num_features = 978, num_targets= num_classes, hidden_size= hidden_size)
-optimizer = torch.optim.Adam(model.parameters(),  weight_decay=WEIGHT_DECAY, lr=learning_rate)
+optimizer = torch.optim.RMSprop(model.parameters(),  weight_decay=WEIGHT_DECAY, lr=learning_rate)
 loss_fn = torch.nn.BCEWithLogitsLoss()
 
 
@@ -256,7 +259,7 @@ loss_fn = torch.nn.BCEWithLogitsLoss()
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
-max_epochs = 15 # number of epochs we are going to run 
+max_epochs = 50 # number of epochs we are going to run 
 # apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
