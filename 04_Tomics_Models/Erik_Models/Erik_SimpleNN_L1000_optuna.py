@@ -130,7 +130,22 @@ class Transcriptomic_Profiles(torch.utils.data.Dataset):
         
         return torch.squeeze(t_profile_features), t_moa 
 
+class EarlyStopper:
+    def __init__(self, patience=1, min_delta=0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.min_validation_loss = np.inf
 
+    def early_stop(self, validation_loss):
+        if validation_loss < self.min_validation_loss:  # if the validation loss is less than the minimum validation loss we have seen so far
+            self.min_validation_loss = validation_loss  # update the minimum validation loss
+            self.counter = 0
+        elif validation_loss > (self.min_validation_loss + self.min_delta): # if the validation loss is greater than the minimum validation loss we have seen so far + the minimum delta
+            self.counter += 1                       # increment the counter
+            if self.counter >= self.patience:       # if the counter is greater than the patience
+                return True
+        return False
 # In[65]:
 
 
@@ -150,8 +165,11 @@ else:
 print(f'Training on device {device}. ' )
 
 
+#train_filename = 'L1000_training_set_nv_my10.csv'
+#valid_filename = 'L1000_test_set_nv_my10.csv'
 train_filename = 'L1000_training_set_nv_cyc_adr.csv'
 valid_filename = 'L1000_test_set_nv_cyc_adr.csv'
+
 L1000_training, L1000_validation = load_train_valid_data(train_filename, valid_filename)
 # Creating a  dictionary of the one hot encoded labels
 dict_moa = dict_splitting_into_tensor(L1000_training)
@@ -238,6 +256,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     valid_loader: generator creating batches of validation data
     '''
     # lists keep track of loss and accuracy for training and validation set
+    early_stopper = EarlyStopper(patience=5, min_delta=0.0001)
     model = model.to(device)
     train_loss_per_epoch = []
     train_acc_per_epoch = []
@@ -248,7 +267,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         loss_train = 0.0
         train_total = 0
         train_correct = 0
-        for tprofiles, labels in train_loader:
+        for tprofiles, labels in tqdm(train_loader, desc = "within epoch", position=0, leave=True):
             optimizer.zero_grad()
             # put model, images, labels on the same device
             tprofiles = tprofiles.to(device = device)
@@ -283,6 +302,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         if epoch == 1 or epoch %2 == 0:
             print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
         # adding epoch loss, accuracy to lists 
+        if early_stopper.early_stop(validation_loss = val_loss):             
+            break
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
@@ -384,7 +405,7 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
 
 study = optuna.create_study(direction='minimize')
 study.optimize(lambda trial: objectiv(trial, num_feat = 978, 
-                                      num_classes = 2, 
+                                      num_classes = num_classes, 
                                       training_generator= training_generator, 
                                       validation_generator = validation_generator), 
                                       n_trials=50)

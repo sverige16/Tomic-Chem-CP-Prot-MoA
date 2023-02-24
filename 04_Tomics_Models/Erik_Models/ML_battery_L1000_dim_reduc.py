@@ -285,7 +285,7 @@ def save_npy(dataset, split_type):
     file_name = input("Give filename for numpy array: ")
     np.save(path + file_name + '_' + split_type, dataset)
 
-def get_models(class_weight):
+def get_models():
     '''
     Input:
         class weight: including or not including class weight.
@@ -295,16 +295,16 @@ def get_models(class_weight):
     TNC = TabNetClassifier()
     TNC._estimator_type = "classifier"
     models = list()
-    #models.append(('logreg', LogisticRegression(class_weight = class_weight, solver= "saga", penalty = "l2")))
+    models.append(('logreg', LogisticRegression(class_weight = "balanced", solver= "saga", penalty = "l2")))
     #models.append(("LDAC",  LinearDiscriminantAnalysis()))
     #models.append(('QDA', QuadraticDiscriminantAnalysis()))
     #models.append(('Ridge', RidgeClassifierCV(class_weight = class_weight)))
     #models.append(('RFC',RandomForestClassifier(class_weight= class_weight))) 
-    #models.append(('gradboost', GradientBoostingClassifier()))
-    #models.append(('Ada', AdaBoostClassifier()))
+    #models.append(('gradboost', GradientBoostingClassifier(learning_rate=0.882416, n_estimators=600, loss= 'exponential', max_depth= 3)))
+    #models.append(('Ada', AdaBoostClassifier(learning_rate= 0.482929,  n_estimators= 902, algorithm= 'SAMME.R')))
     #models.append(('KNN', KNeighborsClassifier(n_neighbors = 5)))
     #models.append(('Bagg',BaggingClassifier()))
-    models.append(('Tab', TNC))
+    # models.append(('Tab', TNC))
     return models
 
 def printing_results(class_alg, labels_val, predictions): 
@@ -410,20 +410,22 @@ def main(train_filename, L1000_training, L1000_validation,
   
     df_train_features, df_val_features = feature_selection(df_train_features, df_val_features, feat_sel)
 
+    
+    # pre-processing using variance threshold
+    if use_variance_threshold > 0:
+        df_train_features, df_val_features = variance_threshold(df_train_features, df_val_features, use_variance_threshold)
+
      # to normalize
     if normalize:
         df_train_features, df_val_features, norm_type = normalize_func(df_train_features, df_val_features)
     else:
         norm_type = None
-    # applying class weights
-    if apply_class_weight:
-        class_weight = "balanced"
-    else:
-        class_weight = None
+
+    input_shape = df_train_features.shape[1]
     
     # -----------------------------------------------------------------------------------------------------------------------------#
     print("starting modelling")
-    models = get_models(class_weight)
+    models = get_models()
     scores = list()
     # battery of classifiers
     for class_alg in models:
@@ -453,17 +455,14 @@ def main(train_filename, L1000_training, L1000_validation,
             predictions = classifier.predict(df_val_features.values)
         f1_score_from_model = f1_score(df_val_labels, predictions, average= "macro") 
         scores.append(f1_score_from_model)
-        run = neptune.init_run(project='erik-everett-palm/Tomics-Models')
+        run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
         run['model'] = class_alg[0]
         run["filename"] = train_filename
         run["feat_selec/feat_sel"] = feat_sel
         run['parameters/normalize'] = norm_type
-        run['parameters/class_weight'] = class_weight
         run['parameters/use_variance_threshold'] = use_variance_threshold
         run['feat_selec/input_shape'] = input_shape
-        if class_alg[0] == 'Ridge':
-            run['parameters/alpha'] = classifier.alpha_
-            run['feat_selec/n_features_in'] =  classifier.n_features_in_ 
+        run['parameters/best_parameters'] = class_alg[1].get_params()
         f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
         run['metrics/f1_score'] = f1_score_p
         run['metrics/accuracy'] = accuracy_p
@@ -484,12 +483,11 @@ def main(train_filename, L1000_training, L1000_validation,
             ensemble.fit(df_train_features.values, df_train_labels.values)
             predictions = ensemble.predict(df_val.values)
         
-        run = neptune.init_run(project='erik-everett-palm/Tomics-Models')
+        run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
         run['model'] = str(models)
         run["feat_selec/feat_sel"] = feat_sel
         run["filename"] = train_filename
         run['parameters/normalize'] = norm_type
-        run['parameters/class_weight'] = class_weight
         run['parameters/use_variance_threshold'] = use_variance_threshold
         f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
         run['metrics/f1_score'] = f1_score_p
@@ -558,8 +556,8 @@ if __name__ == "__main__":
         clue_gene= clue_gene, 
         npy_exists = True,
         apply_class_weight= True,
-        use_variance_threshold = 0.5, 
-        normalize= False,
-        ensemble = False,
+        use_variance_threshold = 0.8, 
+        normalize= True,
+        ensemble = True,
         feat_sel= 0)
     

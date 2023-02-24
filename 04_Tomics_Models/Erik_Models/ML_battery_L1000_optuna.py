@@ -265,13 +265,13 @@ def acquire_npy(dataset):
     if dataset == 'train':
         #filename = input('Give name of npy file (str): ')
         #npy_set = np.load(path + filename)
-        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_train.npy', allow_pickle=True)
-        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrtrain.npy', allow_pickle=True)
+        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_train.npy', allow_pickle=True)
+        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrtrain.npy', allow_pickle=True)
     elif dataset == 'val':
         #filename = input('Give name of npy file (str): ')
         #npy_set = np.load(path + filename)
-        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_val.npy', allow_pickle=True)
-        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrval.npy', allow_pickle=True)
+        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_val.npy', allow_pickle=True)
+        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrval.npy', allow_pickle=True)
     else:
         filename =  input('Give name of npy file (str): ')
         npy_set = np.load(path + filename)
@@ -302,12 +302,13 @@ def get_models():
     #models.append(('KNN', KNeighborsClassifier(n_neighbors = 5)))
     #models.append(('Bagg',BaggingClassifier()))
     # --------# 
+    models.append(('gradboost', GradientBoostingClassifier()))
     models.append(('logreg', LogisticRegression()))
     models.append(("LDAC",  LinearDiscriminantAnalysis()))
     
     models.append(('Ridge', RidgeClassifierCV()))
     
-    models.append(('gradboost', GradientBoostingClassifier()))
+   
     models.append(('Ada', AdaBoostClassifier()))
    
     #models.append(('Tab', TNC))
@@ -413,7 +414,7 @@ def main(train_filename, L1000_training, L1000_validation,
             study.optimize(ridge_objective, n_trials=25)
         elif class_alg[0] == 'gradboost':
             def gradboost_objective(trial):
-                loss = trial.suggest_categorical('loss', ['log_loss', 'exponential'])
+                loss = trial.suggest_categorical('loss', ['log_loss'])
                 learning_rate = trial.suggest_float('learning_rate', 0.01, 1)
                 n_estimators = trial.suggest_int('n_estimators', 100, 1000)
                 max_depth = trial.suggest_int('max_depth', 1, 10)
@@ -449,7 +450,7 @@ def main(train_filename, L1000_training, L1000_validation,
                 solver = trial.suggest_categorical('solver', ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga'])
                 penalty = trial.suggest_categorical('penalty', ['l2'])
                 class_weight = trial.suggest_categorical('class_weight', ['balanced', None])
-                classifier = LogisticRegression(solver=solver, penalty=penalty, class_weight=class_weight)
+                classifier = LogisticRegression(solver=solver, penalty=penalty, class_weight=class_weight, max_iter = 4000)
                 classifier.fit(df_train_features.values, df_train_labels.values)
                 predictions = classifier.predict(df_val_features.values)
                 return f1_score(df_val_labels, predictions, average= "macro")
@@ -514,13 +515,13 @@ def main(train_filename, L1000_training, L1000_validation,
         run.stop()
         print(f' Model: {class_alg[0]}, F1 Score: {study.best_trial.value}')
 if __name__ == "__main__": 
-    for var in [1.1]:
+    for var in [0.5, 0.7, 0.9, 1.1]:
         feat_sel = 0
         for norm in [True, False]:
                 # train_filename = input('Training Data Set Filename: ')
                 # valid_filename = input('Validation Data Set Filename: ')
-                train_filename = 'L1000_training_set_nv_cyc_adr.csv' # 2
-                valid_filename = 'L1000_test_set_nv_cyc_adr.csv'     # 2
+                train_filename = 'L1000_training_set_nv_my10.csv' # 2
+                valid_filename = 'L1000_test_set_nv_my10.csv'     # 2
                 #train_filename = 'L1000_training_set_nv_my10.csv' #10
                 #valid_filename = 'L1000_test_set_nv_my10.csv'  #10
                 
