@@ -77,7 +77,7 @@ clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Model
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
 
 # -------------------------------------------------------------------------------------------------------------------------
-def load_train_valid_data_(train_data, valid_data):
+def load_train_val_data(path, train_data, valid_data):
     '''
     Functions loads the data frames that will be used to train classifier and assess its accuracy in predicting.
     input:
@@ -87,7 +87,6 @@ def load_train_valid_data_(train_data, valid_data):
        L1000 training: pandas dataframe with training data
        L1000 validation: pandas dataframe with validation data
     '''
-    path = '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/data_split_csvs/'
     L1000_training = pd.read_csv(path + train_data, delimiter = ",")
     L1000_validation =pd.read_csv(path + valid_data, delimiter = ",")
     return L1000_training, L1000_validation
@@ -505,26 +504,63 @@ if __name__ == "__main__":
         set train file name to i
         set test file name to p
         fix load train valid data so that it can handle this
-              somehow tell optuna that this is a 5 way
-              save all 5 models in optuna
+              somehow tell neptune that this is a 5 way
+              save all 5 models in neptune
 
     """
-    # train_filename = input('Training Data Set Filename: ')
-    # valid_filename = input('Validation Data Set Filename: ')
-    train_filename = 'L1000_training_set_nv_cyc_adr.csv' # 2
-    valid_filename = 'L1000_test_set_nv_cyc_adr.csv'     # 2
-    #train_filename = 'L1000_training_set_nv_my10.csv' #10
-    #valid_filename = 'L1000_test_set_nv_my10.csv'  #10
-
-    L1000_training, L1000_validation =  load_train_valid_data(train_filename, valid_filename)
-    main(train_filename,
-        L1000_training = L1000_training, 
-        L1000_validation = L1000_validation, 
-        clue_gene= clue_gene, 
-        npy_exists = True,
-        apply_class_weight= True,
-        use_variance_threshold = 0.8, 
-        normalize= True,
-        ensemble = True,
-        feat_sel= 0)
+    ### cyc_adr
+    for trai_val, test in zip(['cyc_adr_clue_train_val_fold_0',
+                 'cyc_adr_clue_train_val_fold_1',
+                 'cyc_adr_clue_train_val_fold_2',
+                 'cyc_adr_clue_train_val_fold_3',
+                 'cyc_adr_clue_train_val_fold_4'],
+                 ['cyc_adr_clue_test_fold_0',
+                 'cyc_adr_clue_test_fold_1',
+                 'cyc_adr_clue_test_fold_2',
+                 'cyc_adr_clue_test_fold_3',
+                 'cyc_adr_clue_test_fold_4']):
+        path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr'
+        train_filename =  trai_val
+        test_filename = test
+        
+    ### my10 
+    for trai_val, test in zip(['erik10_clue_train_val_fold_0',
+                 'erik10_clue_train_val_fold_1',
+                 'erik10_clue_train_val_fold_2',
+                 'erik10_clue_train_val_fold_3',
+                 'erik10_clue_train_val_fold_4'],
+                 ['erik10_clue_test_fold_0',
+                 'erik10_clue_test_fold_1',
+                 'erik10_clue_test_fold_2',
+                 'erik10_clue_test_fold_3',
+                 'erik10_clue_test_fold_4']):
+        path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10'
+        train_filename =  trai_val
+        test_filename = test
     
+    ### tian10
+    for trai_val, test in zip(['tian10_clue_train_val_fold_0',
+                 'tian10_clue_train_val_fold_1',
+                 'tian10_clue_train_val_fold_2',
+                 'tian10_clue_train_val_fold_3',
+                 'tian10_clue_train_val_fold_4'],
+                 ['tian10_clue_test_fold_0',
+                 'tian10_clue_test_fold_1',
+                 'tian10_clue_test_fold_2',
+                 'tian10_clue_test_fold_3',
+                 'tian10_clue_test_fold_4']):
+        path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10'
+        train_filename =  trai_val
+        test_filename = test
+        
+        L1000_training, L1000_validation = load_train_val_data(path, train_filename, test_filename)
+        main(train_filename,
+            L1000_training = L1000_training, 
+            L1000_validation = L1000_validation, 
+            clue_gene= clue_gene, 
+            npy_exists = True,
+            apply_class_weight= True,
+            use_variance_threshold = 0.8, 
+            normalize= True,
+            ensemble = True,
+            feat_sel= 0)

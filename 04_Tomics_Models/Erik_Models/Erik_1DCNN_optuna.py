@@ -325,7 +325,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     valid_loader: generator creating batches of validation data
     '''
     # lists keep track of loss and accuracy for training and validation set
-    early_stopper = EarlyStopper(patience=5, min_delta=0.0001)
+    
+    
     model = model.to(device)
     train_loss_per_epoch = []
     train_acc_per_epoch = []
@@ -441,7 +442,7 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
     dropout_rate5 = trial.suggest_float('dropout_rate5', 0.2, 0.5)
     dropout_rate6 = trial.suggest_float('dropout_rate6', 0.2, 0.5)
     dropout_rates = [dropout_rate1, dropout_rate2, dropout_rate3, dropout_rate4, dropout_rate5, dropout_rate6]
-    channel_num = trial.suggest_int('channel_num', 2, 6)
+    #channel_num = trial.suggest_int('channel_num', 2, 6)
     hidden_size = 4096
     num_feat = num_feat
     num_classes = num_classes

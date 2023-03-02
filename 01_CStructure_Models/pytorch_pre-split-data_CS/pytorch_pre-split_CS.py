@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split # Functipn to split data into training, validation and test sets
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix, f1_score, accuracy_score
 import pickle
 import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
 import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
@@ -27,10 +27,15 @@ import torch
 from torchvision import transforms
 import torchvision.models as models
 import torch.nn as nn
+import neptune.new as neptune
+
+from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
+from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time
+
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
 testing = False # decides if we take a subset of the data
-max_epochs = 250 # number of epochs we are going to run 
+max_epochs = 5 # number of epochs we are going to run 
 apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
@@ -72,62 +77,6 @@ def smiles_to_array(smiles):
     x_array = ((np.squeeze(x_array)).astype(int)) 
     x_array = torch.from_numpy(x_array)
     return x_array                  
-
-def val_vs_train_loss(epochs, train_loss, val_loss):
-    ''' 
-    Plotting validation versus training loss over time
-    epochs: number of epochs that the model ran (int. hyperparameter)
-    train_loss: training loss per epoch (python list)
-    val_loss: validation loss per epoch (python list)
-    ''' 
-    loss_path_to_save = '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split'
-    plt.figure()
-    x_axis = list(range(1, epochs +1)) # create x axis with number of
-    plt.plot(x_axis, train_loss, label = "train_loss")
-    plt.plot(x_axis, val_loss, label = "val_loss")
-    # Figure description
-    plt.xlabel('# of Epochs')
-    plt.ylabel('Loss')
-    plt.title('Validation versus Training Loss: CP Image Model')
-    plt.legend()
-    # plot
-    plt.savefig(loss_path_to_save + '/' + 'loss_train_val_' + now)
-
-def val_vs_train_accuracy(epochs, train_acc, val_acc):
-    '''
-    Plotting validation versus training loss over time
-    epochs: number of epochs that the model ran (int. hyperparameter)
-    train_acc: accuracy loss per epoch (python list)
-    val_acc: accuracy loss per epoch (python list)
-    '''
-    acc_path_to_save = '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split'
-    plt.figure()
-    x_axis = list(range(1, epochs +1)) # create x axis with number of
-    plt.plot(x_axis, train_acc, label = "train_acc")
-    plt.plot(x_axis, val_acc, label = "val_acc")
-    # Figure description
-    plt.xlabel('# of Epochs')
-    plt.ylabel('Accuracy')
-    plt.title('Validation versus Training Accuracy: CP Image Model')
-    plt.legend()
-    # plot
-    plt.savefig(acc_path_to_save + '/' + 'acc_train_val_' + now)
-
-def results_assessment(y_true, y_pred, dict_moa):
-    target= [None]*len(dict_moa)
-    for i in dict_moa.items():
-        target[i[1]] = i[0]
-    save_path =  '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/'
-    class_report_output = classification_report(y_true, y_pred, target_names=target)
-    try:
-        chem_struc_file= open(save_path + 'saved_classification_reports/pre_split/' + now + '_classif_report.txt', 'a')
-        chem_struc_file.write((class_report_output))
-        chem_struc_file.close()
-    except:
-        print("Unable to append to file")
-    
-    conf_matrix = confusion_matrix(y_true, y_pred)
-    np.save((save_path + 'saved_confusion_matrices/pre_split/'  + now + '_confusion_matrix.npy'), conf_matrix)
 
    
 #---------------------------------------------------------------------------------------------------------------------------------------#
@@ -263,13 +212,13 @@ seq_model = nn.Sequential(
 
 # optimizer_algorithm
 #cnn_optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
-optimizer = torch.optim.Adam(seq_model.parameters(), lr = 1e-4)
+learning_rate = 1e-4
+optimizer = torch.optim.Adam(seq_model.parameters(), lr = learning_rate)
 # loss_function
 if apply_class_weights == True:
     loss_function = torch.nn.CrossEntropyLoss(class_weights)
 else:
     loss_function = torch.nn.CrossEntropyLoss()
-
 
 def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader):
     '''
@@ -279,6 +228,124 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     loss_fn: loss function
     train_loader: generator creating batches of training data
     valid_loader: generator creating batches of validation data
+    '''
+    # lists keep track of loss and accuracy for training and validation set
+    model = model.to(device)
+    early_stopper = EarlyStopper(patience=5, min_delta=0.0001)
+    train_loss_per_epoch = []
+    train_acc_per_epoch = []
+    val_loss_per_epoch = []
+    val_acc_per_epoch = []
+    best_val_loss = np.inf
+    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= True):
+        loss_train = 0.0
+        train_total = 0
+        train_correct = 0
+        for tprofiles, labels in train_loader:
+            optimizer.zero_grad()
+            # put model, images, labels on the same device
+            tprofiles = tprofiles.to(device = device)
+            labels = labels.to(device= device)
+            # Training Model
+            outputs = model(tprofiles)
+            #print(f' Outputs : {outputs}') # tensor with 10 elements
+            #print(f' Labels : {labels}') # tensor that is a number
+            loss = loss_fn(outputs,labels)
+            # For L2 regularization
+            l2_lambda = 0.000001
+            l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
+            loss = loss + l2_lambda * l2_norm
+            # Update weights
+            loss.backward()
+            optimizer.step()
+            # Training Metrics
+            loss_train += loss.item()
+            #print(f' loss: {loss.item()}')
+            train_predicted = torch.argmax(outputs, 1)
+            #print(f' train_predicted {train_predicted}')
+            # NEW
+            #labels = torch.argmax(labels,1)
+            #print(labels)
+            train_total += labels.shape[0]
+            train_correct += int((train_predicted == labels).sum())
+        # validation metrics from batch
+        val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
+        best_val_loss = best_val_loss_upd
+        val_accuracy = val_correct/val_total
+        # printing results for epoch
+        if epoch == 1 or epoch %2 == 0:
+            print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
+        if early_stopper.early_stop(validation_loss = val_loss):             
+            break
+        # adding epoch loss, accuracy to lists 
+        val_loss_per_epoch.append(val_loss)
+        train_loss_per_epoch.append(loss_train/len(train_loader))
+        val_acc_per_epoch.append(val_accuracy)
+        train_acc_per_epoch.append(train_correct/train_total)
+    # return lists with loss, accuracy every epoch
+    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
+                                
+
+def validation_loop(model, loss_fn, valid_loader, best_val_loss):
+    '''
+    Assessing trained model on valiidation dataset 
+    model: deep learning architecture getting updated by model
+    loss_fn: loss function
+    valid_loader: generator creating batches of validation data
+    '''
+    model = model.to(device)
+    model.eval()
+    loss_val = 0.0
+    correct = 0
+    total = 0
+    predict_proba = []
+    predictions = []
+    all_labels = []
+    with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
+        for tprofiles, labels in valid_loader:
+            # Move to device MAY NOT BE NECESSARY
+            tprofiles = tprofiles.to(device = device)
+            labels = labels.to(device= device)
+            # Assessing outputs
+            outputs = model(tprofiles)
+            #probs = torch.nn.Softmax(outputs)
+            loss = loss_fn(outputs,labels)
+            loss_val += loss.item()
+            predicted = torch.argmax(outputs, 1)
+            #labels = torch.argmax(labels,1)
+            total += labels.shape[0]
+            correct += int((predicted == labels).sum()) # saving best 
+            all_labels.append(labels)
+            predict_proba.append(outputs)
+            predictions.append(predicted)
+        avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
+        if best_val_loss > avg_val_loss:
+            best_val_loss = avg_val_loss
+            m = torch.nn.Softmax(dim=1)
+            pred_cpu = torch.cat(predictions).cpu()
+            labels_cpu =  torch.cat(all_labels).cpu()
+            torch.save(
+                {   'predict_proba' : m(torch.cat(predict_proba)),
+                    'predictions' : pred_cpu.numpy(),
+                    'labels_val' : labels_cpu.numpy(),
+                    'model_state_dict' : model.state_dict(),
+                    'valid_loss' : loss_val,
+                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'weighted'),
+                    'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_models/pre_split/' + 'ChemStruc_least_loss_model'
+            )
+    model.train()
+    return correct, total, avg_val_loss, best_val_loss
+
+#def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader):
+    '''
+    n_epochs: number of epochs 
+    optimizer: optimizer used to do backpropagation
+    model: deep learning architecture
+    loss_fn: loss function
+    train_loader: generator creating batches of training data
+    valid_loader: generator creating batches of validation data
+    '''
     '''
     # lists keep track of loss and accuracy for training and validation set
     #optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
@@ -332,17 +399,18 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         train_acc_per_epoch.append(train_correct/train_total)
     # return lists with loss, accuracy every epoch
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
-
+'''
 
 # In[494]:
 
 
-def validation_loop(model, loss_fn, valid_loader, best_val_loss, epoch):
+#def validation_loop(model, loss_fn, valid_loader, best_val_loss, epoch):
     '''
     Assessing trained model on valiidation dataset 
     model: deep learning architecture getting updated by model
     loss_fn: loss function
     valid_loader: generator creating batches of validation data
+    '''
     '''
     loss_val = 0.0
     correct = 0
@@ -378,7 +446,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss, epoch):
     model.train()
     return correct, total, avg_val_loss, best_val_loss
 
-
+'''
 def test_loop(model, loss_fn, test_loader):
     '''
     Assessing trained model on test dataset 
@@ -420,7 +488,7 @@ def test_loop(model, loss_fn, test_loader):
         avg_test_loss = loss_test/len(test_loader)  # average loss over batch
     return correct, total, avg_test_loss, all_predictions, all_labels
 #----------------------------------------------------- Training and validation ----------------------------------#
-train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch = training_loop(n_epochs = max_epochs,
+train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
               optimizer = optimizer,
               model = seq_model,
               loss_fn = loss_function,
@@ -432,28 +500,44 @@ correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = s
                                           test_loader = test_generator)
 
 # ----------------------------------------- Plotting loss, accuracy, visualization of results ---------------------#
-val_vs_train_loss(max_epochs,train_loss_per_epoch, val_loss_per_epoch)
 
-val_vs_train_accuracy(max_epochs, train_acc_per_epoch, val_acc_per_epoch)
+val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'Chem_Struct', '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split') 
+val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'Chem_Struct', '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split')
 
-results_assessment(all_predictions, all_labels, moa_dict)
+
 #-------------------------------- Writing interesting info into terminal ----------------------------------# 
 end = time.time()
-def program_elapsed_time(start, end):
-    program_time = round(end - start, 2) 
-    print(program_time)
-    if program_time > float(60) and program_time < 60*60:
-        program_time =  program_time/60
-        time_elapsed = str(program_time) + ' min'
-    elif program_time > 60*60:
-        program_time = program_time/3600
-        time_elapsed = str(program_time) + ' hrs'
-    else:
-        time_elapsed = str(program_time) + ' sec'
-    return time_elapsed
-program_elapsed_time = program_elapsed_time(start, end)
+
+elapsed_time = program_elapsed_time(start, end)
 
 test_set_acc = f' {round(correct/total*100, 2)} %'
-table = [["Time to Run Program", program_elapsed_time],
+table = [["Time to Run Program", elapsed_time],
 ['Accuracy of Test Set', test_set_acc]]
 print(tabulate(table, tablefmt='fancy_grid'))
+
+run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
+run['model'] = 'Chemical Structure'
+#run["feat_selec/feat_sel"] = feat_sel
+run["filename"] = input('Enter filename: ')
+run['parameters/normalize'] = 'None'
+# run['parameters/class_weight'] = class_weight
+run['parameters/learning_rate'] = learning_rate
+run['parameters/loss_function'] = str(loss_function)
+#run['parameters/use_variance_threshold'] = use_variance_threshold
+#f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
+state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_models/pre_split/' + 'ChemStruc_least_loss_model')
+run['metrics/f1_score'] = state["f1_score"]
+run['metrics/accuracy'] = state["accuracy"]
+run['metrics/loss'] = state["valid_loss"]
+run['metrics/time'] = elapsed_time
+run['metrics/epochs'] = num_epochs
+
+conf_matrix_and_class_report(state["labels_val"], state["predictions"], 'Chem_Struct')
+
+# Upload plots
+run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split'+ '/' + 'loss_train_val_' + 'Chem_Struct' + now  + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' +'/' + 'acc_train_val_' +'Chem_Struct' + now + '.png')
+import matplotlib.image as mpimg
+conf_img = mpimg.imread('Conf_matrix.png')
+run["files/classification_info"].upload("class_info.txt")
+run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
