@@ -242,7 +242,7 @@ loss_fn = torch.nn.BCEWithLogitsLoss()
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
-max_epochs = 50 # number of epochs we are going to run 
+max_epochs = 60 # number of epochs we are going to run 
 # apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
@@ -310,13 +310,13 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         # printing results for epoch
         if epoch == 1 or epoch %2 == 0:
             print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
-        if early_stopper.early_stop(validation_loss = val_loss):             
-            break
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
+        if early_stopper.early_stop(validation_loss = val_loss):             
+            break
     # return lists with loss, accuracy every epoch
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
                                 

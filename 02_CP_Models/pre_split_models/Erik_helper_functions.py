@@ -89,6 +89,15 @@ def dict_splitting_into_tensor(df):
         dicti[str(enc.categories_[0][i])] = one_hot_encoded[i]
     return dicti
 
+def splitting(df):
+    '''Splitting data into two parts:
+    1. input : the pointer showing where the transcriptomic profile is  
+    2. target one hot'''
+    target = df['moa']
+    input =  df.drop('moa', axis = 1)
+    
+    return input, target #target_onehot
+
 def normalize_func(trn, val, test = None):
     """
     Performs quantile normalization on the train, test and validation data. The QuantileTransformer

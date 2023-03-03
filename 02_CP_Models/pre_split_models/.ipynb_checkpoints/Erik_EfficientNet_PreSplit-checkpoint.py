@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split # Functipn to split data into training, validation and test sets
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix, f1_score, accuracy_score, roc_auc_score, roc_curve, auc
 import pickle
 import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
 import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
@@ -29,6 +29,13 @@ import torchvision.transforms.functional as TF
 import torchvision.models as models
 import torch.nn as nn
 
+import seaborn as sns
+import neptune.new as neptune
+
+
+
+from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
+from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time
 
 
 # Image analysis packages
@@ -76,7 +83,7 @@ def splitting_into_tensor(df, num_classes, moa_dict):
     
     return input, target #target_onehot
 
-def image_normalization(image, channel, plate, pd_imgnorm):
+def image_normalization(image, channel, plate, pd_image_norm):
     '''
     Normalizes the image by the mean and standard deviation 
     Pseudocode:
@@ -135,66 +142,6 @@ def channel_5_numpy(df, idx, pd_image_norm):
     five_chan_img = torch.from_numpy(arr_stack)
     return five_chan_img
 
-def val_vs_train_loss(epochs, train_loss, val_loss):
-    ''' 
-    Plotting validation versus training loss over time
-    epochs: number of epochs that the model ran (int. hyperparameter)
-    train_loss: training loss per epoch (python list)
-    val_loss: validation loss per epoch (python list)
-    ''' 
-    loss_path_to_save = '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images'
-    plt.figure()
-    x_axis = list(range(1, epochs +1)) # create x axis with number of
-    plt.plot(x_axis, train_loss, label = "train_loss")
-    plt.plot(x_axis, val_loss, label = "val_loss")
-    # Figure description
-    plt.xlabel('# of Epochs')
-    plt.ylabel('Loss')
-    plt.title('Validation versus Training Loss: CP Image Model')
-    plt.legend()
-    # plot
-    plt.savefig(loss_path_to_save + '/' + 'loss_train_val_' + now)
-
-
-def val_vs_train_accuracy(epochs, train_acc, val_acc):
-    '''
-    Plotting validation versus training loss over time
-    epochs: number of epochs that the model ran (int. hyperparameter)
-    train_acc: accuracy loss per epoch (python list)
-    val_acc: accuracy loss per epoch (python list)
-    '''
-    acc_path_to_save = '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images'
-    plt.figure()
-    x_axis = list(range(1, epochs +1)) # create x axis with number of
-    plt.plot(x_axis, train_acc, label = "train_acc")
-    plt.plot(x_axis, val_acc, label = "val_acc")
-    # Figure description
-    plt.xlabel('# of Epochs')
-    plt.ylabel('Accuracy')
-    plt.title('Validation versus Training Accuracy: CP Image Model')
-    plt.legend()
-    # plot
-    plt.savefig(acc_path_to_save + '/' + 'acc_train_val_' + now)
-
-
-
-def results_assessment(y_true, y_pred, dict_moa):
-    target= [None]*len(dict_moa)
-    for i in dict_moa.items():
-        target[i[1]] = i[0]
-    save_path =  '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/'
-    class_report_output = classification_report(y_true, y_pred, target_names=target)
-    try:
-        chem_struc_file= open(save_path + 'saved_classification_reports/pre_split/' + now + '_classif_report.txt', 'a')
-        chem_struc_file.write((class_report_output))
-        chem_struc_file.close()
-    except:
-        print("Unable to append to file")
-    
-    conf_matrix = confusion_matrix(y_true, y_pred)
-    np.save((save_path + 'saved_confusion_matrices/pre_split/'  + now + '_confusion_matrix.npy'), conf_matrix)
-
-
 class Dataset(torch.utils.data.Dataset):
     def __init__(self, paths_df, labels, transform=None, image_normalization=None):
         self.img_labels = labels
@@ -221,23 +168,6 @@ class Dataset(torch.utils.data.Dataset):
         #return image.float(), label.long()
         return image.float(), label.long()  
 
-
-class EarlyStopper:
-    def __init__(self, patience=1, min_delta=0):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.counter = 0
-        self.min_validation_loss = np.inf
-
-    def early_stop(self, validation_loss):
-        if validation_loss < self.min_validation_loss:  # if the validation loss is less than the minimum validation loss we have seen so far
-            self.min_validation_loss = validation_loss  # update the minimum validation loss
-            self.counter = 0
-        elif validation_loss > (self.min_validation_loss + self.min_delta): # if the validation loss is greater than the minimum validation loss we have seen so far + the minimum delta
-            self.counter += 1                       # increment the counter
-            if self.counter >= self.patience:       # if the counter is greater than the patience
-                return True
-        return False
     
 class MyRotationTransform:
     " Rotate by one of the given angles"
@@ -368,19 +298,19 @@ updated_model = image_network()
 apply_class_weights = True
 if apply_class_weights:     # if we want to apply class weights
     counts = training_set.moa.value_counts()  # count the number of moa in each class for the ENTiRE dataset
-    print(counts)
+    #print(counts)
     class_weights = []   # create list that will hold class weights
     for moa in training_set.moa.unique():       # for each moa   
         #print(moa)
         counts[moa]
         class_weights.append(counts[moa])  # add counts to class weights
-    print(len(class_weights))
-    print(class_weights)
-    print(type(class_weights))
+    #print(len(class_weights))
+    #print(class_weights)
+    #print(type(class_weights))
     # class_weights = 1 / (class_weights / sum(class_weights)) # divide all class weights by total moas
     class_weights = [i / sum(class_weights) for  i in class_weights]
     class_weights= torch.tensor(class_weights,dtype=torch.float).to(device) # transform into tensor, put onto device
-print(class_weights)
+#print(class_weights)
 
 #------------------------ Class weights, optimizer, and loss function ---------------------------------#
 
@@ -456,16 +386,15 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         # printing results for epoch
         if epoch == 1 or epoch %2 == 0:
             print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
-        if early_stopper.early_stop(validation_loss = val_loss):             
-            break
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
     # return lists with loss, accuracy every epoch
+        if early_stopper.early_stop(validation_loss = val_loss):             
+                break
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
-                                
 
 def validation_loop(model, loss_fn, valid_loader, best_val_loss):
     '''
@@ -474,6 +403,51 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
     loss_fn: loss function
     valid_loader: generator creating batches of validation data
     '''
+    model = model.to(device)
+    model.eval()
+    loss_val = 0.0
+    correct = 0
+    total = 0
+    predict_proba = []
+    predictions = []
+    all_labels = []
+    with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
+        for tprofiles, labels in valid_loader:
+            # Move to device MAY NOT BE NECESSARY
+            tprofiles = tprofiles.to(device = device)
+            labels = labels.to(device= device)
+            # Assessing outputs
+            outputs = model(tprofiles)
+            #probs = torch.nn.Softmax(outputs)
+            loss = loss_fn(outputs,labels)
+            loss_val += loss.item()
+            predicted = torch.argmax(outputs, 1)
+            # labels = torch.argmax(labels,1)
+            total += labels.shape[0]
+            correct += int((predicted == labels).sum()) # saving best 
+            all_labels.append(labels)
+            predict_proba.append(outputs)
+            predictions.append(predicted)
+        avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
+        if best_val_loss > avg_val_loss:
+            best_val_loss = avg_val_loss
+            m = torch.nn.Softmax(dim=1)
+            pred_cpu = torch.cat(predictions).cpu()
+            labels_cpu =  torch.cat(all_labels).cpu()
+            torch.save(
+                {   'predict_proba' : m(torch.cat(predict_proba)),
+                    'predictions' : pred_cpu.numpy(),
+                    'labels_val' : labels_cpu.numpy(),
+                    'model_state_dict' : model.state_dict(),
+                    'valid_loss' : loss_val,
+                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'weighted'),
+                    'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_models' +'/' + 'CP_least_loss_model'
+            )
+    model.train()
+    return correct, total, avg_val_loss, best_val_loss                      
+'''
+def validation_loop(model, loss_fn, valid_loader, best_val_loss):
     model = model.to(device)
     model.eval()
     loss_val = 0.0
@@ -507,6 +481,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss
+'''
 
 def test_loop(model, loss_fn, test_loader):
     '''
@@ -566,31 +541,45 @@ correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = u
 
 #---------------------------------------- Visual Assessment ---------------------------------# 
 
-val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch)
+val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'CP', '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images') 
+val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'CP', '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images')
 
-val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch)
-
-results_assessment(all_predictions, all_labels, moa_dict)
+# results_assessment(all_predictions, all_labels, moa_dict)
 
 #-------------------------------- Writing interesting info into terminal ------------------------# 
 
 end = time.time()
-def program_elapsed_time(start, end):
-    program_time = round(end - start, 2) 
-    print(program_time)
-    if program_time > float(60) and program_time < 60*60:
-        program_time =  program_time/60
-        time_elapsed = str(program_time) + ' min'
-    elif program_time > 60*60:
-        program_time = program_time/3600
-        time_elapsed = str(program_time) + ' hrs'
-    else:
-        time_elapsed = str(program_time) + ' sec'
-    return time_elapsed
-program_elapsed_time = program_elapsed_time(start, end)
+
+elapsed_time = program_elapsed_time(start, end)
 
 test_set_acc = f' {round(correct/total*100, 2)} %'
-table = [["Time to Run Program", program_elapsed_time],
+table = [["Time to Run Program", elapsed_time],
 ['Accuracy of Test Set', test_set_acc]]
 print(tabulate(table, tablefmt='fancy_grid'))
 
+run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
+run['model'] = "CNN"
+#run["feat_selec/feat_sel"] = feat_sel
+run["filename"] = "Cell_Painting_CNN"
+run['parameters/normalize'] = "mean and std"
+# run['parameters/class_weight'] = class_weight
+# run['parameters/learning_rate'] = learning_rate
+run['parameters/loss_function'] = str(loss_function)
+#run['parameters/use_variance_threshold'] = use_variance_threshold
+#f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
+state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_models' +'/' + 'CP_least_loss_model')
+run['metrics/f1_score'] = state["f1_score"]
+run['metrics/accuracy'] = state["accuracy"]
+run['metrics/loss'] = state["valid_loss"]
+run['metrics/time'] = elapsed_time
+# run['metrics/epochs'] = max_epochs
+
+conf_matrix_and_class_report(state["labels_val"], state["predictions"])
+
+# Upload plots
+run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'loss_train_val_' + now + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'acc_train_val_' + now + '.png')
+import matplotlib.image as mpimg
+conf_img = mpimg.imread('Conf_matrix.png')
+run["files/classification_info"].upload("class_info.txt")
+run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)

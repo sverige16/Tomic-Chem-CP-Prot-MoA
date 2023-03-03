@@ -53,13 +53,9 @@ import matplotlib.pyplot as plt
 import datetime
 import time
 
-
-# In[37]:
-
-
-from ML_battery_L1000_dim_reduc import tprofiles_gc_too_func, extract_tprofile, load_train_valid_data 
-from ML_battery_L1000_dim_reduc import variance_threshold, normalize_func, feature_selection
-
+from Erik_tprofiles_extraction_functions import tprofiles_gc_too_func, extract_tprofile
+from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
+from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time
 
 # In[63]:
 
@@ -85,19 +81,6 @@ def save_val(val_tensor, file_type):
     torch.save(val_tensor, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/pickles/val_order_pickles/' + file_type )
     print('Done writing binary file')
 
-
-def dict_splitting_into_tensor(df):
-    '''Splitting data into two parts:
-    1. input : the pointer showing where the transcriptomic profile is  
-    2. target one hot : labels (the correct MoA) '''
-    
-    enc = OneHotEncoder(handle_unknown='ignore')
-    enc.fit(df["moa"].unique().reshape(-1,1))
-    one_hot_encoded = enc.transform(enc.categories_[0].reshape(-1,1)).toarray()
-    dicti = {}
-    for i in range(0, len(enc.categories_[0])):
-        dicti[str(enc.categories_[0][i])] = one_hot_encoded[i]
-    return dicti
 
 class Transcriptomic_Profiles(torch.utils.data.Dataset):
     def __init__(self, gc_too, split, dict_moa):
@@ -129,23 +112,6 @@ class Transcriptomic_Profiles(torch.utils.data.Dataset):
         return torch.squeeze(t_profile_features), t_moa 
 
 
-class EarlyStopper:
-    def __init__(self, patience=1, min_delta=0):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.counter = 0
-        self.min_validation_loss = np.inf
-
-    def early_stop(self, validation_loss):
-        if validation_loss < self.min_validation_loss:  # if the validation loss is less than the minimum validation loss we have seen so far
-            self.min_validation_loss = validation_loss  # update the minimum validation loss
-            self.counter = 0
-        elif validation_loss > (self.min_validation_loss + self.min_delta): # if the validation loss is greater than the minimum validation loss we have seen so far + the minimum delta
-            self.counter += 1                       # increment the counter
-            if self.counter >= self.patience:       # if the counter is greater than the patience
-                return True
-        return False
-
 
 batch_size = 50
 WEIGHT_DECAY = 1e-5
@@ -167,7 +133,7 @@ print(f'Training on device {device}. ' )
 #valid_filename = 'L1000_test_set_nv_cyc_adr.csv'
 train_filename = 'L1000_training_set_nv_my10.csv'
 valid_filename = 'L1000_test_set_nv_my10.csv'
-L1000_training, L1000_validation = load_train_valid_data(train_filename, valid_filename)
+L1000_training, L1000_validation = load_train_valid_data('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/data_split_csvs/', train_filename, valid_filename)
 # Creating a  dictionary of the one hot encoded labels
 dict_moa = dict_splitting_into_tensor(L1000_training)
 
@@ -276,7 +242,7 @@ loss_fn = torch.nn.BCEWithLogitsLoss()
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
-max_epochs = 80 # number of epochs we are going to run 
+max_epochs = 60 # number of epochs we are going to run 
 # apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
@@ -288,7 +254,6 @@ now = now.strftime("%d_%m_%Y-%H:%M:%S")
 print("Begin Training")
 
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
-
 
 def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader):
     '''
@@ -307,7 +272,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     val_loss_per_epoch = []
     val_acc_per_epoch = []
     best_val_loss = np.inf
-    for epoch in tqdm(range(1, max_epochs +1), desc = "Epoch", position=0, leave= True):
+    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= True):
         loss_train = 0.0
         train_total = 0
         train_correct = 0
@@ -345,15 +310,15 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         # printing results for epoch
         if epoch == 1 or epoch %2 == 0:
             print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
-        if early_stopper.early_stop(validation_loss = val_loss):             
-            break
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
+        if early_stopper.early_stop(validation_loss = val_loss):             
+            break
     # return lists with loss, accuracy every epoch
-    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
+    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
                                 
 
 def validation_loop(model, loss_fn, valid_loader, best_val_loss):
@@ -396,7 +361,8 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             labels_cpu =  torch.cat(all_labels).cpu()
             torch.save(
                 {   'predict_proba' : m(torch.cat(predict_proba)),
-                    'predictions' : pred_cpu,
+                    'predictions' : pred_cpu.numpy(),
+                    'labels_val' : labels_cpu.numpy(),
                     'model_state_dict' : model.state_dict(),
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'weighted'),
@@ -406,54 +372,11 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
     model.train()
     return correct, total, avg_val_loss, best_val_loss
 
-#---------------------------------------- Visual Assessment ---------------------------------# 
-
-def val_vs_train_loss(epochs, train_loss, val_loss):
-    ''' 
-    Plotting validation versus training loss over time
-    epochs: number of epochs that the model ran (int. hyperparameter)
-    train_loss: training loss per epoch (python list)
-    val_loss: validation loss per epoch (python list)
-    ''' 
-    loss_path_to_save = '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images'
-    plt.figure()
-    x_axis = list(range(1, epochs +1)) # create x axis with number of
-    plt.plot(x_axis, train_loss, label = "train_loss")
-    plt.plot(x_axis, val_loss, label = "val_loss")
-    # Figure description
-    plt.xlabel('# of Epochs')
-    plt.ylabel('Loss')
-    plt.title('Validation versus Training Loss: Tomics SimpleNN Model')
-    plt.legend()
-    # plot
-    plt.savefig(loss_path_to_save + '/' + 'loss_train_val_simpleNN' + now)
-
-
-def val_vs_train_accuracy(epochs, train_acc, val_acc):
-    '''
-    Plotting validation versus training loss over time
-    epochs: number of epochs that the model ran (int. hyperparameter)
-    train_acc: accuracy loss per epoch (python list)
-    val_acc: accuracy loss per epoch (python list)
-    '''
-    acc_path_to_save = '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images'
-    plt.figure()
-    x_axis = list(range(1, epochs +1)) # create x axis with number of
-    plt.plot(x_axis, train_acc, label = "train_acc")
-    plt.plot(x_axis, val_acc, label = "val_acc")
-    # Figure description
-    plt.xlabel('# of Epochs')
-    plt.ylabel('Accuracy')
-    plt.title('Validation versus Training Accuracy: Tomics SimpleNN Model')
-    plt.legend()
-    # plot
-    plt.savefig(acc_path_to_save + '/' + 'acc_train_val_simpleNN' + now)
-
 
 # In[69]:
 
 
-train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch = training_loop(n_epochs = max_epochs,
+train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
               optimizer = optimizer,
               model = model,
               loss_fn = loss_fn,
@@ -461,8 +384,11 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               valid_loader=validation_generator)
 
 
-val_vs_train_loss(max_epochs,train_loss_per_epoch, val_loss_per_epoch)
-val_vs_train_accuracy(max_epochs, train_acc_per_epoch, val_acc_per_epoch)
+
+val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'SimpleNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
+val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'SimpleNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
+
+
 
 #-------------------------------- Writing interesting info into terminal ------------------------# 
 
@@ -502,8 +428,14 @@ run['metrics/f1_score'] = state["f1_score"]
 run['metrics/accuracy'] = state["accuracy"]
 run['metrics/loss'] = state["valid_loss"]
 run['metrics/time'] = elapsed_time
-run['metrics/epochs'] = max_epochs
+run['metrics/epochs'] = num_epochs
+
+conf_matrix_and_class_report(state["labels_val"], state["predictions"], 'SimpleNN')
 
 # Upload plots
 run["images/loss"].upload("/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images"+ '/' + 'loss_train_val_simpleNN' + now + '.png')
 run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'acc_train_val_simpleNN' + now + '.png')
+import matplotlib.image as mpimg
+conf_img = mpimg.imread('Conf_matrix.png')
+run["files/classification_info"].upload("class_info.txt")
+run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)

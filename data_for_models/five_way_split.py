@@ -9,6 +9,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import StratifiedKFold
+import random
 
 def assess_duplicates(flat_list):
     '''
@@ -44,15 +45,15 @@ def main(subset, compounds_v1v2, str_help ):
     # subsetting the data according to usage
     if subset == "cyc_adr":
         y = y[y.isin(["cyclooxygenase inhibitor", "adrenergic receptor antagonist"])]
-        X = X[y.index]
+        X = X.iloc[y.index]
     elif subset == "erik10":
         y = y[y.isin(["cyclooxygenase inhibitor", "dopamine receptor antagonist","adrenergic receptor antagonist", "phosphodiesterase inhibitor",  "HDAC inhibitor", 
                 "histamine receptor antagonist","EGFR inhibitor", "adrenergic receptor agonist", "PARP inhibitor",  "topoisomerase inhibitor"])]
-        X = X[y.index]
+        X = X.iloc[y.index]
     elif subset == "tian10":
         y = y[y.isin(['Aurora kinase inhibitor', 'tubulin polymerization inhibitor', 'JAK inhibitor', 'protein synthesis inhibitor', 'HDAC inhibitor', 
             'topoisomerase inhibitor', 'PARP inhibitor', 'ATPase inhibitor', 'retinoid receptor agonist', 'HSP inhibitor'])]
-        X = X[y.index]  
+        X = X.iloc[y.index]  
     elif subset == "0":
         pass
     else:
@@ -76,16 +77,23 @@ def main(subset, compounds_v1v2, str_help ):
     # make sure that all indices have been in the test set at least one time
     assert len(test_indices) == len(y) 
 
-    compounds_v1v2.iloc[test_index].reset_index(drop = True)
+    #compounds_v1v2.iloc[test_index].reset_index(drop = True)
 
-    for i, (train_index, test_index) in enumerate(skf.split(X,y)):
+    for i, (train_val_index, test_index) in enumerate(skf.split(X,y)):
         file_loc = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/' + subset + '/'
         fold_num = 'fold_' + str(i) + '.csv'
-        train = compounds_v1v2.iloc[train_index].reset_index(drop = True)
-        test = compounds_v1v2.iloc[test_index].reset_index(drop = True)
-        train.to_csv(file_loc + subset + str_help + '_train_val_' + fold_num)
+        _20_ = int(len(train_val_index)*0.8)
+        train_index = random.sample(train_val_index.tolist(), _20_)
+        val_index = list(set(train_val_index.tolist()) - set(train_index))
+        assess_duplicates(train_index + val_index)
+        train = compounds_v1v2.iloc[X.iloc[train_index].index].reset_index(drop = True)
+        test = compounds_v1v2.iloc[X.iloc[test_index].index].reset_index(drop = True)
+        val = compounds_v1v2.iloc[X.iloc[val_index].index].reset_index(drop = True)
+        train.to_csv(file_loc + subset + str_help + '_train_' + fold_num)
         test.to_csv(file_loc + subset + str_help + '_test_' + fold_num)
+        val.to_csv(file_loc + subset + str_help + '_val_' + fold_num)
 
+    print("Done!")
 
 if __name__ == "__main__": 
 
