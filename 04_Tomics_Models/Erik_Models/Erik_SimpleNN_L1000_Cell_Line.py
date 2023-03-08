@@ -55,7 +55,7 @@ import time
 
 from Erik_tprofiles_extraction_functions import tprofiles_gc_too_func, extract_tprofile
 from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time
+from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, extract_all_cell_lines, create_splits
 
 # In[63]:
 
@@ -110,16 +110,16 @@ class Transcriptomic_Profiles(torch.utils.data.Dataset):
         moa_key = moa_key.iloc[0]
         t_moa = torch.tensor(self.dict_moa[moa_key])
         # cell line extration
-        cell_line_key = self.split_sets["cell_id"][self.split_sets["sig_id"] == t_sig_id]
+        cell_line_key = self.split_sets["cell_iname"][self.split_sets["sig_id"] == t_sig_id]
         cell_line_key = cell_line_key.iloc[0]
         t_cell_line = torch.tensor(self.dict_cell_line[cell_line_key])
         t_profile_features = torch.tensor(t_profile[1])       # turn t profile into a floating torch tensor
         
-        return torch.squeeze(t_profile_features), t_moa 
+        return torch.squeeze(t_profile_features), t_moa, t_cell_line.float() 
 
 
 
-batch_size = 50
+batch_size = 51
 WEIGHT_DECAY = 1e-5
 learning_rate = 0.0020009202086758936
 num_feat = 0
@@ -133,35 +133,46 @@ if using_cuda:
 else:
     device = torch.device('cpu')
 print(f'Training on device {device}. ' )
+  
+# download csvs with all the data pre split
+#cyc_adr_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
+#train_filename = 'cyc_adr_clue_train_fold_0.csv'
+#val_filename = 'cyc_adr_clue_val_fold_0.csv'
+#test_filename = 'cyc_adr_clue_test_fold_0.csv'
+#training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
 
+# download csvs with all the data pre split
+erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+train_filename = 'erik10_clue_train_fold_0.csv'
+val_filename = 'erik10_clue_val_fold_0.csv'
+test_filename = 'erik10_clue_test_fold_0.csv'
+training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
 
-#train_filename = 'L1000_training_set_nv_cyc_adr.csv'
-#valid_filename = 'L1000_test_set_nv_cyc_adr.csv'
-train_filename = 'L1000_training_set_nv_my10.csv'
-valid_filename = 'L1000_test_set_nv_my10.csv'
-L1000_training, L1000_validation = load_train_valid_data('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/data_split_csvs/', train_filename, valid_filename)
 # Creating a  dictionary of the one hot encoded labels
-dict_moa = dict_splitting_into_tensor(L1000_training)
+dict_moa = dict_splitting_into_tensor(training_set)
+
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set)
+
+# checking that no overlap in sig_id exists between training, test, validation sets
+inter1 = set(list(L1000_training["sig_id"])) & set(list(L1000_validation["sig_id"]))
+inter2 = set(list(L1000_training["sig_id"])) & set(list(L1000_test["sig_id"]))
+inter3 = set(list(L1000_validation["sig_id"])) & set(list(L1000_test["sig_id"]))
+assert len(inter1) + len(inter2) + len(inter3) == 0, ("There is an intersection between the training, validation and test sets")
 
 # shuffling training and validation data
 L1000_training = L1000_training.sample(frac = 1, random_state = 1)
 L1000_validation = L1000_validation.sample(frac = 1, random_state = 1)
+L1000_test = L1000_test.sample(frac = 1, random_state = 1)
 
 print("extracting training transcriptomes")
 profiles_gc_too_train = tprofiles_gc_too_func(L1000_training, clue_gene)
 print("extracting validation transcriptomes")
 profiles_gc_too_valid = tprofiles_gc_too_func(L1000_validation, clue_gene)
+print("extracting test transcriptomes")
+profiles_gc_too_test = tprofiles_gc_too_func(L1000_test, clue_gene)
 
-def extract_all_cell_lines(df):
 
-    enc = OneHotEncoder(handle_unknown='ignore')
-    enc.fit(df["cell_iname"].to_numpy().reshape(-1,1))          # fit the encoder to the unique values of the moa column
-    one_hot_encoded = enc.transform(enc.categories_[0].reshape(-1,1)).toarray()
-    dicti = {}
-    for i in range(0, len(enc.categories_[0])):       # create a dictionary with the one hot encoded values
-        dicti[str(enc.categories_[0][i])] = one_hot_encoded[i]
-    return dicti
-dict_cell_lines = extract_all_cell_lines(L1000_training)
+dict_cell_lines = extract_all_cell_lines(pd.concat([L1000_training, L1000_validation, L1000_test]))
 
 
 # ------------------------------------- Feature Selection -------------------------------------#
@@ -175,6 +186,7 @@ dict_cell_lines = extract_all_cell_lines(L1000_training)
 
 
 num_classes = len(L1000_training["moa"].unique())
+num_cell_lines = len(dict_cell_lines)
 
 
 
@@ -204,6 +216,9 @@ validation_dataset = Transcriptomic_Profiles(profiles_gc_too_valid, L1000_valida
 
 validation_generator = torch.utils.data.DataLoader(validation_dataset, **params)
 
+test_dataset = Transcriptomic_Profiles(profiles_gc_too_test, L1000_test, dict_moa, dict_cell_lines)
+test_generator = torch.utils.data.DataLoader(test_dataset, **params)
+
 
 
 
@@ -226,14 +241,15 @@ class SimpleNN_Model(nn.Module):
         
         self.batch_norm3 = nn.BatchNorm1d(15)
         self.dropout3 = nn.Dropout(0.236081104695429)
-        self.dense3 = nn.Linear(15,10)
+        self.dense3 = nn.Linear(15,num_targets)
         #self.dense4 = nn.utils.weight_norm(nn.Linear(48, num_targets))
     
     def forward(self, x):
         #x = self.batch_norm1(x)
         #x = self.dropout1(x)
         x = F.leaky_relu(self.dense1(x))
-        
+        if x.shape[0] == 1:
+            pass
         x = self.batch_norm2(x)
         x = self.dropout2(x)
         x = F.leaky_relu(self.dense2(x))
@@ -246,11 +262,37 @@ class SimpleNN_Model(nn.Module):
         
         return x
 
+class cell_line_model(nn.Module):
+    def __init__(self, num_features = None, num_targets = None):
+        super(cell_line_model, self).__init__()
+        self.dense1 = nn.Linear(num_features, 20)
+        self.dense2 = nn.Linear(20, num_targets)
+    def forward(self, x):
+        x = F.leaky_relu(self.dense1(x))
+        x = self.dense2(x)
+        return x
+cell_line_mod = cell_line_model(num_features = num_cell_lines, num_targets = 5)
+cell_line_mod.to(device)
+simple_mod = SimpleNN_Model(num_features = 978, num_targets = 15)
+simple_mod.to(device)
 
-# In[66]:
+class SimpleNN_and_Cell_Line_Model(nn.Module):
+    def __init__(self, simple_model, cell_line_model, num_targets = None):
+        super(SimpleNN_and_Cell_Line_Model, self).__init__()
+        self.SimpleNN = simple_model
+        self.cell_line = cell_line_model
+        self.combo = nn.Linear(20, num_targets)
+    def forward(self, x1, x2):
+        x1 = self.SimpleNN(x1)
+        x1 = F.relu(x1)
+        x2 = self.cell_line(x2)
+        x2 = F.relu(x2)
+        x = torch.cat((x1, x2), dim=1)
+        x = self.combo(x)
+        return x
 
-
-model = SimpleNN_Model(num_features = 978, num_targets= num_classes, hidden_size= hidden_size)
+#model = SimpleNN_Model(num_features = 978, num_targets= num_classes, hidden_size= hidden_size)
+model = SimpleNN_and_Cell_Line_Model(simple_mod, cell_line_mod, num_targets = num_classes)           
 optimizer = torch.optim.RMSprop(model.parameters(),  weight_decay=WEIGHT_DECAY, lr=learning_rate)
 loss_fn = torch.nn.BCEWithLogitsLoss()
 
@@ -260,7 +302,7 @@ loss_fn = torch.nn.BCEWithLogitsLoss()
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
-max_epochs = 60 # number of epochs we are going to run 
+max_epochs = 100 # number of epochs we are going to run 
 # apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
@@ -294,13 +336,14 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         loss_train = 0.0
         train_total = 0
         train_correct = 0
-        for tprofiles, labels in train_loader:
+        for tprofiles, labels, cell_line in train_loader:
             optimizer.zero_grad()
             # put model, images, labels on the same device
             tprofiles = tprofiles.to(device = device)
             labels = labels.to(device= device)
+            cell_line = cell_line.to(device = device)
             # Training Model
-            outputs = model(tprofiles)
+            outputs = model(tprofiles, cell_line)
             #print(f' Outputs : {outputs}') # tensor with 10 elements
             #print(f' Labels : {labels}') # tensor that is a number
             loss = loss_fn(outputs,labels)
@@ -355,12 +398,13 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
     predictions = []
     all_labels = []
     with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
-        for tprofiles, labels in valid_loader:
+        for tprofiles, labels, cell_line in valid_loader:
             # Move to device MAY NOT BE NECESSARY
             tprofiles = tprofiles.to(device = device)
             labels = labels.to(device= device)
+            cell_line = cell_line.to(device = device)
             # Assessing outputs
-            outputs = model(tprofiles)
+            outputs = model(tprofiles, cell_line)
             #probs = torch.nn.Softmax(outputs)
             loss = loss_fn(outputs,labels)
             loss_val += loss.item()
@@ -390,6 +434,47 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
     model.train()
     return correct, total, avg_val_loss, best_val_loss
 
+def test_loop(model, loss_fn, test_loader):
+    '''
+    Assessing trained model on test dataset 
+    model: deep learning architecture getting updated by model
+    loss_fn: loss function
+    test_loader: generator creating batches of test data
+    '''
+    model = model.to(device)
+    model.eval()
+    loss_test = 0.0
+    correct = 0
+    total = 0
+    all_predictions = []
+    all_labels = []
+    with torch.no_grad():  # does not keep track of gradients so as to not train on test data.
+        for compounds, labels, cell_line in tqdm(test_loader,
+                                            desc = "Test Batches w/in Epoch",
+                                              position = 0,
+                                              leave = True):
+            # Move to device MAY NOT BE NECESSARY
+            compounds = compounds.to(device = device)
+            labels = labels.to(device= device)
+            cell_line = cell_line.to(device = device)
+            # Assessing outputs
+            outputs = model(compounds, cell_line)
+            # print(f' Outputs : {outputs}') # tensor with 10 elements
+            # print(f' Labels : {labels}') # tensor that is a number
+            loss = loss_fn(outputs,labels)
+            loss_test += loss.item()
+            predicted = torch.argmax(outputs, 1)
+            #labels = torch.argmax(labels,1)
+            #print(predicted)
+            #print(labels)
+            total += labels.shape[0]
+            correct += int((predicted == torch.max(labels, 1)[1]).sum())
+            #print(f' Predicted: {predicted.tolist()}')
+            #print(f' Labels: {predicted.tolist()}')
+            all_predictions = all_predictions + predicted.tolist()
+            all_labels = all_labels + torch.max(labels, 1)[1].tolist()
+        avg_test_loss = loss_test/len(test_loader)  # average loss over batch
+    return correct, total, avg_test_loss, all_predictions, all_labels
 
 # In[69]:
 
@@ -406,36 +491,32 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
 val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'SimpleNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
 val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'SimpleNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
 
+#----------------------------------------- Assessing model on test data -----------------------------------------#
+model_test = SimpleNN_and_Cell_Line_Model(simple_mod, cell_line_mod, num_targets = num_classes)  
+model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'Tomics_SimpleNN')['model_state_dict'])
+correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = model_test,
+                                          loss_fn = loss_fn, 
+                                          test_loader = test_generator)
+
 
 
 #-------------------------------- Writing interesting info into terminal ------------------------# 
 
 end = time.time()
-def program_elapsed_time(start, end):
-    program_time = round(end - start, 2) 
-    print(program_time)
-    if program_time > float(60) and program_time < 60*60:
-        program_time =  program_time/60
-        time_elapsed = str(program_time) + ' min'
-    elif program_time > 60*60:
-        program_time = program_time/3600
-        time_elapsed = str(program_time) + ' hrs'
-    else:
-        time_elapsed = str(program_time) + ' sec'
-    return time_elapsed
 elapsed_time = program_elapsed_time(start, end)
 
-#test_set_acc = f' {round(correct/total*100, 2)} %'
-table = [["Time to Run Program", elapsed_time]]
-#['Accuracy of Test Set', test_set_acc]]
+table = [["Time to Run Program", elapsed_time],
+['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
+['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='weighted')]]
 print(tabulate(table, tablefmt='fancy_grid'))
+
 
 
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
 run['model'] = str(model)
 #run["feat_selec/feat_sel"] = feat_sel
 run["filename"] = train_filename
-run['parameters/normalize'] = None
+run['parameters/normalize'] = "SNone"
 # run['parameters/class_weight'] = class_weight
 run['parameters/learning_rate'] = learning_rate
 run['parameters/loss_function'] = str(loss_fn)
@@ -448,11 +529,14 @@ run['metrics/loss'] = state["valid_loss"]
 run['metrics/time'] = elapsed_time
 run['metrics/epochs'] = num_epochs
 
-conf_matrix_and_class_report(state["labels_val"], state["predictions"], 'SimpleNN')
+run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='weighted')
+run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
+
+conf_matrix_and_class_report(all_labels, all_predictions, 'SimpleNN')
 
 # Upload plots
-run["images/loss"].upload("/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images"+ '/' + 'loss_train_val_simpleNN' + now + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'acc_train_val_simpleNN' + now + '.png')
+run["images/loss"].upload("/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images"+ '/' + 'loss_train_val_SimpleNN' + now + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'acc_train_val_SimpleNN' + now + '.png')
 import matplotlib.image as mpimg
 conf_img = mpimg.imread('Conf_matrix.png')
 run["files/classification_info"].upload("class_info.txt")

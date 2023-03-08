@@ -30,7 +30,7 @@ import torch.nn as nn
 import neptune.new as neptune
 
 from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time
+from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
@@ -46,20 +46,11 @@ now = datetime.datetime.now()
 now = now.strftime("%d_%m_%Y-%H:%M:%S")
 print("Begin Training")
 #---------------------------------------------------------------------------------------------------------------------------------------#
-def splitting_into_tensor(df, num_classes):
+def splitting(df):
     '''Splitting data into two parts:
     1. input : the pointer showing where the transcriptomic profile is  
-    2. target one hot : labels (the correct MoA) '''
-    
-    # one-hot encoding labels
-     # creating tensor from all_data.df
-    target = torch.tensor(df['moa'].values.astype(np.int64))
-
-    # For each row, take the index of the target label
-    # (which coincides with the score in our case) and use it as the column index to set the value 1.0.” 
-    #target_onehot = torch.zeros(target.shape[0], num_classes)
-    #target_onehot.scatter_(1, target.unsqueeze(1), 1.0)
-    
+    2. target one hot'''
+    target = df['moa']
     input =  df.drop('moa', axis = 1)
     
     return input, target #target_onehot
@@ -82,11 +73,12 @@ def smiles_to_array(smiles):
 #---------------------------------------------------------------------------------------------------------------------------------------#
 # create Torch.dataset
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, compound_df, labels, transform=None):
-        self.compound_labels = labels    # the entire length of the correct classes that we are trying to predict
+    def __init__(self, compound_df, labels_df, dict_moa, transform=None):
+        self.compound_labels = labels_df    # the entire length of the correct classes that we are trying to predict
         # print(self.img_labels)
         self.compound_df = compound_df        # list of indexes that are a part of training, validation, tes sets
         self.transform = transform       # any transformations done
+        self.dict_moa = dict_moa
 
     def __len__(self):
         ''' The number of data points'''
@@ -100,12 +92,13 @@ class Dataset(torch.utils.data.Dataset):
         compound_array = smiles_to_array(smile_string)
         #print(f' return from function: {compound}')
         #print(f' matrix: {compound_array}')
-        label = self.compound_labels[idx]             # extract classification using index
+        label = self.compound_labels.iloc[idx]             # extract classification using index
         #print(f' label: {label}')
         #label = torch.tensor(label, dtype=torch.float)
+        label_tensor = torch.from_numpy(self.dict_moa[label])                  # convert label to number
         if self.transform:                         # uses Albumentations image pipeline to return an augmented image
             compound = self.transform(compound)
-        return compound_array.float(), label.long()
+        return compound_array.float(), label_tensor.long() # returns the image and the correct label
 
 #---------------------------------------------------------------------------------------------------------------------------------------#
 
@@ -128,24 +121,29 @@ now = now.strftime("%d_%m_%Y-%H:%M:%S")
 compounds_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/compounds_v1v2.csv', delimiter = ",")
 
 # download csvs with all the data pre split
-training_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_training_set_cyclo_adr_2.csv')
-validation_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_valid_set_cyclo_adr_2.csv')
-test_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_test_set_cyclo_adr_2.csv')
+train_filename = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/erik10_clue_train_fold_0.csv'
+#training_set = pd.read_csv(train_filename)
+#validation_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/cyc_adr_clue_val_fold_0.csv')
+#test_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/cyc_adr_clue_test_fold_0.csv')
+# download csvs with all the data pre split
+training_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/erik10_clue_train_fold_0.csv')
+validation_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/erik10_clue_val_fold_0.csv')
+test_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/erik10_clue_test_fold_0.csv')
 
 # download dictionary which associates moa with a number
-with open('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/cyclo_adr_2_moa_dict.pickle', 'rb') as handle:
-        moa_dict = pickle.load(handle)
-
-assert training_set.moa.unique().all() == validation_set.moa.unique().all() == test_set.moa.unique().all()
+#with open('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/cyclo_adr_2_moa_dict.pickle', 'rb') as handle:
+        #moa_dict = pickle.load(handle)
+dict_moa = dict_splitting_into_tensor(training_set)
+assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique())
 
 
 num_classes = len(training_set.moa.unique())
 
 
 # split data into labels and inputs
-training_df, train_labels = splitting_into_tensor(training_set, num_classes)
-validation_df, validation_labels = splitting_into_tensor(validation_set, num_classes)
-test_df, test_labels = splitting_into_tensor(test_set, num_classes)
+training_df, train_labels = splitting(training_set, num_classes)
+validation_df, validation_labels = splitting(validation_set, num_classes)
+test_df, test_labels = splitting(test_set, num_classes)
 
 
 
@@ -163,9 +161,9 @@ print(f'Training on device {device}. ' )
 
 
 # Create datasets with relevant data and labels
-training_dataset = Dataset(training_df, train_labels)
-valid_dataset = Dataset(validation_df, validation_labels)
-test_dataset = Dataset(test_df, test_labels)
+training_dataset = Dataset(training_df, train_labels, dict_moa)
+valid_dataset = Dataset(validation_df, validation_labels, dict_moa)
+test_dataset = Dataset(test_df, test_labels, dict_moa)
 
 # make sure that the number of labels is equal to the number of inputs
 assert len(training_df) == len(train_labels)
@@ -250,7 +248,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             outputs = model(tprofiles)
             #print(f' Outputs : {outputs}') # tensor with 10 elements
             #print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
+            loss = loss_fn(outputs,torch.max(labels, 1)[1])
             # For L2 regularization
             l2_lambda = 0.000001
             l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
@@ -267,7 +265,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             #labels = torch.argmax(labels,1)
             #print(labels)
             train_total += labels.shape[0]
-            train_correct += int((train_predicted == labels).sum())
+            train_correct += int((train_predicted == torch.max(labels, 1)[1]).sum())
         # validation metrics from batch
         val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
         best_val_loss = best_val_loss_upd
@@ -275,14 +273,14 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         # printing results for epoch
         if epoch == 1 or epoch %2 == 0:
             print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
-        if early_stopper.early_stop(validation_loss = val_loss):             
-            break
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
     # return lists with loss, accuracy every epoch
+        if early_stopper.early_stop(validation_loss = val_loss):             
+                break
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
                                 
 
@@ -309,13 +307,13 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             # Assessing outputs
             outputs = model(tprofiles)
             #probs = torch.nn.Softmax(outputs)
-            loss = loss_fn(outputs,labels)
+            loss = loss_fn(outputs,torch.max(labels, 1)[1])
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
             #labels = torch.argmax(labels,1)
             total += labels.shape[0]
-            correct += int((predicted == labels).sum()) # saving best 
-            all_labels.append(labels)
+            correct += int((predicted == torch.max(labels, 1)[1]).sum()) # saving best 
+            all_labels.append(torch.max(labels, 1)[1])
             predict_proba.append(outputs)
             predictions.append(predicted)
         avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
@@ -473,18 +471,18 @@ def test_loop(model, loss_fn, test_loader):
             outputs = model(compounds)
             # print(f' Outputs : {outputs}') # tensor with 10 elements
             # print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
+            loss = loss_fn(outputs,torch.max(labels, 1)[1])
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
             #labels = torch.argmax(labels,1)
             #print(predicted)
             #print(labels)
             total += labels.shape[0]
-            correct += int((predicted == labels).sum())
+            correct += int((predicted == torch.max(labels, 1)[1]).sum())
             #print(f' Predicted: {predicted.tolist()}')
             #print(f' Labels: {predicted.tolist()}')
             all_predictions = all_predictions + predicted.tolist()
-            all_labels = all_labels + labels.tolist()
+            all_labels = all_labels + torch.max(labels, 1)[1].tolist()
         avg_test_loss = loss_test/len(test_loader)  # average loss over batch
     return correct, total, avg_test_loss, all_predictions, all_labels
 #----------------------------------------------------- Training and validation ----------------------------------#
@@ -510,15 +508,16 @@ end = time.time()
 
 elapsed_time = program_elapsed_time(start, end)
 
-test_set_acc = f' {round(correct/total*100, 2)} %'
+
 table = [["Time to Run Program", elapsed_time],
-['Accuracy of Test Set', test_set_acc]]
+['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
+['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='weighted')]]
 print(tabulate(table, tablefmt='fancy_grid'))
 
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
 run['model'] = 'Chemical Structure'
 #run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = input('Enter filename: ')
+run["filename"] = train_filename
 run['parameters/normalize'] = 'None'
 # run['parameters/class_weight'] = class_weight
 run['parameters/learning_rate'] = learning_rate
@@ -531,6 +530,9 @@ run['metrics/accuracy'] = state["accuracy"]
 run['metrics/loss'] = state["valid_loss"]
 run['metrics/time'] = elapsed_time
 run['metrics/epochs'] = num_epochs
+
+run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='weighted')
+run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
 conf_matrix_and_class_report(state["labels_val"], state["predictions"], 'Chem_Struct')
 

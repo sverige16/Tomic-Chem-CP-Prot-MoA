@@ -35,7 +35,7 @@ from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
 testing = False # decides if we take a subset of the data
-max_epochs = 500 # number of epochs we are going to run 
+max_epochs = 1000 # number of epochs we are going to run 
 apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
@@ -121,25 +121,42 @@ now = now.strftime("%d_%m_%Y-%H:%M:%S")
 compounds_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/compounds_v1v2.csv', delimiter = ",")
 
 # download csvs with all the data pre split
-train_filename = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/cyc_adr_clue_train.csv'
-training_set = pd.read_csv(train_filename)
-validation_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/cyc_adr_clue_val_fold_0.csv')
-test_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/cyc_adr_clue_test_fold_0.csv')
+#cyc_adr_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
+#train_filename = 'cyc_adr_clue_train_fold_0.csv'
+#val_filename = 'cyc_adr_clue_val_fold_0.csv'
+#test_filename = 'cyc_adr_clue_test_fold_0.csv'
+#training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
 
-# download dictionary which associates moa with a number
-#with open('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/cyclo_adr_2_moa_dict.pickle', 'rb') as handle:
-        #moa_dict = pickle.load(handle)
+# download csvs with all the data pre split
+erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+train_filename = 'erik10_clue_train_fold_0.csv'
+val_filename = 'erik10_clue_val_fold_0.csv'
+test_filename = 'erik10_clue_test_fold_0.csv'
+training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
+
+# download dictionary which associates moa with a tensor
+
 dict_moa = dict_splitting_into_tensor(training_set)
 assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique())
+
+test_data_lst = list(test_set['Compound_ID'])
+train_data_lst = list(training_set['Compound_ID'])
+valid_data_lst = list(validation_set['Compound_ID'])
+
+# check to make sure the compound IDs do not overlapp
+inter1 = set(test_data_lst) & set(train_data_lst)
+inter2 = set(test_data_lst) & set(valid_data_lst)
+inter3 = set(train_data_lst) & set(valid_data_lst)
+assert len(inter1) + len(inter2) + len(inter3) == 0, ("There are overlapping compounds between the training, validation and test sets")
 
 
 num_classes = len(training_set.moa.unique())
 
 
 # split data into labels and inputs
-training_df, train_labels = splitting(training_set, num_classes)
-validation_df, validation_labels = splitting(validation_set, num_classes)
-test_df, test_labels = splitting(test_set, num_classes)
+training_df, train_labels = splitting(training_set)
+validation_df, validation_labels = splitting(validation_set)
+test_df, test_labels = splitting(test_set)
 
 
 
@@ -489,6 +506,14 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               train_loader=training_generator, 
               valid_loader=validation_generator)
 #----------------------------------------- Assessing model on test data -----------------------------------------#
+model_test = nn.Sequential(
+    nn.Linear(2048, 128),
+    nn.ReLU(),
+    nn.Dropout(p = drop),
+    nn.Linear(128,64),
+    nn.ReLU(),
+    nn.Linear(64, num_classes))
+model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_models/pre_split/' + 'ChemStruc_least_loss_model')['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = seq_model,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator)
@@ -534,7 +559,7 @@ conf_matrix_and_class_report(state["labels_val"], state["predictions"], 'Chem_St
 
 # Upload plots
 run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split'+ '/' + 'loss_train_val_' + 'Chem_Struct' + now  + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images/pre_split' +'/' + 'acc_train_val_' +'Chem_Struct' + now + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split' +'/' + 'acc_train_val_' +'Chem_Struct' + now + '.png')
 import matplotlib.image as mpimg
 conf_img = mpimg.imread('Conf_matrix.png')
 run["files/classification_info"].upload("class_info.txt")

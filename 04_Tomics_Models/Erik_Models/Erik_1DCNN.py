@@ -56,7 +56,7 @@ import math
 from Erik_tprofiles_extraction_functions import tprofiles_gc_too_func, extract_tprofile
 
 from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time
+from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, create_splits
 
 # In[63]:
 
@@ -128,22 +128,42 @@ else:
 print(f'Training on device {device}. ' )
 
 
-#train_filename = 'L1000_training_set_nv_cyc_adr.csv'
-#valid_filename = 'L1000_test_set_nv_cyc_adr.csv'
-train_filename = 'L1000_training_set_nv_my10.csv'
-valid_filename = 'L1000_test_set_nv_my10.csv'
-L1000_training, L1000_validation = load_train_valid_data('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/data_split_csvs/', train_filename, valid_filename)
+# download csvs with all the data pre split
+#cyc_adr_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
+#train_filename = 'cyc_adr_clue_train_fold_0.csv'
+#val_filename = 'cyc_adr_clue_val_fold_0.csv'
+#test_filename = 'cyc_adr_clue_test_fold_0.csv'
+#training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
+
+# download csvs with all the data pre split
+erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+train_filename = 'erik10_clue_train_fold_0.csv'
+val_filename = 'erik10_clue_val_fold_0.csv'
+test_filename = 'erik10_clue_test_fold_0.csv'
+training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
+
 # Creating a  dictionary of the one hot encoded labels
-dict_moa = dict_splitting_into_tensor(L1000_training)
+dict_moa = dict_splitting_into_tensor(training_set)
+
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set)
+
+# checking that no overlap in sig_id exists between training, test, validation sets
+inter1 = set(list(L1000_training["sig_id"])) & set(list(L1000_validation["sig_id"]))
+inter2 = set(list(L1000_training["sig_id"])) & set(list(L1000_test["sig_id"]))
+inter3 = set(list(L1000_validation["sig_id"])) & set(list(L1000_test["sig_id"]))
+assert len(inter1) + len(inter2) + len(inter3) == 0, ("There is an intersection between the training, validation and test sets")
 
 # shuffling training and validation data
 L1000_training = L1000_training.sample(frac = 1, random_state = 1)
 L1000_validation = L1000_validation.sample(frac = 1, random_state = 1)
+L1000_test = L1000_test.sample(frac = 1, random_state = 1)
 
 print("extracting training transcriptomes")
 profiles_gc_too_train = tprofiles_gc_too_func(L1000_training, clue_gene)
 print("extracting validation transcriptomes")
 profiles_gc_too_valid = tprofiles_gc_too_func(L1000_validation, clue_gene)
+print("extracting test transcriptomes")
+profiles_gc_too_test = tprofiles_gc_too_func(L1000_test, clue_gene)
 
 
 
@@ -168,7 +188,7 @@ training_dataset = Transcriptomic_Profiles(profiles_gc_too_train, L1000_training
 
 
 training_generator = torch.utils.data.DataLoader(training_dataset, **params)
-train_profile, train_labels = next(iter(training_generator))
+
 
 # In[50]:
 
@@ -182,6 +202,10 @@ validation_dataset = Transcriptomic_Profiles(profiles_gc_too_valid, L1000_valida
 
 
 validation_generator = torch.utils.data.DataLoader(validation_dataset, **params)
+
+test_dataset = Transcriptomic_Profiles(profiles_gc_too_test, L1000_test, dict_moa)
+test_generator = torch.utils.data.DataLoader(test_dataset, **params)
+
 
 
 
@@ -262,14 +286,14 @@ class CNN_Model(nn.Module):
 # In[66]:
 
 
-model = CNN_Model(num_features = train_profile.shape[1], num_targets= num_classes, hidden_size= hidden_size)
+model = CNN_Model(num_features = 978, num_targets= num_classes, hidden_size= hidden_size)
 optimizer = torch.optim.RMSprop(model.parameters(),  weight_decay=WEIGHT_DECAY, lr=learning_rate)
 loss_fn = torch.nn.BCEWithLogitsLoss()
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
 testing = False # decides if we take a subset of the data
-max_epochs = 50 # number of epochs we are going to run 
+max_epochs = 100 # number of epochs we are going to run 
 # apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
@@ -300,7 +324,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     val_loss_per_epoch = []
     val_acc_per_epoch = []
     best_val_loss = np.inf
-    for epoch in tqdm(range(1, max_epochs +1), desc = "Epoch", position=0, leave= True):
+    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= True):
         loss_train = 0.0
         train_total = 0
         train_correct = 0
@@ -315,9 +339,9 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             #print(f' Labels : {labels}') # tensor that is a number
             loss = loss_fn(outputs,labels)
             # For L2 regularization
-            l2_lambda = 0.000001
-            l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
-            loss = loss + l2_lambda * l2_norm
+            #l2_lambda = 0.000001
+            #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
+            #loss = loss + l2_lambda * l2_norm
             # Update weights
             loss.backward()
             optimizer.step()
@@ -338,14 +362,15 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         # printing results for epoch
         if epoch == 1 or epoch %2 == 0:
             print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
-        if early_stopper.early_stop(validation_loss = val_loss):             
-            break
+        
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
     # return lists with loss, accuracy every epoch
+        if early_stopper.early_stop(validation_loss = val_loss):             
+            break
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
                                 
 
@@ -402,6 +427,48 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
 
 
 
+def test_loop(model, loss_fn, test_loader):
+    '''
+    Assessing trained model on test dataset 
+    model: deep learning architecture getting updated by model
+    loss_fn: loss function
+    test_loader: generator creating batches of test data
+    '''
+    model = model.to(device)
+    model.eval()
+    loss_test = 0.0
+    correct = 0
+    total = 0
+    all_predictions = []
+    all_labels = []
+    with torch.no_grad():  # does not keep track of gradients so as to not train on test data.
+        for compounds, labels in tqdm(test_loader,
+                                            desc = "Test Batches w/in Epoch",
+                                              position = 0,
+                                              leave = True):
+            # Move to device MAY NOT BE NECESSARY
+            compounds = compounds.to(device = device)
+            labels = labels.to(device= device)
+            #cell_line = cell_line.to(device = device)
+            # Assessing outputs
+            outputs = model(compounds)
+            # print(f' Outputs : {outputs}') # tensor with 10 elements
+            # print(f' Labels : {labels}') # tensor that is a number
+            loss = loss_fn(outputs,labels)
+            loss_test += loss.item()
+            predicted = torch.argmax(outputs, 1)
+            #labels = torch.argmax(labels,1)
+            #print(predicted)
+            #print(labels)
+            total += labels.shape[0]
+            correct += int((predicted == torch.max(labels, 1)[1]).sum())
+            #print(f' Predicted: {predicted.tolist()}')
+            #print(f' Labels: {predicted.tolist()}')
+            all_predictions = all_predictions + predicted.tolist()
+            all_labels = all_labels + torch.max(labels, 1)[1].tolist()
+        avg_test_loss = loss_test/len(test_loader)  # average loss over batch
+    return correct, total, avg_test_loss, all_predictions, all_labels
+
 # In[69]:
 
 
@@ -412,6 +479,17 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               train_loader=training_generator, 
               valid_loader=validation_generator)
 
+model_test = CNN_Model(num_features = 978, num_targets= num_classes, hidden_size= hidden_size)
+model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'Tomics_1DCNN')['model_state_dict'])
+#----------------------------------------- Assessing model on test data -----------------------------------------#
+correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = model_test,
+                                          loss_fn = loss_fn, 
+                                          test_loader = test_generator)
+
+
+
+#-------------------------------- Writing interesting info into terminal ------------------------# 
+
 
 val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, '1DCNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
 val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  '1DCNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
@@ -421,9 +499,9 @@ val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  
 end = time.time()
 elapsed_time = program_elapsed_time(start, end)
 
-#test_set_acc = f' {round(correct/total*100, 2)} %'
-table = [["Time to Run Program", elapsed_time]]
-#['Accuracy of Test Set', test_set_acc]]
+table = [["Time to Run Program", elapsed_time],
+['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
+['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='weighted')]]
 print(tabulate(table, tablefmt='fancy_grid'))
 
 
@@ -446,7 +524,11 @@ run['metrics/loss'] = state["valid_loss"]
 run['metrics/time'] = elapsed_time
 run['metrics/epochs'] = max_epochs
 
-conf_matrix_and_class_report(state["labels_val"], state["predictions"], '1DCNN')
+run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='weighted')
+run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
+
+
+conf_matrix_and_class_report(all_labels, all_predictions, '1DCNN')
 
 # Upload plots
 run["images/loss"].upload("/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images"+ '/' + 'loss_train_val_1DCNN' + now + '.png')

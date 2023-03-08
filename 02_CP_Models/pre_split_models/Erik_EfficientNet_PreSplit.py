@@ -181,9 +181,18 @@ valid_transforms = A.Compose([])
 paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/paths_channels_treated_v1v2.csv')
 
 # download csvs with all the data pre split
-training_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/cyc_adr_clue_train_fold_0.csv')
-validation_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/cyc_adr_clue_val_fold_0.csv')
-test_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/cyc_adr_clue_test_fold_0.csv')
+#cyc_adr_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
+#train_filename = 'cyc_adr_clue_train_fold_0.csv'
+#val_filename = 'cyc_adr_clue_val_fold_0.csv'
+#test_filename = 'cyc_adr_clue_test_fold_0.csv'
+#training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
+
+# download csvs with all the data pre split
+erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+train_filename = 'erik10_clue_train_fold_0.csv'
+val_filename = 'erik10_clue_val_fold_0.csv'
+test_filename = 'erik10_clue_test_fold_0.csv'
+training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
 
 # download dictionary which associates moa with a number
 dict_moa = dict_splitting_into_tensor(training_set)
@@ -193,6 +202,13 @@ assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set
 test_data_lst= list(test_set["Compound_ID"].unique())
 train_data_lst= list(training_set["Compound_ID"].unique())
 valid_data_lst= list(validation_set["Compound_ID"].unique())
+
+# check to make sure the compound IDs do not overlapp
+inter1 = set(test_data_lst) & set(train_data_lst)
+inter2 = set(test_data_lst) & set(valid_data_lst)
+inter3 = set(train_data_lst) & set(valid_data_lst)
+assert len(inter1) + len(inter2) + len(inter3) == 0, ("There are overlapping compounds between the training, validation and test sets")
+
 
 training_df = paths_v1v2[paths_v1v2["compound"].isin(train_data_lst)].reset_index(drop=True)
 validation_df = paths_v1v2[paths_v1v2["compound"].isin(valid_data_lst)].reset_index(drop=True)
@@ -516,7 +532,9 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               valid_loader=validation_generator)
 
 #--------------------------------- Assessing model on test data ------------------------------#
-correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = updated_model,
+updated_model_test = image_network()
+updated_model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_models/CP_least_loss_model')['model_state_dict'])
+correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = updated_model_test,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator)
 
@@ -541,7 +559,7 @@ print(tabulate(table, tablefmt='fancy_grid'))
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
 run['model'] = "CNN"
 #run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = "Cell_Painting_CNN"
+run["filename"] = "Cell_Painting_CNN_erik10"
 run['parameters/normalize'] = "mean and std"
 # run['parameters/class_weight'] = class_weight
 # run['parameters/learning_rate'] = learning_rate
@@ -558,11 +576,11 @@ run['metrics/epochs'] = num_epochs
 run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='weighted')
 run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
-conf_matrix_and_class_report(state["labels_val"], state["predictions"], 'CP_CNN')
+conf_matrix_and_class_report(all_labels, all_predictions, 'CP_CNN')
 
 # Upload plots
-run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'loss_train_val_' + now + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'acc_train_val_' + now + '.png')
+run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'loss_train_val_' + 'CP' + now + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'acc_train_val_' + 'CP' + now + '.png') 
 import matplotlib.image as mpimg
 conf_img = mpimg.imread('Conf_matrix.png')
 run["files/classification_info"].upload("class_info.txt")

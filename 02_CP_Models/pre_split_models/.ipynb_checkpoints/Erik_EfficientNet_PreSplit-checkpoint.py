@@ -35,7 +35,7 @@ import neptune.new as neptune
 
 
 from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time
+from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor, splitting
 
 
 # Image analysis packages
@@ -63,25 +63,6 @@ now = datetime.datetime.now()
 now = now.strftime("%d_%m_%Y-%H:%M:%S")
 print("Begin Training")
 
-def splitting_into_tensor(df, num_classes, moa_dict):
-    '''Splitting data into two parts:
-    1. input : the pointer showing where the transcriptomic profile is  
-    2. target one hot : labels (the correct MoA) '''
-    
-    # one-hot encoding labels
-     # creating tensor from all_data.df
-    for i in moa_dict.items():
-        df['moa'] = df['moa'].replace(i[0], i[1])
-    target = torch.tensor(df['moa'].values.astype(np.int64))
-
-    # For each row, take the index of the target label
-    # (which coincides with the score in our case) and use it as the column index to set the value 1.0.” 
-    #target_onehot = torch.zeros(target.shape[0], num_classes)
-    #target_onehot.scatter_(1, target.unsqueeze(1), 1.0)
-    
-    input =  df.drop('moa', axis = 1)
-    
-    return input, target #target_onehot
 
 def image_normalization(image, channel, plate, pd_image_norm):
     '''
@@ -143,12 +124,13 @@ def channel_5_numpy(df, idx, pd_image_norm):
     return five_chan_img
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, paths_df, labels, transform=None, image_normalization=None):
-        self.img_labels = labels
+    def __init__(self, paths_df, labels_df, dict_moa, transform=None, image_normalization=None):
+        self.img_labels = labels_df
         # print(self.img_labels)
         self.paths_df = paths_df
         self.transform = transform
         self.im_norm  = image_normalization
+        self.dict_moa = dict_moa
 
     def __len__(self):
         ''' The number of data points '''
@@ -163,10 +145,11 @@ class Dataset(torch.utils.data.Dataset):
         label = self.img_labels[idx]          # extract calssification using index
         #print(label)
         #label = torch.tensor(label, dtype=torch.short)
+        label_tensor = torch.from_numpy(self.dict_moa[label]) # convert label to tensor
         if self.transform:                         # uses Albumentations image pipeline to return an augmented image
             image = self.transform(image)
         #return image.float(), label.long()
-        return image.float(), label.long()  
+        return image.float(), label_tensor.long()  
 
     
 class MyRotationTransform:
@@ -197,16 +180,20 @@ valid_transforms = A.Compose([])
 '''
 paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/paths_channels_treated_v1v2.csv')
 
-# testing using pandas dataframe
-training_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_training_set_cyclo_adr_2.csv')
-validation_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_valid_set_cyclo_adr_2.csv')
-test_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/CS_test_set_cyclo_adr_2.csv')
+# download csvs with all the data pre split
+#training_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/cyc_adr_clue_train_fold_0.csv')
+#validation_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/cyc_adr_clue_val_fold_0.csv')
+#test_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/cyc_adr_clue_test_fold_0.csv')
+# download csvs with all the data pre split
+training_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/erik10_clue_train_fold_0.csv')
+validation_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/erik10_clue_val_fold_0.csv')
+test_set = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/erik10_clue_test_fold_0.csv')
 
 # download dictionary which associates moa with a number
-with open('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/CS_data_splits/cyclo_adr_2_moa_dict.pickle', 'rb') as handle:
-        moa_dict = pickle.load(handle)
-
-assert training_set.moa.unique().all() == validation_set.moa.unique().all() == test_set.moa.unique().all()
+dict_moa = dict_splitting_into_tensor(training_set)
+print(set(training_set.moa.unique()))
+print(set(validation_set.moa.unique()))
+assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique())
 
 # extract compound IDs
 test_data_lst= list(test_set["Compound_ID"].unique())
@@ -222,9 +209,9 @@ num_classes = len(training_set.moa.unique())
 
 
 # split data into labels and inputs
-training_df, train_labels = splitting_into_tensor(training_df, num_classes, moa_dict)
-validation_df, validation_labels = splitting_into_tensor(validation_df, num_classes, moa_dict)
-test_df, test_labels = splitting_into_tensor(test_df, num_classes, moa_dict)
+training_df, train_labels = splitting(training_df)
+validation_df, validation_labels = splitting(validation_df)
+test_df, test_labels = splitting(test_df)
 
 # showing that I have no GPUs
 world_size = torch.cuda.device_count()
@@ -255,9 +242,9 @@ else:
 print(f'Training on device {device}. ' )
 
 # Create datasets with relevant data and labels
-training_dataset = Dataset(training_df, train_labels, transform = train_transforms, image_normalization= pd_image_norm)
-valid_dataset = Dataset(validation_df, validation_labels, image_normalization= pd_image_norm)
-test_dataset = Dataset(test_df, test_labels, image_normalization= pd_image_norm)
+training_dataset = Dataset(training_df, train_labels, dict_moa, transform = train_transforms, image_normalization= pd_image_norm)
+valid_dataset = Dataset(validation_df, validation_labels, dict_moa, image_normalization= pd_image_norm)
+test_dataset = Dataset(test_df, test_labels, dict_moa, image_normalization= pd_image_norm)
 
 # make sure that the number of labels is equal to the number of inputs
 assert len(training_df) == len(train_labels)
@@ -345,7 +332,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     val_loss_per_epoch = []
     val_acc_per_epoch = []
     best_val_loss = np.inf
-    for epoch in tqdm(range(1, max_epochs +1), desc = "Epoch", position=0, leave= True):
+    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= True):
         loss_train = 0.0
         train_total = 0
         train_correct = 0
@@ -361,7 +348,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             outputs = model(imgs)
             #print(f' Outputs : {outputs}') # tensor with 10 elements
             #print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
+            loss = loss_fn(outputs,torch.max(labels, 1)[1])
             # For L2 regularization
             l2_lambda = 0.000001
             l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
@@ -378,7 +365,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             #labels = torch.argmax(labels,1)
             #print(labels)
             train_total += labels.shape[0]
-            train_correct += int((train_predicted == labels).sum())
+            train_correct += int((train_predicted == torch.max(labels, 1)[1]).sum())
         # validation metrics from batch
         val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
         best_val_loss = best_val_loss_upd
@@ -419,13 +406,13 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             # Assessing outputs
             outputs = model(tprofiles)
             #probs = torch.nn.Softmax(outputs)
-            loss = loss_fn(outputs,labels)
+            loss = loss_fn(outputs,torch.max(labels, 1)[1])
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
             # labels = torch.argmax(labels,1)
             total += labels.shape[0]
-            correct += int((predicted == labels).sum()) # saving best 
-            all_labels.append(labels)
+            correct += int((predicted == torch.max(labels, 1)[1]).sum()) # saving best 
+            all_labels.append(torch.max(labels, 1)[1])
             predict_proba.append(outputs)
             predictions.append(predicted)
         avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
@@ -509,18 +496,18 @@ def test_loop(model, loss_fn, test_loader):
             outputs = model(compounds)
             # print(f' Outputs : {outputs}') # tensor with 10 elements
             # print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
+            loss = loss_fn(outputs,torch.max(labels, 1)[1])
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
             #labels = torch.argmax(labels,1)
             #print(predicted)
             #print(labels)
             total += labels.shape[0]
-            correct += int((predicted == labels).sum())
+            correct += int((predicted == torch.max(labels, 1)[1]).sum())
             #print(f' Predicted: {predicted.tolist()}')
             #print(f' Labels: {predicted.tolist()}')
             all_predictions = all_predictions + predicted.tolist()
-            all_labels = all_labels + labels.tolist()
+            all_labels = all_labels + torch.max(labels, 1)[1].tolist()
         
         avg_test_loss = loss_test/len(test_loader)  # average loss over batch
     return correct, total, avg_test_loss, all_predictions, all_labels
@@ -552,15 +539,15 @@ end = time.time()
 
 elapsed_time = program_elapsed_time(start, end)
 
-test_set_acc = f' {round(correct/total*100, 2)} %'
 table = [["Time to Run Program", elapsed_time],
-['Accuracy of Test Set', test_set_acc]]
+['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
+['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='weighted')]]
 print(tabulate(table, tablefmt='fancy_grid'))
 
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
 run['model'] = "CNN"
 #run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = "Cell_Painting_CNN"
+run["filename"] = "Cell_Painting_CNN_erik10"
 run['parameters/normalize'] = "mean and std"
 # run['parameters/class_weight'] = class_weight
 # run['parameters/learning_rate'] = learning_rate
@@ -572,9 +559,12 @@ run['metrics/f1_score'] = state["f1_score"]
 run['metrics/accuracy'] = state["accuracy"]
 run['metrics/loss'] = state["valid_loss"]
 run['metrics/time'] = elapsed_time
-# run['metrics/epochs'] = max_epochs
+run['metrics/epochs'] = num_epochs
 
-conf_matrix_and_class_report(state["labels_val"], state["predictions"])
+run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='weighted')
+run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
+
+conf_matrix_and_class_report(state["labels_val"], state["predictions"], 'CP_CNN')
 
 # Upload plots
 run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'loss_train_val_' + now + '.png')

@@ -194,7 +194,84 @@ def feature_selection(df_train_feat, df_val_feat, num_feat):
    
     return df_train_feat, df_val_feat
 
-# ---------------------------------------------- visualization ----------------------------------------------# 
+def extract_all_cell_lines(df):
+    '''
+    Extract all cell lines from the dataframe
+    Input:
+        df: pandas dataframe with all columns.
+    Output:
+        dicti: dictionary with the cell lines as keys and the one hot encoded values as values
+    '''
+    
+    enc = OneHotEncoder(handle_unknown='ignore')
+    enc.fit(df["cell_iname"].to_numpy().reshape(-1,1))          # fit the encoder to the unique values of the moa column
+    one_hot_encoded = enc.transform(enc.categories_[0].reshape(-1,1)).toarray()
+    dicti = {}
+    for i in range(0, len(enc.categories_[0])):       # create a dictionary with the one hot encoded values
+        dicti[str(enc.categories_[0][i])] = one_hot_encoded[i]
+    return dicti
+
+
+# --
+def choose_cell_lines_to_include(moas, clue_sig_in_SPECS, MoAs_2_correlated):
+    '''
+    Returns a pandas dataframe which includes only the information of those entries that have the correct cell line and moa.
+
+    Input:
+        moas: the list of moas being investigated
+        clue_sig_in_SPECS: the pandas dataframe with information on the small molecules found in SPECSv1/v2 and clue.io
+        MoAs_2_correlated: a dictionary, where the key is the name of the moa and value is a list with the names of cell lines to be included.
+    Output:
+        pandas dataframe with 4 columns representing transcriptomic profiles with the correct cell line and moa.
+    '''
+    together = []
+    for i in moas:
+        bro = MoAs_2_correlated[i]
+        svt = clue_sig_in_SPECS[clue_sig_in_SPECS["moa"]== i]
+        yep = svt[svt["cell_iname"].isin(bro)]
+        together.append(yep)
+    allbo = pd.concat(together)
+    allbo = allbo[["Compound ID", "sig_id", "moa", "cell_iname"]]
+    return allbo
+
+def create_splits(train, val, test, cc_q75 = 0, cell_lines = {}):
+    '''
+    Input:
+        moas: the list of moas being investigated.
+        filename_mod: Name of the resulting csv file to be found.
+        perc_test: The percentage of the data to be placed in the training vs test data.
+        cc_q75: Threshold for 75th quantile of pairwise spearman correlation for individual, level 4 profiles.
+        need_val: True/False: do we need a validation set?
+        cell_lines: a dictionary, where the key is the name of the moa and value is a list with the names of cell lines to be included.
+            Default is empty. Ex. "{"cyclooxygenase inhibitor": ["A375", "HA1E"], "adrenergic receptor antagonist" : ["A375", "HA1E"] }"
+    Output:
+        2 or 3 separate csv files, saved to a separate folder. Each csv file represents training, validation or test sets-
+    '''
+
+    # read in documents
+    clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_sig_in_SPECS1&2.csv', delimiter = ",")
+    
+    # # Pre-processing Psuedo-Code
+    # 1. Do pre-processing to extract relevant transcriptomic profiles with MoAs of interest from the GCTX document
+    # 2. Prepare classes.
+    # 3. Do the test, train  and validation split, making sure to shuffle
+    # 4. Save the test, train and validation splits to a csv.
+
+# -------------------------------------------- #1 --------------------------------------------------------------------------
+    # Removing transcriptomic profiles based on the correlation of the level 4 profiles
+    if cc_q75 > 0:
+        clue_sig_in_SPECS = clue_sig_in_SPECS[clue_sig_in_SPECS["cc_q75"] > cc_q75]
+    
+    list_with_ans = []
+    for set_split in [train, val, test]:
+    # Removing transcriptomic profiles based on the correlation between different cell lines
+        if cell_lines:
+            profile_ids = choose_cell_lines_to_include(list(set_split.unique()), clue_sig_in_SPECS, cell_lines)
+        else:
+            profile_ids = clue_sig_in_SPECS[["Compound ID", "sig_id", "moa", 'cell_iname']][clue_sig_in_SPECS["Compound ID"].isin(set_split["Compound_ID"].unique())]
+        list_with_ans.append(profile_ids)
+    return list_with_ans[0], list_with_ans[1], list_with_ans[2]
+#-------------------------------------------- visualization ----------------------------------------------# 
 def val_vs_train_loss(epochs, train_loss, val_loss, now, model_name, loss_path_to_save):
     ''' 
     Plotting validation versus training loss over time
@@ -255,7 +332,7 @@ def conf_matrix_and_class_report(labels_val, predictions, model_name):
 
 #---------------------------------------------- model ----------------------------------------------#
 class EarlyStopper:
-    def __init__(self, patience=1, min_delta=0):
+    def __init__(self, patience=10, min_delta=0):
         self.patience = patience
         self.min_delta = min_delta
         self.counter = 0
