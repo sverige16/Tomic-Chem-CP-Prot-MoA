@@ -366,6 +366,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             # Update weights
             loss.backward()
             optimizer.step()
+
             # Training Metrics
             loss_train += loss.item()
             #print(f' loss: {loss.item()}')

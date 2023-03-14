@@ -614,9 +614,15 @@ def table_to_image(norm_d, scale, fea_dist_method, image_dist_method, save_image
     data, samples = generate_image_data(data=norm_d, index=index[min_id, :], num_row=scale[0], num_column=scale[1],
         coord=coordinate, image_folder=normDir + '/data', file_name='')
 
-    output = open(normDir + '/Results.pkl', 'wb')
+    output = open(normDir + '/Results_orig.pkl', 'wb')
     cp.dump(norm_d, output)
+    output.close()
+    
+    output = open(normDir + '/Results_imag.pkl', 'wb')
     cp.dump(data, output)
+    output.close()
+    
+    output = open(normDir + '/Results_samp.pkl', 'wb')
     cp.dump(samples, output)
     output.close()
 

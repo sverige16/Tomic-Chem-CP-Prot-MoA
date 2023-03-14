@@ -615,8 +615,8 @@ X_test_norm = ln.transform(df_test_features.to_numpy().astype(float))
 #y_val_enc = le.transform(df_val_labels.values)
 
 # In[51]:
-
-
+from umap import UMAP
+'''
 distance_metric = 'cosine'
 reducer = TSNE(
     n_components=2,
@@ -626,13 +626,21 @@ reducer = TSNE(
     perplexity=5,
     n_jobs=-1
 )
-
-
+'''
+reducer = UMAP(
+    n_components=2,
+    random_state=456
+)
 
 # In[52]:
 
 
-pixel_size = (50, 50)
+#pixel_size = (10, 10)
+#pixel_size = (20, 20)
+#pixel_size = (30, 30)
+pixel_size = (50,50)
+#pixel_size = (100,100)
+#pixel_size = (224,224)
 it = ImageTransformer(
     feature_extractor=reducer, 
     pixels=pixel_size)
@@ -641,8 +649,10 @@ it = ImageTransformer(
 
 # In[53]:
 
-
+# fitting Image Transformer
+print("Fitting Image Transformer...")
 it.fit(df_train_features, y= df_train_labels, plot=True)
+print("Transforming...")
 X_train_img = it.transform(X_train_norm)
 X_val_img = it.transform(X_val_norm)
 X_test_img = it.transform(X_test_norm)
@@ -711,7 +721,7 @@ class Reducer_profiles(torch.utils.data.Dataset):
         self.dict_moa = dict_moa
 
     def __getitem__(self, index):
-        label = dict_moa[self.y[index]]
+        label = self.dict_moa[self.y[index]]
         return self.X[index], torch.tensor(label, dtype=torch.float)
 
     def __len__(self):
@@ -721,6 +731,7 @@ net = torchvision.models.squeezenet1_1(pretrained=True, progress=True)
 num_classes = len(np.unique(df_train_labels))
 net.classifier[1] = nn.Conv2d(512, num_classes, kernel_size=(1,1), 
                               stride=(1,1))
+'''
 class DeepInsight_Model(nn.Module):
     def __init__(self, model):
         super(DeepInsight_Model, self).__init__()
@@ -729,10 +740,188 @@ class DeepInsight_Model(nn.Module):
     def forward(self, x):
         x = self.base_model(x)
         return x
+'''
+'''
+# 10 by 10
+class DeepInsight_Model(nn.Module):
+    def __init__(self):
+        super(DeepInsight_Model, self).__init__()
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=(3, 3), stride=1, padding=1)
+        self.relu1 = nn.ReLU()
+        self.pool1 = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=(3, 3), stride=1, padding=1)
+        self.relu2 = nn.ReLU()
+        self.pool2 = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=(3, 3), stride=1, padding=1)
+        self.relu3 = nn.ReLU()
+        self.pool3 = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
+        self.fc1 = nn.Linear(64*1*1, 128)
+        self.relu4 = nn.ReLU()
+        self.fc2 = nn.Linear(128, 10)
         
-        
-DI_model = DeepInsight_Model(net)     
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = self.relu2(x)
+        x = self.pool2(x)
+        x = self.conv3(x)
+        x = self.relu3(x)
+        x = self.pool3(x)
+        x = x.view(-1, 64*1*1)
+        x = self.fc1(x)
+        x = self.relu4(x)
+        x = self.fc2(x)
+        return x
+        '''
+ # 20 by 20
+'''
+class DeepInsight_Model(nn.Module):
+    def __init__(self):
+        super(DeepInsight_Model, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout = nn.Dropout(p=0.25)
+        self.fc1 = nn.Linear(in_features=64*10*10, out_features=128)
+        self.fc2 = nn.Linear(in_features=128, out_features=10)
 
+    def forward(self, x):
+        x = self.conv1(x)
+        x = nn.functional.relu(x)
+        x = self.conv2(x)
+        x = nn.functional.relu(x)
+        x = self.pool(x)
+        x = self.dropout(x)
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = nn.functional.relu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return x
+'''
+'''
+# 30 by 30
+class DeepInsight_Model(nn.Module):
+    def __init__(self):
+        super(DeepInsight_Model, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout = nn.Dropout(p=0.25)
+        self.fc1 = nn.Linear(in_features=64*15*15, out_features=128)
+        self.fc2 = nn.Linear(in_features=128, out_features=10)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = nn.functional.relu(x)
+        x = self.conv2(x)
+        x = nn.functional.relu(x)
+        x = self.pool(x)
+        x = self.dropout(x)
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = nn.functional.relu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return x
+ '''
+
+# 50 x 50
+#deep
+'''
+class DeepInsight_Model(nn.Module):
+    def __init__(self):
+        super(DeepInsight_Model, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1)
+        self.conv4 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout = nn.Dropout(p=0.25)
+        self.fc1 = nn.Linear(in_features=256*12*12, out_features=512)
+        self.fc2 = nn.Linear(in_features=512, out_features=10)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = nn.functional.relu(x)
+        x = self.conv2(x)
+        x = nn.functional.relu(x)
+        x = self.pool(x)
+        x = self.dropout(x)
+        x = self.conv3(x)
+        x = nn.functional.relu(x)
+        x = self.conv4(x)
+        x = nn.functional.relu(x)
+        x = self.pool(x)
+        x = self.dropout(x)
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = nn.functional.relu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return x
+'''
+
+# not deep   50x50
+class DeepInsight_Model(nn.Module):
+    def __init__(self):
+        super(DeepInsight_Model, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout = nn.Dropout(p=0.25)
+        self.fc1 = nn.Linear(in_features=64*25*25, out_features=128)
+        self.fc2 = nn.Linear(in_features=128, out_features=10)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = nn.functional.relu(x)
+        x = self.conv2(x)
+        x = nn.functional.relu(x)
+        x = self.pool(x)
+        x = self.dropout(x)
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = nn.functional.relu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return x
+
+# instantiate the model
+
+'''
+class DeepInsight_Model(nn.Module):
+    def __init__(self):
+        super(DeepInsight_Model, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout = nn.Dropout(p=0.25)
+        self.fc1 = nn.Linear(64 * 50 * 50, 128)
+        self.fc2 = nn.Linear(128, 10)
+        
+    def forward(self, x):
+        x = self.conv1(x)
+        x = nn.functional.relu(x)
+        x = self.conv2(x)
+        x = nn.functional.relu(x)
+        x = self.pool(x)
+        x = self.dropout(x)
+        x = x.view(-1, 64 * 50 * 50)
+        x = self.fc1(x)
+        x = nn.functional.relu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return x
+
+
+'''
+
+        
+#DI_model = DeepInsight_Model(net)     
+DI_model = DeepInsight_Model()
 
 
 batch_size = 200
@@ -772,7 +961,7 @@ if apply_class_weights:
     loss_function = torch.nn.CrossEntropyLoss(class_weights)
 else:
     loss_function = torch.nn.CrossEntropyLoss()
-max_epochs = 1000
+max_epochs = 75
 optimizer = optim.SGD(
     net.parameters(),
     lr=1e-04,
@@ -851,8 +1040,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
     # return lists with loss, accuracy every epoch
-        if early_stopper.early_stop(validation_loss = val_loss):             
-                break
+        #if early_stopper.early_stop(validation_loss = val_loss):             
+                #break
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
 
 def validation_loop(model, loss_fn, valid_loader, best_val_loss):
@@ -1027,6 +1216,8 @@ run['parameters/class_weight'] = apply_class_weights
 run['parameters/variance_threshold'] = variance_thresh
 # run['parameters/learning_rate'] = learning_rate
 run['parameters/loss_function'] = str(loss_function)
+run['parameters/pixel_size'] = pixel_size
+run['parameters/reducer'] = str(reducer)
 #run['parameters/use_variance_threshold'] = use_variance_threshold
 #f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
 state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'DeepInsight')
@@ -1035,6 +1226,7 @@ run['metrics/accuracy'] = state["accuracy"]
 run['metrics/loss'] = state["valid_loss"]
 run['metrics/time'] = elapsed_time
 run['metrics/epochs'] = num_epochs
+
 
 run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='weighted')
 run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)

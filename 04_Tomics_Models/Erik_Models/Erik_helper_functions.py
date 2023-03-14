@@ -332,7 +332,7 @@ def conf_matrix_and_class_report(labels_val, predictions, model_name):
 
 #---------------------------------------------- model ----------------------------------------------#
 class EarlyStopper:
-    def __init__(self, patience=10, min_delta=0):
+    def __init__(self, patience=100, min_delta=0):
         self.patience = patience
         self.min_delta = min_delta
         self.counter = 0
