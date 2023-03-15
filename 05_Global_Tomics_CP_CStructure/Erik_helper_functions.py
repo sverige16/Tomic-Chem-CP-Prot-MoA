@@ -50,6 +50,7 @@ import matplotlib.pyplot as plt
 import datetime
 import time
 import math
+import cv2 
 
 # ---------------------------------------------- data loading ----------------------------------------------#
 def load_train_valid_data(path, train_data, valid_data, test_data = None):
@@ -712,3 +713,104 @@ def smiles_to_array(smiles):
     x_array = ((np.squeeze(x_array)).astype(int)) 
     x_array = torch.from_numpy(x_array)
     return x_array    
+
+
+def image_normalization(image, channel, plate, pd_image_norm):
+    '''
+    Normalizes the image by the mean and standard deviation 
+    Pseudocode:
+    1. using plate and channel, extract mean and standard deviation from pd_imgnorm
+    2. use torch.transform.Normalize to normalize the image
+    3. return normalized image
+    '''
+
+    if channel == "C1":
+        extract = plate
+    elif channel == "C2":
+        extract = plate + '.1'
+    elif channel == "C3":
+        extract = plate + '.2'
+    elif channel == "C4":
+        extract = plate + '.3'
+    else:
+        extract = plate + '.4'
+    single_cha = pd_image_norm[extract]
+    
+    mean = float(single_cha.iloc[1])
+    std = float(single_cha.iloc[2])
+    im_np =  (image - mean) / std
+    return im_np
+
+def channel_5_numpy_CID(df, CID, pd_image_norm):
+    '''
+    Puts together all channels from CP imaging into a single 5 x 256 x 256 tensor (c x h x w) from all_data.csv
+    Input
+    df  : file which contains all rows of image data with compound information (type = csv)
+    idx : the index of the row (type = integer)
+    
+    Output:
+    image: a single 5 x 256 x 256 tensor (c x h x w)
+    '''
+    # extract row with compound Name
+    # This is currently not an ideal solution bc Compound_ID is not unique.
+    # Will be fixed with batch ID, but this means paths document will need to be updated
+    row = df[df["compound"] == CID]
+
+    # randomly sample a CP image  from the rows that have the same compound name
+    if row.shape[0] > 1:
+        row = row.sample(n=1)
+        
+    
+    # loop through all of the channels and add to single array
+    im_list = []
+    for c in range(1, 6):
+        # extract by adding C to the integer we are looping
+        #row_channel_path = row["C" + str(c)]
+        local_im = cv2.imread(row["C" + str(c)].values[0], -1) # row.path would be same for me, except str(row[path]))
+        
+        # directly resize down to 256 by 256
+        local_im = cv2.resize(local_im, (256, 256), interpolation = cv2.INTER_LINEAR)
+        local_im = local_im.astype(np.float32)
+        local_im_norm = image_normalization(local_im, c, row['plate'], pd_image_norm)
+        # adds to array to the image vector 
+        im_list.append(local_im_norm)
+    
+    arr_stack = np.stack(im_list, axis=0)
+    # once we have all the channels, we covert it to a np.array, transpose so it has the correct dimensions and change the type for some reason
+    #im = np.array(im).astype("int16")
+    five_chan_img = torch.from_numpy(arr_stack)
+    return five_chan_img
+
+def channel_5_numpy(df, idx, pd_image_norm):
+    '''
+    Puts together all channels from CP imaging into a single 5 x 256 x 256 tensor (c x h x w) from all_data.csv
+    Input
+    df  : file which contains all rows of image data with compound information (type = csv)
+    idx : the index of the row (type = integer)
+    
+    Output:
+    image: a single 5 x 256 x 256 tensor (c x h x w)
+    '''
+    # extract row with index 
+    row = df.iloc[idx]
+    
+    # loop through all of the channels and add to single array
+    im_list = []
+    for c in range(1, 6):
+        # extract by adding C to the integer we are looping
+        #row_channel_path = row["C" + str(c)]
+        local_im = cv2.imread(row["C" + str(c)], -1) # row.path would be same for me, except str(row[path]))
+        
+        # directly resize down to 256 by 256
+        local_im = cv2.resize(local_im, (256, 256), interpolation = cv2.INTER_LINEAR)
+        local_im = local_im.astype(np.float32)
+        local_im_norm = image_normalization(local_im, c, row['plate'], pd_image_norm)
+        # adds to array to the image vector 
+        im_list.append(local_im_norm)
+    
+    arr_stack = np.stack(im_list, axis=0)
+    # once we have all the channels, we covert it to a np.array, transpose so it has the correct dimensions and change the type for some reason
+    #im = np.array(im).astype("int16")
+    five_chan_img = torch.from_numpy(arr_stack)
+    return five_chan_img
+

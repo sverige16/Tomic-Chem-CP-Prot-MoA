@@ -188,11 +188,21 @@ paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_
 #training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
 
 # download csvs with all the data pre split
-erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-train_filename = 'erik10_clue_train_fold_0.csv'
-val_filename = 'erik10_clue_val_fold_0.csv'
-test_filename = 'erik10_clue_test_fold_0.csv'
-training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
+#erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+#train_filename = 'erik10_clue_train_fold_0.csv'
+#val_filename = 'erik10_clue_val_fold_0.csv'
+#test_filename = 'erik10_clue_test_fold_0.csv'
+
+
+# training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
+# download csvs with all the data pre split
+tian10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
+train_filename = 'tian10_clue_train_fold_0.csv'
+val_filename = 'tian10_clue_val_fold_0.csv'
+test_filename = 'tian10_clue_test_fold_0.csv'
+
+
+training_set, validation_set, test_set =  load_train_valid_data(tian10_file, train_filename, val_filename, test_filename)
 
 # download dictionary which associates moa with a number
 dict_moa = dict_splitting_into_tensor(training_set)
@@ -214,7 +224,7 @@ training_df = paths_v1v2[paths_v1v2["compound"].isin(train_data_lst)].reset_inde
 validation_df = paths_v1v2[paths_v1v2["compound"].isin(valid_data_lst)].reset_index(drop=True)
 test_df = paths_v1v2[paths_v1v2["compound"].isin(test_data_lst)].reset_index(drop=True)
 
-
+assert set(training_df.moa.unique()) == set(validation_df.moa.unique()) == set(test_df.moa.unique())
 num_classes = len(training_set.moa.unique())
 
 
@@ -334,7 +344,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     valid_loader: generator creating batches of validation data
     '''
     # lists keep track of loss and accuracy for training and validation set
-    early_stopper = EarlyStopper(patience=5, min_delta=0.0001)
+    early_stopper = EarlyStopper(patience=7, min_delta=0.0001)
     model = model.to(device)
     optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
     train_loss_per_epoch = []

@@ -269,7 +269,7 @@ print(f'Training on device {device}. ' )
 
 # load individual models
 print("Loading Pretrained Models...")
-modelCS = seq_model = nn.Sequential(
+modelCS =  nn.Sequential(
     nn.Linear(2048, 128),
     nn.ReLU(),
     nn.Dropout(p = 0.7),
@@ -294,7 +294,8 @@ class CS_DI_Dataset(torch.utils.data.Dataset):
     def __getitem__(self,idx):
         '''Retrieving the compound '''
         tprofile = self.tprofiles_df[idx]
-        CID, label  = self.labels_CID.iloc[idx] 
+        CID, label  = self.labels_CID.iloc[idx]
+        assert len(CID) > 1, "No compound ID found"
         smile_string = self.compound_df["SMILES"][self.compound_df["Compound_ID"]== CID]      # returns smiles by using compound as keys
         #assert smile_string.shape[0] == 1, "More than one compound found that matches Compound ID"
         # problem with enantiomers
@@ -384,7 +385,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         loss_train = 0.0
         train_total = 0
         train_correct = 0
-        for tprofiles, cmpds, labels in train_loader:
+        for tprofiles, cmpds, labels in tqdm(train_loader, desc = "Training", position=0, leave= False):
             optimizer.zero_grad()
             # put model, images, labels on the same device
             tprofiles = tprofiles.to(device = device)
@@ -477,7 +478,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss, device):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'weighted'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  'home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models' + 'CS_DI_least_loss_model'
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models' + 'CS_DI_least_loss_model'
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss
@@ -535,7 +536,7 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               device = device)
 #----------------------------------------- Assessing model on test data -----------------------------------------#
 model_test = CStructure_DI
-model_test.load_state_dict(torch.load('home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models' + 'CS_DI_least_loss_model')['model_state_dict'])
+model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models/' + 'CS_DI_least_loss_model')['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = model_test,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator,
@@ -543,8 +544,8 @@ correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = m
 
 # ----------------------------------------- Plotting loss, accuracy, visualization of results ---------------------#
 
-val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'CS_DI','home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images') 
-val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'CS_DI', 'home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images')
+val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'CS_DI','/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images') 
+val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'CS_DI', '/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images')
 
 
 #-------------------------------- Writing interesting info into neptune.ai----------------------------------# 
@@ -555,7 +556,7 @@ elapsed_time = program_elapsed_time(start, end)
 
 table = [["Time to Run Program", elapsed_time],
 ['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
-['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='weighted')]]
+['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
 print(tabulate(table, tablefmt='fancy_grid'))
 
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
@@ -568,21 +569,21 @@ run['parameters/learning_rate'] = learning_rate
 run['parameters/loss_function'] = str(loss_function)
 #run['parameters/use_variance_threshold'] = use_variance_threshold
 #f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
-state = torch.load('home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models' + 'CS_DI_least_loss_model')
+state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models/' + 'CS_DI_least_loss_model')
 run['metrics/f1_score'] = state["f1_score"]
 run['metrics/accuracy'] = state["accuracy"]
 run['metrics/loss'] = state["valid_loss"]
 run['metrics/time'] = elapsed_time
 run['metrics/epochs'] = num_epochs
 
-run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='weighted')
+run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
 run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
 conf_matrix_and_class_report(state["labels_val"], state["predictions"], 'CS_DI')
 
 # Upload plots
-run["images/loss"].upload('home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images'+ '/' + 'loss_train_val_' + 'CS_DI' + now  + '.png')
-run["images/accuracy"].upload('home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images' +'/' + 'acc_train_val_' +'CS_DI' + now + '.png')
+run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images'+ '/' + 'loss_train_val_' + 'CS_DI' + now  + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images' +'/' + 'acc_train_val_' +'CS_DI' + now + '.png')
 import matplotlib.image as mpimg
 conf_img = mpimg.imread('Conf_matrix.png')
 run["files/classification_info"].upload("class_info.txt")

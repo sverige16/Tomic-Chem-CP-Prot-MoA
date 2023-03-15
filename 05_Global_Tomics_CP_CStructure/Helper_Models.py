@@ -83,6 +83,8 @@ from pytorch_tabnet.tab_model import TabNetClassifier
 nn._estimator_type = "classifier"
 from rdkit import Chem
 from rdkit.Chem import DataStructs, AllChem
+import torchvision.transforms.functional as TF
+from efficientnet_pytorch import EfficientNet 
 
 # A function changing SMILES to Morgan fingerprints 
 def smiles_to_array(smiles):
@@ -183,3 +185,28 @@ class Chem_Model(nn.Module):
         x = self.Linear3(x)
         return x
 '''
+
+
+class image_network(nn.Module):
+    def __init__(self, num_classes = 10):
+        super().__init__()
+        self.base_model = EfficientNet.from_name('efficientnet-b1', include_top=False, in_channels = 5)
+        self.dropout_1 = nn.Dropout(p = 0.3)
+        self.Linear_last = nn.Linear(1280, num_classes)
+        # self.softmax = nn.Softmax(dim = 1)
+    
+    def forward(self, x):
+        out = self.dropout_1(self.base_model(x))
+        out = out.view(-1, 1280)
+        out = self.Linear_last(out)
+        # out = self.softmax(out) # don't need softmax when using CrossEntropyLoss
+        return out
+ 
+class MyRotationTransform:
+    " Rotate by one of the given angles"
+    def __init__(self, angle):
+        self.angle = angle
+
+    def __call__(self, image):
+        angle = random.choice(self.angle)
+        return TF.rotate(image, angle)

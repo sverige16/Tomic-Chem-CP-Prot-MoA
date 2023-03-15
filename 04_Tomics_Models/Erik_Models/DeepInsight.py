@@ -985,7 +985,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     valid_loader: generator creating batches of validation data
     '''
     # lists keep track of loss and accuracy for training and validation set
-    early_stopper = EarlyStopper(patience=5, min_delta=0.0001)
+    early_stopper = EarlyStopper(patience=10, min_delta=0.0001)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
     train_loss_per_epoch = []
@@ -1040,8 +1040,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
     # return lists with loss, accuracy every epoch
-        #if early_stopper.early_stop(validation_loss = val_loss):             
-                #break
+        if early_stopper.early_stop(validation_loss = val_loss):             
+            break
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
 
 def validation_loop(model, loss_fn, valid_loader, best_val_loss):
@@ -1088,48 +1088,12 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
                     'labels_val' : labels_cpu.numpy(),
                     'model_state_dict' : model.state_dict(),
                     'valid_loss' : loss_val,
-                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'weighted'),
+                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
             },  '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'DeepInsight'
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss                      
-'''
-def validation_loop(model, loss_fn, valid_loader, best_val_loss):
-    model = model.to(device)
-    model.eval()
-    loss_val = 0.0
-    correct = 0
-    total = 0
-    with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
-        for imgs, labels in valid_loader:
-            # Move to device MAY NOT BE NECESSARY
-            imgs = imgs.to(device = device)
-            labels = labels.to(device= device)
-            # Assessing outputs
-            outputs = model(imgs)
-            # print(f' Outputs : {outputs}') # tensor with 10 elements
-            # print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
-            loss_val += loss.item()
-            predicted = torch.argmax(outputs, 1)
-            #labels = torch.argmax(labels,1)
-            #print(predicted)
-            #print(labels)
-            total += labels.shape[0]
-            correct += int((predicted == labels).sum())
-        avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
-        if best_val_loss > loss_val:
-            best_val_loss = loss_val
-            torch.save(
-                {
-                    'model_state_dict' : model.state_dict(),
-                    'valid_loss' : loss_val
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_models' +'/' + 'CP_least_loss_model'
-            )
-    model.train()
-    return correct, total, avg_val_loss, best_val_loss
-'''
 
 def test_loop(model, loss_fn, test_loader):
     '''
@@ -1204,13 +1168,13 @@ elapsed_time = program_elapsed_time(start, end)
 
 table = [["Time to Run Program", elapsed_time],
 ['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
-['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='weighted')]]
+['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
 print(tabulate(table, tablefmt='fancy_grid'))
 
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
 run['model'] = "deepinsight"
 #run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = "erik10"
+run["filename"] = train_filename
 run['parameters/normalize'] = normalize_c
 run['parameters/class_weight'] = apply_class_weights
 run['parameters/variance_threshold'] = variance_thresh
@@ -1228,7 +1192,7 @@ run['metrics/time'] = elapsed_time
 run['metrics/epochs'] = num_epochs
 
 
-run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='weighted')
+run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
 run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
 conf_matrix_and_class_report(all_labels, all_predictions, 'CP_CNN')
