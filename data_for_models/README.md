@@ -1,7 +1,7 @@
 ## .csv files
-all_data.csv: csv file containing information for Tian's 10 moas (compound and paths to the pictures)
-fl_data.csv: updated all_data that phil used before sending in for publication. Unclear as to what I should use it for.
-dmso_stats: used for normalization of the various plates. Think it is for tian's but unsure
+Phil_all_data.csv: csv file containing information for Tian's 10 moas (compound and paths to the pictures)
+Phil_fl_data.csv: updated all_data that phil used before sending in for publication. Unclear as to what I should use it for.
+Phil_dmso_stats: used for normalization of the various plates. Think it is for tian's but unsure
 specs935-v1-compounds: compound info for specs 935
 specs1k-v2-compounds: compound info for specs 1k-v2
 compounds_v1v2.csv: compound info for concatenated specs 935 and specs 1k-v2
@@ -9,7 +9,7 @@ cmpds_v1v2_no_enants: compound info for concatenated specs 935 and specs 1k-v2 w
 5_fold_data_sets: directory with data sets that have been split into test and training sets using stratified k-fold
 
 ## .pickles
-dictionary2.pickle: dictionary for tian's work, in which the key are the compounds for the 10 classes and the value is the smiles strings
+Phil_dictionary2.pickle: dictionary for tian's work, in which the key are the compounds for the 10 classes and the value is the smiles strings
 ## directories
 paths_to_channels_creation: Contains the code to create paths_to_channels csvs and the csvs for SPECSv1 and SPECSv2
 ## ipynb

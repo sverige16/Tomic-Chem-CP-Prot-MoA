@@ -620,7 +620,7 @@ def pre_processing(train_filename, L1000_training, L1000_validation, L1000_test,
         df_train = acquire_npy('train')
     else:    
         df_train = np_array_transform(profiles_gc_too_train)
-        save_npy(df_train, "train")
+        #save_npy(df_train, "train")
     
     #
     print("extracting validation transcriptomes") 
@@ -629,7 +629,7 @@ def pre_processing(train_filename, L1000_training, L1000_validation, L1000_test,
         df_val = acquire_npy('val')
     else:    
         df_val = np_array_transform(profiles_gc_too_valid)
-        save_npy(df_val, "val")
+        #save_npy(df_val, "val")
     
     print("extracting test transcriptomes")
     profiles_gc_too_test = tprofiles_gc_too_func(L1000_test, clue_gene)
@@ -637,7 +637,7 @@ def pre_processing(train_filename, L1000_training, L1000_validation, L1000_test,
         df_test = acquire_npy('test')
     else:    
         df_test = np_array_transform(profiles_gc_too_test)
-        save_npy(df_test, "test")
+        #save_npy(df_test, "test")
    
     # merging the transcriptomic profiles with the corresponding MoA class using the sig_id as a key
     df_train = pd.merge(df_train, L1000_training[["sig_id", "Compound ID", "moa"]], how = "outer", on ="sig_id")

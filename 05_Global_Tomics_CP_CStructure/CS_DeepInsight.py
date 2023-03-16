@@ -141,7 +141,7 @@ df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_feat
     L1000_validation = L1000_validation, 
     L1000_test = L1000_test,
     clue_gene= clue_gene, 
-    npy_exists = True,
+    npy_exists = False,
     apply_class_weight= True,
     use_variance_threshold = variance_thresh, 
     normalize= normalize_c,
@@ -152,7 +152,8 @@ df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_feat
 # download dictionary which associates moa with a tensor
 
 dict_moa = dict_splitting_into_tensor(training_set)
-assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique())
+assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique()), "Training, validation and test sets have different labels"
+assert df_train_features.shape[0] == df_train_features.dropna().shape[0], "NaNs in training set"
 
 test_data_lst = list(test_set['Compound_ID'])
 train_data_lst = list(training_set['Compound_ID'])

@@ -98,17 +98,6 @@ start = time.time()
 now = datetime.datetime.now()
 now = now.strftime("%d_%m_%Y-%H:%M:%S")
 print("Begin Training")
-#---------------------------------------------------------------------------------------------------------------------------------------#
-'''
-def splitting(df):
-    #Splitting data into two parts:
-    #1. input : the pointer showing where the transcriptomic profile is  
-    #2. target one hot
-    target = df['moa']
-    input =  df.drop('moa', axis = 1)
-    
-    return input, target #target_onehot
-'''   
 
 #---------------------------------------------------------------------------------------------------------------------------------------#
 
@@ -143,7 +132,7 @@ df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_feat
     L1000_validation = L1000_validation, 
     L1000_test = L1000_test,
     clue_gene= clue_gene, 
-    npy_exists = True,
+    npy_exists = False,
     apply_class_weight= True,
     use_variance_threshold = variance_thresh, 
     normalize= normalize_c,
@@ -154,8 +143,8 @@ df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_feat
 # download dictionary which associates moa with a tensor
 
 dict_moa = dict_splitting_into_tensor(training_set)
-assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique())
-
+assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique()), "Training, validation and test sets have different labels"
+assert df_train_features.shape[0] == df_train_features.dropna().shape[0], "NaNs in training set"
 
 num_classes = len(training_set.moa.unique())
 
@@ -317,6 +306,16 @@ training_df = paths_v1v2[paths_v1v2["compound"].isin(train_data_lst)].reset_inde
 validation_df = paths_v1v2[paths_v1v2["compound"].isin(valid_data_lst)].reset_index(drop=True)
 test_df = paths_v1v2[paths_v1v2["compound"].isin(test_data_lst)].reset_index(drop=True)
 
+# removing the compounds that have a moa class that contains a "|" as this is not supported by the model
+training_df = training_df[training_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
+validation_df = validation_df[validation_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
+test_df = test_df[test_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
+
+# Checking to see if the compounds after removing from paths_v1v2 are the same as the ones in the training, validation and test sets
+# no loss should occur, but it does occur
+#assert len(list(training_df.compound.unique())) == len(train_data_lst)
+#assert len(list(validation_df.compound.unique())) == len(valid_data_lst)
+#assert len(list(test_df.compound.unique())) == len(test_data_lst)
 
 
 # importing data normalization pandas dataframe
@@ -379,7 +378,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     '''
     # lists keep track of loss and accuracy for training and validation set
     model = model.to(device)
-    early_stopper = EarlyStopper(patience=5, min_delta=0.0001)
+    early_stopper = EarlyStopper(patience=15, min_delta=0.0001)
     train_loss_per_epoch = []
     train_acc_per_epoch = []
     val_loss_per_epoch = []
@@ -482,7 +481,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss, device):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models/' + 'CS_DI_least_loss_model'
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models/' + 'CP_DI_least_loss_model'
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss

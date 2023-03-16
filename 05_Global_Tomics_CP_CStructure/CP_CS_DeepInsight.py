@@ -154,7 +154,8 @@ df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_feat
 # download dictionary which associates moa with a tensor
 
 dict_moa = dict_splitting_into_tensor(training_set)
-assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique())
+assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique()), "Training, validation and test sets have different labels"
+assert df_train_features.shape[0] == df_train_features.dropna().shape[0], "NaNs in training set"
 
 
 num_classes = len(training_set.moa.unique())

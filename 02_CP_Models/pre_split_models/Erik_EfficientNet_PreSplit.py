@@ -197,9 +197,9 @@ paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_
 # training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
 # download csvs with all the data pre split
 tian10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
-train_filename = 'tian10_clue_train_fold_0.csv'
-val_filename = 'tian10_clue_val_fold_0.csv'
-test_filename = 'tian10_clue_test_fold_0.csv'
+train_filename = 'tian10_all_train_fold_0.csv'
+val_filename = 'tian10_all_val_fold_0.csv'
+test_filename = 'tian10_all_test_fold_0.csv'
 
 
 training_set, validation_set, test_set =  load_train_valid_data(tian10_file, train_filename, val_filename, test_filename)
@@ -213,17 +213,29 @@ test_data_lst= list(test_set["Compound_ID"].unique())
 train_data_lst= list(training_set["Compound_ID"].unique())
 valid_data_lst= list(validation_set["Compound_ID"].unique())
 
-# check to make sure the compound IDs do not overlapp
+# check to make sure the compound IDs do not overlapp between the training, validation and test sets
 inter1 = set(test_data_lst) & set(train_data_lst)
 inter2 = set(test_data_lst) & set(valid_data_lst)
 inter3 = set(train_data_lst) & set(valid_data_lst)
 assert len(inter1) + len(inter2) + len(inter3) == 0, ("There are overlapping compounds between the training, validation and test sets")
 
-
+# extracting all the paths to the images where we have a Compound in the respective lists
 training_df = paths_v1v2[paths_v1v2["compound"].isin(train_data_lst)].reset_index(drop=True)
 validation_df = paths_v1v2[paths_v1v2["compound"].isin(valid_data_lst)].reset_index(drop=True)
 test_df = paths_v1v2[paths_v1v2["compound"].isin(test_data_lst)].reset_index(drop=True)
 
+# removing the compounds that have a moa class that contains a "|" as this is not supported by the model
+training_df = training_df[training_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
+validation_df = validation_df[validation_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
+test_df = test_df[test_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
+
+# Checking to see if the compounds after removing from paths_v1v2 are the same as the ones in the training, validation and test sets
+# no loss should occur, but it does occur
+#assert len(list(training_df.compound.unique())) == len(train_data_lst)
+#assert len(list(validation_df.compound.unique())) == len(valid_data_lst)
+#assert len(list(test_df.compound.unique())) == len(test_data_lst)
+
+# checking to see that the unique moa classes are identical across training, validation and test set
 assert set(training_df.moa.unique()) == set(validation_df.moa.unique()) == set(test_df.moa.unique())
 num_classes = len(training_set.moa.unique())
 
@@ -344,7 +356,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     valid_loader: generator creating batches of validation data
     '''
     # lists keep track of loss and accuracy for training and validation set
-    early_stopper = EarlyStopper(patience=7, min_delta=0.0001)
+    early_stopper = EarlyStopper(patience=10, min_delta=0.0001)
     model = model.to(device)
     optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
     train_loss_per_epoch = []
@@ -420,12 +432,12 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
     predictions = []
     all_labels = []
     with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
-        for tprofiles, labels in valid_loader:
+        for imgs, labels in valid_loader:
             # Move to device MAY NOT BE NECESSARY
-            tprofiles = tprofiles.to(device = device)
+            imgs = imgs.to(device = device)
             labels = labels.to(device= device)
             # Assessing outputs
-            outputs = model(tprofiles)
+            outputs = model(imgs)
             #probs = torch.nn.Softmax(outputs)
             loss = loss_fn(outputs,torch.max(labels, 1)[1])
             loss_val += loss.item()
@@ -454,42 +466,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss                      
-'''
-def validation_loop(model, loss_fn, valid_loader, best_val_loss):
-    model = model.to(device)
-    model.eval()
-    loss_val = 0.0
-    correct = 0
-    total = 0
-    with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
-        for imgs, labels in valid_loader:
-            # Move to device MAY NOT BE NECESSARY
-            imgs = imgs.to(device = device)
-            labels = labels.to(device= device)
-            # Assessing outputs
-            outputs = model(imgs)
-            # print(f' Outputs : {outputs}') # tensor with 10 elements
-            # print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
-            loss_val += loss.item()
-            predicted = torch.argmax(outputs, 1)
-            #labels = torch.argmax(labels,1)
-            #print(predicted)
-            #print(labels)
-            total += labels.shape[0]
-            correct += int((predicted == labels).sum())
-        avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
-        if best_val_loss > loss_val:
-            best_val_loss = loss_val
-            torch.save(
-                {
-                    'model_state_dict' : model.state_dict(),
-                    'valid_loss' : loss_val
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_models' +'/' + 'CP_least_loss_model'
-            )
-    model.train()
-    return correct, total, avg_val_loss, best_val_loss
-'''
+
 
 def test_loop(model, loss_fn, test_loader):
     '''
@@ -505,16 +482,16 @@ def test_loop(model, loss_fn, test_loader):
     all_predictions = []
     all_labels = []
     with torch.no_grad():  # does not keep track of gradients so as to not train on test data.
-        for compounds, labels in tqdm(test_loader,
+        for cp_imgs, labels in tqdm(test_loader,
                                             desc = "Test Batches w/in Epoch",
                                               position = 0,
                                               leave = True):
             # Move to device MAY NOT BE NECESSARY
             model = model.to(device)
-            compounds = compounds.to(device = device)
+            cp_imgs = cp_imgs.to(device = device)
             labels = labels.to(device= device)
             # Assessing outputs
-            outputs = model(compounds)
+            outputs = model(cp_imgs)
             # print(f' Outputs : {outputs}') # tensor with 10 elements
             # print(f' Labels : {labels}') # tensor that is a number
             loss = loss_fn(outputs,torch.max(labels, 1)[1])

@@ -10,6 +10,7 @@ specs1k_v2_paths_dmso: has paths to the images for all 5 channels of certain sit
 specs1k_v2_paths_treated: has paths to the images for all 5 channels of certain site perturbed by a small molecule.
 specs935-v1_paths: has paths to the images for all 5 channels of certain site perturbed by a small molecule.
 specs935-v1_paths_dmso:  has paths to the images for all 5 channels of certain site with only dmso
-paths_dmso_v1v2.csv: has all paths to all of the images for all 5 channels with only dmso.
+dmso_stats_v1v2.csv: the mean and standard deviation  for  each plate, produced by Erik_make_dmso_stats.py
+paths_channels_dmso_v1v2.csv: has all paths to all of the images for all 5 channels with only dmso.
 paths_channels_treated_v1v2.csv: has paths to the images for all 5 channels of all sites treated with images for specs 1 and 2.
 

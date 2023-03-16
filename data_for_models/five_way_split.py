@@ -37,8 +37,9 @@ def main(subset, compounds_v1v2, str_help ):
         str_help: string, either _all or _clue
     Output:
         saves the data to a csv file (5 csv files)'''
-
-
+    # Remove all compounds that have multiple moas
+    compounds_v1v2 = compounds_v1v2[compounds_v1v2.moa.str.contains("|", regex = False, na = True) == False]
+    print(compounds_v1v2["moa"].unique())
     #X = compounds_v1v2["Compound_ID"]
     # y = compounds_v1v2["moa"]
     # We want to split the data based on the moa, but only for unique compounds.
@@ -94,7 +95,6 @@ def main(subset, compounds_v1v2, str_help ):
     '''
 
     skf = StratifiedKFold(n_splits = 5, shuffle = True,  random_state=5)
-
     y = y.astype(object).replace(np.nan, 'None')
 
 
@@ -162,7 +162,7 @@ def main(subset, compounds_v1v2, str_help ):
 
 if __name__ == "__main__": 
 
-   # read in all compounds in specs v1 and v2
+   # read in all compounds in spallecs v1 and v2
     all_compounds_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/compounds_v1v2.csv', delimiter = ",")
 
     # read in the compounds that compounds_v1v2 have in common with clue
