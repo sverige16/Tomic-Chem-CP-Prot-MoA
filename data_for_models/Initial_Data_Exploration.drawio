@@ -1,1 +1,40 @@
-<mxfile host="app.diagrams.net" modified="2023-03-16T15:41:08.486Z" agent="5.0 (Macintosh)" version="20.8.2" etag="vv01ZXEZ3ZPRO46Agc3v" type="github"><diagram id="Rk5mw1bh5XdKYH3z02LM">UzV2zq1wL0osyPDNT0nNUTV2VTV2LsrPL4GwciucU3NyVI0MMlNUjV1UjYwMgFjVyA2HrCFY1qAgsSg1rwSLBiADYTaQg2Y1AA==</diagram></mxfile>
+<mxfile host="app.diagrams.net" modified="2023-03-16T16:17:20.369Z" agent="5.0 (Macintosh)" version="20.8.2" etag="cRSh5AsqQXe8kq09RKFR" type="github">
+  <diagram id="6dKqERXotfZ60ivdcI1Y" name="Page-1">
+    <mxGraphModel dx="1431" dy="723" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="Iul-wUf45ReHOHg2lYzj-1" value="Initial Dimensionality Reduction of Transcriptomic Profiles" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="90" y="110" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Iul-wUf45ReHOHg2lYzj-2" value="UMAP" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="200" y="290" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Iul-wUf45ReHOHg2lYzj-3" value="PCA" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="290" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Iul-wUf45ReHOHg2lYzj-4" value="Quality of the Data" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="400" y="110" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Iul-wUf45ReHOHg2lYzj-6" value="&lt;div&gt;Internal Variation within MoA Classes &lt;br&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="690" y="110" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Iul-wUf45ReHOHg2lYzj-7" value="Correlation between Cell Lines" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="680" y="280" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Iul-wUf45ReHOHg2lYzj-8" value="Clustering of Compounds within Single MoA" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="680" y="390" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Iul-wUf45ReHOHg2lYzj-9" value="Number of Compounds per MoA Class Given cell type and dosage restrictions" style="ellipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="680" y="490" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Iul-wUf45ReHOHg2lYzj-10" value="Assessing whether we can visualize separation of MoA classes using transcriptomic profiles by using using dimensionality reduction techniques " style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="20" y="180" width="300" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Iul-wUf45ReHOHg2lYzj-11" value="Assessing the quality of the collapsed transcriptomic profiles we extract from the clue database by assessing the correlation of the replicates" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="335" y="180" width="290" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
