@@ -32,10 +32,10 @@ import torchvision.models as models
 import torch.nn as nn
 import neptune.new as neptune
 
-from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
-from Erik_helper_functions import  apply_class_weights, set_parameter_requires_grad, LogScaler
-from Erik_helper_functions import channel_5_numpy_CID, image_normalization
+from Erik_alll_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
+from Erik_alll_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
+from Erik_alll_helper_functions import  apply_class_weights, set_parameter_requires_grad, LogScaler
+from Erik_alll_helper_functions import channel_5_numpy_CID, image_normalization
 from Helper_Models import DeepInsight_Model, Chem_Dataset, Reducer_profiles, image_network, MyRotationTransform
 from efficientnet_pytorch import EfficientNet 
 
@@ -72,11 +72,11 @@ import torchvision.models as models
 import torch.nn as nn
 import neptune.new as neptune
 
-from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
-from Erik_helper_functions import  apply_class_weights, set_parameter_requires_grad
-from Erik_helper_functions import pre_processing, save_npy, acquire_npy, np_array_transform, feature_selection, splitting
-from Erik_helper_functions import extract_tprofile, tprofiles_gc_too_func, normalize_func, variance_threshold, create_splits, smiles_to_array
+from Erik_alll_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
+from Erik_alll_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
+from Erik_alll_helper_functions import  apply_class_weights, set_parameter_requires_grad
+from Erik_alll_helper_functions import pre_processing, save_tprofile_npy, acquire_npy, np_array_transform, splitting
+from Erik_alll_helper_functions import extract_tprofile, tprofiles_gc_too_func, normalize_data, variance_threshold, create_splits, smiles_to_array
 from Helper_Models import DeepInsight_Model, Chem_Dataset, Reducer_profiles
 
 import torch
@@ -125,20 +125,20 @@ test_filename = 'erik10_clue_test_fold_0.csv'
 training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
 L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set)
 
+training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
+
+
+
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set)
+
 variance_thresh = 0
 normalize_c = False
-df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(train_filename,
-    L1000_training = L1000_training, 
-    L1000_validation = L1000_validation, 
-    L1000_test = L1000_test,
-    clue_gene= clue_gene, 
-    npy_exists = False,
-    apply_class_weight= True,
-    use_variance_threshold = variance_thresh, 
-    normalize= normalize_c,
-    ensemble = False,
-    feat_sel= 0)
-
+df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
+         clue_gene, 
+         npy_exists = False,
+         use_variance_threshold = variance_thresh, 
+         normalize = normalize_c, 
+         save_npy = False)
 # ----------------------------------------- Prepping Chemical Structure Data ---------------------------------------#
 # download dictionary which associates moa with a tensor
 
@@ -357,7 +357,7 @@ CP_DI = CP_DI(modelCP, modelDI)
 
 # optimizer_algorithm
 #cnn_optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
-learning_rate = 1e-6
+learning_rate = 1e-4
 optimizer = torch.optim.Adam(CP_DI.parameters(), lr = learning_rate)
 # loss_function
 if incl_class_weights == True:
