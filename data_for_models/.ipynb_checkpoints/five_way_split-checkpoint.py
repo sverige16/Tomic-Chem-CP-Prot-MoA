@@ -39,6 +39,7 @@ def main(subset, compounds_v1v2, str_help ):
         saves the data to a csv file (5 csv files)'''
     # Remove all compounds that have multiple moas
     compounds_v1v2 = compounds_v1v2[compounds_v1v2.moa.str.contains("|", regex = False, na = True) == False]
+    print(compounds_v1v2["moa"].unique())
     #X = compounds_v1v2["Compound_ID"]
     # y = compounds_v1v2["moa"]
     # We want to split the data based on the moa, but only for unique compounds.
@@ -47,12 +48,6 @@ def main(subset, compounds_v1v2, str_help ):
     if subset == "cyc_adr":
         moas = ["cyclooxygenase inhibitor", "adrenergic receptor antagonist"]
         compounds_for_splitting = compounds_for_splitting[compounds_for_splitting.moa.isin(["cyclooxygenase inhibitor", "adrenergic receptor antagonist"])]
-        assert set(compounds_for_splitting.moa) == set(moas), "There might be multple moas (cyclo | adr) in the data. "
-        X = compounds_for_splitting["Compound_ID"]
-        y = compounds_for_splitting["moa"]
-    elif subset == "cyc_dop":
-        moas = ["cyclooxygenase inhibitor", "dopamine receptor antagonist"]
-        compounds_for_splitting = compounds_for_splitting[compounds_for_splitting.moa.isin(["cyclooxygenase inhibitor", "dopamine receptor antagonist"])]
         assert set(compounds_for_splitting.moa) == set(moas), "There might be multple moas (cyclo | adr) in the data. "
         X = compounds_for_splitting["Compound_ID"]
         y = compounds_for_splitting["moa"]

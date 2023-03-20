@@ -428,8 +428,8 @@ if __name__ == "__main__":
     #valid_filename = input('Validation Data Set Filename: ')
     #train_filename = 'L1000_training_set_cyclo_adr_2.csv'
     #valid_filename = 'L1000_test_set_cyclo_adr_2.csv'
-    train_filename = 'L1000_training_set_cyclo_adr_2_moa.csv'
-    valid_filename = 'L1000_test_set_cyclo_adr_2_moa.csv'
+    train_filename = "L1000_training_set_nv_cyc_adr.csv"
+    valid_filename = "L1000_test_set_nv_cyc_adr.csv" 
     #train_filename = 'L1000_training_set.csv'
     # valid_filename = 'L1000_valid_set.csv'
     

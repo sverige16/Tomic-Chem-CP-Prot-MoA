@@ -69,20 +69,88 @@ import pytorch_tabnet
 from pytorch_tabnet.tab_model import TabNetClassifier
 nn._estimator_type = "classifier"
 import neptune.new as neptune
-
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-from Erik_alll_helper_functions import pre_processing, create_splits, load_train_valid_data
+from Erik_alll_helper_functions import pre_processing, create_splits, load_train_valid_data, dict_splitting_into_tensor
 # clue row metadata with rows representing transcription levels of specific genes
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
 
- # download csvs with all the data pre split
-#cyc_adr_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
-#train_filename = 'cyc_adr_clue_train_fold_0.csv'
-#val_filename = 'cyc_adr_clue_val_fold_0.csv'
-#test_filename = 'cyc_adr_clue_test_fold_0.csv'
-#training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
-   
+def cmpd_clustering(df_train_features, df_train_labels, moa_subset):
+
+    df_cyclo_labels = df_train_labels[df_train_labels["moa"] == moa_subset]
+    df_train_features_cyclo = df_train_features.iloc[df_cyclo_labels.index]
+    df_train_features_cyclo.reset_index(drop=True, inplace=True)
+    df_cyclo_labels.reset_index(drop=True, inplace=True)
+    print("Investigating using PCA")
+    pca_ten = PCA(n_components=10)
+    pca_ten.fit_transform(df_train_features_cyclo)
+    plt.figure()
+    plt.bar([i for i in range(0,10)], pca_ten.explained_variance_ratio_)
+    plt.title("Explained Variance Ratio of PCA Components")
+    plt.show() 
+
+    pca = PCA(n_components=2)
+    principalComponents = pca.fit_transform(df_train_features_cyclo)
+    principalDf = pd.DataFrame(data = principalComponents
+                ,#  columns = [f' PC1: VarExp: {pca.explained_variance_[0]}', f' PC1: VarExp: {pca.explained_variance_[1]}'])
+                columns = ["PC1" , "PC2"])
+
+    plt.figure(figsize=(10,10))
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=14)
+    plt.xlabel(f' Principal Component - 1: {pca.explained_variance_[0]}', fontsize=20)
+    plt.ylabel(f' Principal Component - 2: {pca.explained_variance_[1]}', fontsize=20)
+    plt.title("Principal Component Analysis of Dataset", fontsize=20)
+    targets = [i for i in df_cyclo_labels["Compound ID"].unique()]
+    print(len(targets))
+
+    targets =  [i for i in df_cyclo_labels["Compound ID"].unique()]
+    labels_to_targets = {label: i for i, label in enumerate(targets)}
+    colors = [labels_to_targets[label] for label in df_cyclo_labels["Compound ID"]]
+    plt.figure(figsize=(15,10))
+    graph = plt.scatter(
+        principalDf["PC1"],
+        principalDf["PC2"],
+        c=colors,
+        cmap='gist_rainbow',
+        s=15)
+
+    handles, labels= graph.legend_elements(prop="colors", num=len(targets))
+    plt.gca().set_aspect('equal', 'datalim')
+    plt.title('UMAP projection of Compound Clustering with Cyclooxygenase MoA', fontsize=24)
+    plt.legend(handles, targets, prop={'size': 10})
+    plt.show()
+
+    pca = PCA(n_components=20)
+    principalComponents = pca.fit_transform(df_train_features_cyclo)
+    principalDf = pd.DataFrame(data = principalComponents)
+
+
+    print("Starting UMAP")
+    # In[127]:
+    umap_neighbors = 15
+    umap_min_dist = 0.1
+    reducer = umap.UMAP(n_neighbors= umap_neighbors, min_dist = umap_min_dist)
+
+    embedding = reducer.fit_transform(principalDf)
+
+    targets =  [i for i in df_cyclo_labels["Compound ID"].unique()]
+    labels_to_targets = {label: i for i, label in enumerate(targets)}
+    colors = [labels_to_targets[label] for label in df_cyclo_labels["Compound ID"]]
+    plt.figure(figsize=(15,10))
+    graph = plt.scatter(
+        embedding[:, 0],
+        embedding[:, 1],
+        c=colors,
+        cmap='gist_rainbow',
+        s=15)
+    handles, labels= graph.legend_elements(prop="colors", num=len(targets))
+    plt.gca().set_aspect('equal', 'datalim')
+    plt.title('UMAP projection of Compound Clustering with Dopamine Receptor Antagonist', fontsize=24)
+    plt.legend(handles, targets, prop={'size': 10})
+    plt.show()
+
+
 # download csvs with all the data pre split
 erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
 train_filename = 'erik10_clue_train_fold_0.csv'
@@ -93,13 +161,15 @@ training_set, validation_set, test_set =  load_train_valid_data(erik10_file, tra
 
 
 
-L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, 0, cell_lines = ["A375", "A549"])
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set)
 
 variance_thresh = 0
 normalize_c = False
 df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
-         clue_gene, 
-         npy_exists = True,
-         use_variance_threshold = variance_thresh, 
-         normalize = normalize_c, 
-         save_npy = False)
+        clue_gene, 
+        npy_exists = True,
+        use_variance_threshold = variance_thresh, 
+        normalize = normalize_c, 
+        save_npy = False)
+
+cmpd_clustering(df_train_features, df_train_labels, "Cyclooxygenase inhibitor")

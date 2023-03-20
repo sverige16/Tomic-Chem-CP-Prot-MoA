@@ -469,7 +469,7 @@ def np_array_transform(profiles_gc_too):
     df["sig_id"] =  sig_id_df[0:]
     return df
 
-def acquire_npy(dataset):
+def acquire_npy(dataset, subset_data):
     '''
     Acquiring the numpy dataset in the npy format if it has already been created. Purpose is to save the reloading of the .npy dataframe, which can take 
     up to 9 minutes for the 10 MoAs.
@@ -486,19 +486,40 @@ def acquire_npy(dataset):
         #npy_set = np.load(path + filename)
         #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_train.npy', allow_pickle=True)
         #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrtrain.npy', allow_pickle=True)
-        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik_10_fold0_train.npy', allow_pickle=True)
+        if subset_data == "erik10":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_fold0_train.npy', allow_pickle=True)
+        elif subset_data == "tian10":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_fold0_train.npy', allow_pickle=True)
+        elif subset_data == "cyc_adr":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_fold0_train.npy', allow_pickle=True)
+        elif subset_data == "cyc_dop":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_fold0_train.npy', allow_pickle=True)
+        else: 
+            raise ValueError("subset_data must be either erik10, tian10, cyc_adr or cyc_dop")  
+        
     elif dataset == 'val':
-        #filename = input('Give name of npy file (str): ')
-        #npy_set = np.load(path + filename)
-        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_val.npy', allow_pickle=True)
-        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrval.npy', allow_pickle=True)
-        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik_10_fold0_val.npy', allow_pickle=True)
+        if subset_data == "erik10":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_fold0_val.npy', allow_pickle=True)
+        elif subset_data == "tian10":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_fold0_val.npy', allow_pickle=True)
+        elif subset_data == "cyc_adr":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_fold0_val.npy', allow_pickle=True)
+        elif subset_data == "cyc_dop":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_fold0_val.npy', allow_pickle=True)
+        else: 
+            raise ValueError("subset_data must be either erik10, tian10, cyc_adr or cyc_dop")  
+    
     elif dataset == 'test':
-        #filename = input('Give name of npy file (str): ')
-        #npy_set = np.load(path + filename)
-        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_test.npy', allow_pickle=True)
-        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrtest.npy', allow_pickle=True)
-        npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_fold0_test.npy', allow_pickle=True)
+        if subset_data == "erik10":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_fold0_test.npy', allow_pickle=True)
+        elif subset_data == "tian10":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_fold0_test.npy', allow_pickle=True)
+        elif subset_data == "cyc_adr":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_fold0_test.npy', allow_pickle=True)
+        elif subset_data == "cyc_dop":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_fold0_test.npy', allow_pickle=True)
+        else: 
+            raise ValueError("subset_data must be either erik10, tian10, cyc_adr or cyc_dop")  
     else:
         filename =  input('Give name of npy file (str): ')
         npy_set = np.load(path + filename)
@@ -519,7 +540,8 @@ def pre_processing(L1000_training, L1000_validation, L1000_test,
          npy_exists = True,
          use_variance_threshold = 0, 
          normalize = False, 
-         save_npy = False):
+         save_npy = False,
+         data_subset = "erik10"):
     '''
     Pre-processing of the data. The data is shuffled, the transcriptomic profiles are extracted, and transformed into numpy arrays, pre-processed
     all irrelevant columns are removed.
@@ -555,7 +577,7 @@ def pre_processing(L1000_training, L1000_validation, L1000_test,
     print("extracting training transcriptomes")
     profiles_gc_too_train = tprofiles_gc_too_func(L1000_training, clue_gene)
     if npy_exists:
-        df_train = acquire_npy('train')
+        df_train = acquire_npy('train', data_subset)
     else:    
         df_train = np_array_transform(profiles_gc_too_train)
         if save_npy:
@@ -564,7 +586,7 @@ def pre_processing(L1000_training, L1000_validation, L1000_test,
     print("extracting validation transcriptomes") 
     profiles_gc_too_valid = tprofiles_gc_too_func(L1000_validation, clue_gene)
     if npy_exists:
-        df_val = acquire_npy('val')
+        df_val = acquire_npy('val', data_subset)
     else:    
         df_val = np_array_transform(profiles_gc_too_valid)
         if save_npy:
@@ -573,7 +595,7 @@ def pre_processing(L1000_training, L1000_validation, L1000_test,
     print("extracting test transcriptomes")
     profiles_gc_too_test = tprofiles_gc_too_func(L1000_test, clue_gene)
     if npy_exists:
-        df_test = acquire_npy('test')
+        df_test = acquire_npy('test', data_subset)
     else:    
         df_test = np_array_transform(profiles_gc_too_test)
         if save_npy:
@@ -605,8 +627,20 @@ def pre_processing(L1000_training, L1000_validation, L1000_test,
 
     return df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa
 
+def choose_cell_lines_to_include(df_set, clue_sig_in_SPECS, cell_lines):
+    '''
+    Returns training/validation/test set with only the cell lines specified by the user
+    Input:
+        df_set: a dataframe with the training/validation/test data
+        cell_lines: a dictionary, where the key is the name of the moa and value is a list with the names of cell lines to be included.
+            Default is empty. Ex. "{"cyclooxygenase inhibitor": ["A375", "HA1E"], "adrenergic receptor antagonist" : ["A375", "HA1E"] }"
+    Output:
+        df_set: a dataframe with the training/validation/test data with only the cell lines specified by the user
+    '''
+    profile_ids = clue_sig_in_SPECS[["Compound ID", "sig_id", "moa", 'cell_iname']][clue_sig_in_SPECS["Compound ID"].isin(df_set["Compound_ID"].unique())]
+    return profile_ids[profile_ids["cell_iname"].isin(cell_lines)]
 
-def create_splits(train, val, test, cc_q75 = 0, cell_lines = {}):
+def create_splits(train, val, test, cc_q75 = 0, cell_lines = []):
     '''
     Input:
         train: a dataframe with training data
@@ -636,7 +670,7 @@ def create_splits(train, val, test, cc_q75 = 0, cell_lines = {}):
     # Removing transcriptomic profiles based on the correlation between different cell lines
         # Cell_Lines_Deprecated
         if cell_lines:
-            profile_ids = choose_cell_lines_to_include(list(set_split.unique()), clue_sig_in_SPECS, cell_lines)
+            profile_ids = choose_cell_lines_to_include(set_split, clue_sig_in_SPECS, cell_lines)
         else:
             profile_ids = clue_sig_in_SPECS[["Compound ID", "sig_id", "moa", 'cell_iname']][clue_sig_in_SPECS["Compound ID"].isin(set_split["Compound_ID"].unique())]
         list_with_ans.append(profile_ids)
