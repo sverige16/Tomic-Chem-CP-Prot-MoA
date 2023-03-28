@@ -32,10 +32,6 @@ import torchvision.models as models
 import torch.nn as nn
 import neptune.new as neptune
 
-from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
-from Erik_helper_functions import  apply_class_weights, set_parameter_requires_grad, LogScaler
-from Helper_Models import DeepInsight_Model, Chem_Dataset, Reducer_profiles
 
 
 
@@ -62,6 +58,9 @@ from tqdm.notebook import tqdm_notebook
 import datetime
 import time
 from tabulate import tabulate
+import re
+import warnings
+
 
 # Torch
 import torch
@@ -70,11 +69,11 @@ import torchvision.models as models
 import torch.nn as nn
 import neptune.new as neptune
 
-from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_helper_functions import conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
-from Erik_helper_functions import apply_class_weights, set_parameter_requires_grad
-from Erik_helper_functions import pre_processing, save_npy, acquire_npy, np_array_transform, feature_selection, splitting
-from Erik_helper_functions import extract_tprofile, tprofiles_gc_too_func, normalize_func, variance_threshold, create_splits, smiles_to_array
+from Erik_alll_helper_functions import checking_veracity_of_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
+from Erik_alll_helper_functions import conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
+from Erik_alll_helper_functions import apply_class_weights, set_parameter_requires_grad, LogScaler
+from Erik_alll_helper_functions import pre_processing, save_tprofile_npy, acquire_npy, np_array_transform, splitting
+from Erik_alll_helper_functions import accessing_correct_fold_csv_files, create_splits, smiles_to_array
 from Helper_Models import DeepInsight_Model, Chem_Dataset, Reducer_profiles
 
 import torch
@@ -83,6 +82,10 @@ import torch.nn as nn
 import torch.optim as optim
 
 from sklearn.metrics import accuracy_score
+import warnings
+warnings.simplefilter('error')
+
+
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
 testing = False # decides if we take a subset of the data
@@ -126,27 +129,36 @@ clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_d
 #test_filename = 'cyc_adr_clue_test_fold_0.csv'
 #training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
 
-# download csvs with all the data pre split
-erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-train_filename = 'erik10_clue_train_fold_0.csv'
-val_filename = 'erik10_clue_val_fold_0.csv'
-test_filename = 'erik10_clue_test_fold_0.csv'
-training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
-L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set)
 
-variance_thresh = 0
-normalize_c = False
-df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(train_filename,
-    L1000_training = L1000_training, 
-    L1000_validation = L1000_validation, 
-    L1000_test = L1000_test,
-    clue_gene= clue_gene, 
-    npy_exists = False,
-    apply_class_weight= True,
-    use_variance_threshold = variance_thresh, 
-    normalize= normalize_c,
-    ensemble = False,
-    feat_sel= 0)
+
+file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
+training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
+hq, dose = 'False', 'False'
+if re.search('hq', file_name):
+    hq = 'True'
+if re.search('8', file_name):
+    dose = 'True'
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
+
+checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
+variance_thresh = int(input("Variance threshold? (Options: 0 - 1.2): "))
+normalize_c = input("Normalize? (Options: True, False): ")
+if variance_thresh > 0 or normalize_c == 'True':
+    npy_exists = False
+    save_npy = False
+
+npy_exists = True
+save_npy = False
+
+df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
+        clue_gene, 
+        npy_exists = npy_exists,
+        use_variance_threshold = variance_thresh, 
+        normalize = normalize_c, 
+        save_npy = save_npy,
+        data_subset = file_name)
+checking_veracity_of_data(file_name, df_train_labels, df_val_labels, df_test_labels)
+
 
 # ----------------------------------------- Prepping Chemical Structure Data ---------------------------------------#
 # download dictionary which associates moa with a tensor
@@ -255,7 +267,7 @@ DI_val_tensor = torch.stack([preprocess(img) for img in X_val_img]).float()
 DI_test_tensor = torch.stack([preprocess(img) for img in X_test_img]).float()
 # -----------------------------------------Prepping Individual Models ---------------------#
 # parameters for the dataloader
-batch_size = 50
+batch_size = 100
 params = {'batch_size' : batch_size,
          'num_workers' : 3,
          'shuffle' : True,
@@ -298,11 +310,13 @@ class CS_DI_Dataset(torch.utils.data.Dataset):
         CID, label  = self.labels_CID.iloc[idx]
         assert len(CID) > 1, "No compound ID found"
         smile_string = self.compound_df["SMILES"][self.compound_df["Compound_ID"]== CID]      # returns smiles by using compound as keys
-        #assert smile_string.shape[0] == 1, "More than one compound found that matches Compound ID"
+        # assert smile_string.shape[0] == 1, "More than one compound found that matches Compound ID"
         # problem with enantiomers
         if smile_string.shape[0] > 1:
-            smile_string = smile_string.iloc[0]
-            print("We have an enantiomer")
+            row_num = smile_string.shape[0]
+            selection = int(np.random.randint(0,row_num) - 1)
+            smile_string = smile_string.iloc[selection]
+            #print("We have an enantiomer")
         if type(smile_string) == pd.Series:
             smile_string = smile_string.values[0]
         elif type(smile_string) == str:
@@ -310,6 +324,8 @@ class CS_DI_Dataset(torch.utils.data.Dataset):
         else:
             print("We have a problem")
         compound_array = smiles_to_array(smile_string)
+        if compound_array.shape[0] != 2048:
+            raise ValueError("Compound array is not the correct size")
         assert not torch.isnan(compound_array).any(), "NaN value found in compound array"
         label_tensor = torch.from_numpy(self.dict_moa[label])                  # convert label to number
         if self.transform:                         # uses Albumentations image pipeline to return an augmented image
@@ -343,6 +359,8 @@ class CStructure_DI(nn.Module):
     def forward(self, x1in, x2in):
         #print(f' compound: {x1.size()}')
         #print(f' image: {x2.size()}')
+        if x1in.shape[1] != 2048:
+            raise ValueError("The input shape for the compound is not correct")
         x1 = self.modelCS(x1in)
         x2 = self.modelDI(x2in)
         x  = torch.cat((x1, x2), dim = 1)
@@ -382,7 +400,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     val_loss_per_epoch = []
     val_acc_per_epoch = []
     best_val_loss = np.inf
-    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= True):
+    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
         loss_train = 0.0
         train_total = 0
         train_correct = 0
@@ -419,8 +437,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
-        if epoch == 1 or epoch %2 == 0:
-            print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
+        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, Accuracy: {val_accuracy} ')
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
@@ -448,7 +465,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss, device):
     predictions = []
     all_labels = []
     with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
-        for tprofiles, labels, cmpds in valid_loader:
+        for tprofiles, cmpds, labels in valid_loader:
             # Move to device MAY NOT BE NECESSARY
             tprofiles = tprofiles.to(device = device)
             labels = labels.to(device= device)
@@ -479,7 +496,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss, device):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'weighted'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models' + 'CS_DI_least_loss_model'
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models/' + 'CS_DI_least_loss_model'
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss
@@ -527,6 +544,136 @@ def test_loop(model, loss_fn, test_loader, device):
         avg_test_loss = loss_test/len(test_loader)  # average loss over batch
     return correct, total, avg_test_loss, all_predictions, all_labels
 
+def training_loop_fe(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader, device):
+    '''
+    n_epochs: number of epochs 
+    optimizer: optimizer used to do backpropagation
+    model: deep learning architecture
+    loss_fn: loss function
+    train_loader: generator creating batches of training data
+    valid_loader: generator creating batches of validation data
+    '''
+    # lists keep track of loss and accuracy for training and validation set
+    model = model.to(device)
+    train_loss_per_epoch = []
+    train_acc_per_epoch = []
+    val_loss_per_epoch = []
+    val_acc_per_epoch = []
+    best_val_loss = np.inf
+    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
+        loss_train = 0.0
+        train_total = 0
+        train_correct = 0
+        for tprofiles, cmpds, labels in tqdm(train_loader, desc = "Training", position=0, leave= False):
+            optimizer.zero_grad()
+            # put model, images, labels on the same device
+            tprofiles = tprofiles.to(device = device)
+            labels = labels.to(device= device)
+            cmpds = cmpds.to(device = device)
+            # Training Model
+            outputs = model(cmpds, tprofiles)
+            #print(f' Outputs : {outputs}') # tensor with 10 elements
+            #print(f' Labels : {labels}') # tensor that is a number
+            loss = loss_fn(outputs,torch.max(labels, 1)[1])
+            # For L2 regularization
+            l2_lambda = 0.000001
+            l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
+            loss = loss + l2_lambda * l2_norm
+            # Update weights
+            loss.backward()
+            optimizer.step()
+            # Training Metrics
+            loss_train += loss.item()
+            #print(f' loss: {loss.item()}')
+            train_predicted = torch.argmax(outputs, 1)
+            #print(f' train_predicted {train_predicted}')
+            # NEW
+            #labels = torch.argmax(labels,1)
+            #print(labels)
+            train_total += labels.shape[0]
+            train_correct += int((train_predicted == torch.max(labels, 1)[1]).sum())
+        # validation metrics from batch
+        val_correct, val_total, val_loss, best_val_loss_upd = validation_loop_fe(model, loss_fn, valid_loader, best_val_loss, device)
+        best_val_loss = best_val_loss_upd
+        val_accuracy = val_correct/val_total
+        # printing results for epoch
+        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, Accuracy: {val_accuracy} ')
+        # adding epoch loss, accuracy to lists 
+        val_loss_per_epoch.append(val_loss)
+        train_loss_per_epoch.append(loss_train/len(train_loader))
+        val_acc_per_epoch.append(val_accuracy)
+        train_acc_per_epoch.append(train_correct/train_total)
+    # return lists with loss, accuracy every epoch
+       
+    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
+                                
+
+def validation_loop_fe(model, loss_fn, valid_loader, best_val_loss, device):
+    '''
+    Assessing trained model on valiidation dataset 
+    model: deep learning architecture getting updated by model
+    loss_fn: loss function
+    valid_loader: generator creating batches of validation data
+    '''
+    model = model.to(device)
+    model.eval()
+    loss_val = 0.0
+    correct = 0
+    total = 0
+    predict_proba = []
+    predictions = []
+    all_labels = []
+    with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
+        for tprofiles, cmpds, labels in valid_loader:
+            # Move to device MAY NOT BE NECESSARY
+            tprofiles = tprofiles.to(device = device)
+            labels = labels.to(device= device)
+            cmpds = cmpds.to(device = device)
+            # Assessing outputs
+            outputs = model(cmpds, tprofiles)
+            #probs = torch.nn.Softmax(outputs)
+            loss = loss_fn(outputs,torch.max(labels, 1)[1])
+            loss_val += loss.item()
+            predicted = torch.argmax(outputs, 1)
+            #labels = torch.argmax(labels,1)
+            total += labels.shape[0]
+            correct += int((predicted == torch.max(labels, 1)[1]).sum()) # saving best 
+            all_labels.append(torch.max(labels, 1)[1])
+            predict_proba.append(outputs)
+            predictions.append(predicted)
+        avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
+    model.train()
+    return correct, total, avg_val_loss, best_val_loss
+
+set_parameter_requires_grad(CStructure_DI, feature_extracting = True)
+
+learning_rate = 1e-4
+optimizer = torch.optim.Adam(CStructure_DI.parameters(), lr = learning_rate)
+# loss_function
+if incl_class_weights == True:
+    class_weights = apply_class_weights(training_set, device)
+    loss_function = torch.nn.CrossEntropyLoss(class_weights)
+else:
+    loss_function = torch.nn.CrossEntropyLoss()
+num_epochs_fs = 20
+
+train_loss_per_epoch_fe, train_acc_per_epoch_fe, val_loss_per_epoch_fe, val_acc_per_epoch_fe, num_epochs = training_loop_fe(n_epochs = num_epochs_fs,
+              optimizer = optimizer,
+              model = CStructure_DI,
+              loss_fn = loss_function,
+              train_loader=training_generator, 
+              valid_loader=validation_generator,
+              device = device)
+
+set_parameter_requires_grad(CStructure_DI, feature_extracting = False)
+learning_rate = 0.5e-4
+optimizer = torch.optim.Adam(CStructure_DI.parameters(), lr = learning_rate)
+# loss_function
+if incl_class_weights == True:
+    class_weights = apply_class_weights(training_set, device)
+    loss_function = torch.nn.CrossEntropyLoss(class_weights)
+else:
+    loss_function = torch.nn.CrossEntropyLoss()
 #----------------------------------------------------- Training and validation ----------------------------------#
 train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
               optimizer = optimizer,
@@ -562,12 +709,14 @@ print(tabulate(table, tablefmt='fancy_grid'))
 
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
 run['model'] = 'CS_DI'
-#run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = train_filename
-run['parameters/normalize'] = 'None'
-# run['parameters/class_weight'] = class_weight
+run["feat_selec/variance_threshold"] = variance_thresh
+run["filename"] = file_name
+run['parameters/normalize'] = normalize_c
+run['parameters/class_weight'] = incl_class_weights
 run['parameters/learning_rate'] = learning_rate
 run['parameters/loss_function'] = str(loss_function)
+run['parameters/optimizer'] = str(optimizer)
+run['parameters/num_epochs_fs'] = num_epochs_fs
 #run['parameters/use_variance_threshold'] = use_variance_threshold
 #f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
 state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models/' + 'CS_DI_least_loss_model')
@@ -580,7 +729,7 @@ run['metrics/epochs'] = num_epochs
 run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
 run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
-conf_matrix_and_class_report(state["labels_val"], state["predictions"], 'CS_DI')
+conf_matrix_and_class_report(all_labels, all_predictions, 'DI', dict_moa)
 
 # Upload plots
 run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images'+ '/' + 'loss_train_val_' + 'CS_DI' + now  + '.png')

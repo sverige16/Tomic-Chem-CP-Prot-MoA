@@ -52,10 +52,9 @@ import matplotlib.pyplot as plt
 
 import datetime
 import time
-
-from Erik_tprofiles_extraction_functions import tprofiles_gc_too_func, extract_tprofile
-from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, extract_all_cell_lines, create_splits
+import sys
+sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
+from Erik_alll_helper_functions import *
 
 # In[63]:
 
@@ -74,12 +73,6 @@ clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Model
 
 # clue row metadata with rows representing transcription levels of specific genes
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
-
-
-# In[40]:
-def save_val(val_tensor, file_type):
-    torch.save(val_tensor, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/pickles/val_order_pickles/' + file_type )
-    print('Done writing binary file')
 
 
 class Transcriptomic_Profiles(torch.utils.data.Dataset):
@@ -143,9 +136,9 @@ print(f'Training on device {device}. ' )
 
 # download csvs with all the data pre split
 erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-train_filename = 'erik10_clue_train_fold_0.csv'
-val_filename = 'erik10_clue_val_fold_0.csv'
-test_filename = 'erik10_clue_test_fold_0.csv'
+train_filename = 'erik10_clue_hq_train_fold_0.csv'
+val_filename = 'erik10_clue_hq_val_fold_0.csv'
+test_filename = 'erik10_clue_hq_test_fold_0.csv'
 training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
 
 # Creating a  dictionary of the one hot encoded labels
@@ -332,7 +325,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     val_loss_per_epoch = []
     val_acc_per_epoch = []
     best_val_loss = np.inf
-    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= True):
+    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
         loss_train = 0.0
         train_total = 0
         train_correct = 0
@@ -369,8 +362,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
-        if epoch == 1 or epoch %2 == 0:
-            print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
+        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
@@ -488,8 +480,8 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
 
 
 
-val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'SimpleNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
-val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'SimpleNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
+val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'SimpleNN_CL', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
+val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'SimpleNN_CL', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
 
 #----------------------------------------- Assessing model on test data -----------------------------------------#
 model_test = SimpleNN_and_Cell_Line_Model(simple_mod, cell_line_mod, num_targets = num_classes)  
@@ -507,7 +499,7 @@ elapsed_time = program_elapsed_time(start, end)
 
 table = [["Time to Run Program", elapsed_time],
 ['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
-['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='weighted')]]
+['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
 print(tabulate(table, tablefmt='fancy_grid'))
 
 
@@ -529,14 +521,14 @@ run['metrics/loss'] = state["valid_loss"]
 run['metrics/time'] = elapsed_time
 run['metrics/epochs'] = num_epochs
 
-run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='weighted')
+run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
 run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
-conf_matrix_and_class_report(all_labels, all_predictions, 'SimpleNN')
+conf_matrix_and_class_report(all_labels, all_predictions, 'SimpleNN', dict_moa)
 
 # Upload plots
-run["images/loss"].upload("/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images"+ '/' + 'loss_train_val_SimpleNN' + now + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'acc_train_val_SimpleNN' + now + '.png')
+run["images/loss"].upload("/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images"+ '/' + 'loss_train_val_SimpleNN_CL' + now + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'acc_train_val_SimpleNN_CL' + now + '.png')
 import matplotlib.image as mpimg
 conf_img = mpimg.imread('Conf_matrix.png')
 run["files/classification_info"].upload("class_info.txt")

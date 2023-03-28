@@ -72,14 +72,13 @@ import pytorch_tabnet
 from pytorch_tabnet.tab_model import TabNetClassifier
 from torchsummary import summary
 nn._estimator_type = "classifier"
-
-from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, extract_all_cell_lines, create_splits
-
+import sys
+sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
+from Erik_alll_helper_functions import *
 
 
 start = time.time()
-now = datetime.now()
+now = datetime.datetime.now()
 now = now.strftime("%d_%m_%Y-%H:%M:%S")
 print("Begin Training")
 
@@ -93,7 +92,7 @@ with open('/scratch2-shared/erikep/Results/Euc_full/Results_imag.pkl', 'rb') as 
 with open('/scratch2-shared/erikep/Results/Euc_full/Results_samp.pkl', 'rb') as f:
     samples = pickle.load(f)
 '''
-
+'''
 # pearson correlation with squared error
 with open('/scratch2-shared/erikep/Results/Pear/Results_imag.pkl', 'rb') as f:
     data = pickle.load(f)
@@ -101,13 +100,22 @@ with open('/scratch2-shared/erikep/Results/Pear/Results_imag.pkl', 'rb') as f:
 
 with open('/scratch2-shared/erikep/Results/Pear/Results_samp.pkl', 'rb') as f:
     samples = pickle.load(f)
+'''
+# pearson correlation with squared error
+with open('/scratch2-shared/erikep/Results/hq_Pear/Results_imag.pkl', 'rb') as f:
+    data = pickle.load(f)
+    data_set_name = "pearson"
+
+with open('/scratch2-shared/erikep/Results/hq_Pear/Results_samp.pkl', 'rb') as f:
+    samples = pickle.load(f)
 
 generated_images = np.transpose(data, (2, 0, 1))
 
 # ------------- Load Labels -------------- #
-with open('/scratch2-shared/erikep/Results/labels_moadict.pkl', 'rb') as f:
+with open('/scratch2-shared/erikep/Results/labels_hq_moadict.pkl', 'rb') as f:
     all_labels = pickle.load(f)
 train_labels, valid_labels, test_labels, dict_moa, dict_indexes = all_labels
+
 
 last_training_index = train_labels.shape[0]
 last_validat_index = last_training_index + valid_labels.shape[0]
@@ -128,7 +136,7 @@ assert len(test_images) == len(test_labels)
 
 assert samples[last_training_index] == '0'
 assert samples[last_validat_index] == '0'
-assert samples[last_test_index -1 ] ==  '2706'
+#assert samples[last_test_index -1 ] ==  '2706'
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -193,8 +201,8 @@ class IGTD_Model(nn.Module):
         self.pool = nn.MaxPool2d(kernel_size=(1,2), stride=2)
         self.dropout = nn.Dropout(p=0.25)
         self.fc1 = nn.Linear(16*4* 82, 512)
-        self.fc2 = nn.Linear(512, 128)
-        self.fc3 = nn.Linear(128, 10)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, 10)
         
     def forward(self, x):
         #x = x.unsqueeze(1)
@@ -222,13 +230,13 @@ IGTD_model = IGTD_Model()
 batch_size = 50
 train_transform = transforms.GaussianBlur(kernel_size=(3,3), sigma = (0.1, 0.2))
 
-trainset = IGTD_profiles(train_images, train_labels, dict_moa)
-train_generator = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=False)
+trainset = IGTD_profiles(train_images, train_labels["moa"], dict_moa)
+train_generator = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True)
 
-validset = IGTD_profiles(valid_images, valid_labels, dict_moa)
+validset = IGTD_profiles(valid_images, valid_labels["moa"], dict_moa)
 valid_generator = torch.utils.data.DataLoader(validset, batch_size=batch_size, shuffle=False)
 
-testset = IGTD_profiles(test_images, test_labels, dict_moa)
+testset = IGTD_profiles(test_images, test_labels["moa"], dict_moa)
 test_generator = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False)
 
 
@@ -236,24 +244,11 @@ test_generator = torch.utils.data.DataLoader(testset, batch_size=batch_size, shu
 # In[50]:
 
 # If applying class weights
-apply_class_weights = True
-if apply_class_weights:     # if we want to apply class weights
-    counts = train_labels.value_counts()  # count the number of moa in each class for the ENTiRE dataset
-    #print(counts)
-    class_weights = []   # create list that will hold class weights
-    for moa in train_labels.unique():       # for each moa   
-        #print(moa)
-        counts[moa]
-        class_weights.append(counts[moa])  # add counts to class weights
-    #print(len(class_weights))
-    #print(class_weights)
-    #print(type(class_weights))
-    # class_weights = 1 / (class_weights / sum(class_weights)) # divide all class weights by total moas
-    class_weights = [i / sum(class_weights) for  i in class_weights]
-    class_weights= torch.tensor(class_weights,dtype=torch.float).to(device) # transform into tensor, put onto device
-
+yn_class_weights = True
+if yn_class_weights:     # if we want to apply class weights
+    class_weights = apply_class_weights(train_labels, device)
 # loss_function
-if apply_class_weights:
+if yn_class_weights:
     loss_function = torch.nn.CrossEntropyLoss(class_weights)
 else:
     loss_function = torch.nn.CrossEntropyLoss()
@@ -282,7 +277,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     valid_loader: generator creating batches of validation data
     '''
     # lists keep track of loss and accuracy for training and validation set
-    early_stopper = EarlyStopper(patience=5, min_delta=0.0001)
+    early_stopper = EarlyStopper(patience=10, min_delta=0.0001)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
     train_loss_per_epoch = []
@@ -290,7 +285,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     val_loss_per_epoch = []
     val_acc_per_epoch = []
     best_val_loss = np.inf
-    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= True):
+    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
         loss_train = 0.0
         train_total = 0
         train_correct = 0
@@ -329,16 +324,15 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
-        if epoch == 1 or epoch %2 == 0:
-            print(f' {datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
+        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
     # return lists with loss, accuracy every epoch
-        #if early_stopper.early_stop(validation_loss = val_loss):             
-                #break
+        if early_stopper.early_stop(validation_loss = val_loss):             
+                break
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
 
 def validation_loop(model, loss_fn, valid_loader, best_val_loss):
@@ -385,7 +379,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
                     'labels_val' : labels_cpu.numpy(),
                     'model_state_dict' : model.state_dict(),
                     'valid_loss' : loss_val,
-                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'weighted'),
+                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
             },  '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'IGTD'
             )
@@ -466,7 +460,7 @@ elapsed_time = program_elapsed_time(start, end)
 
 table = [["Time to Run Program", elapsed_time],
 ['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
-['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='weighted')]]
+['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
 print(tabulate(table, tablefmt='fancy_grid'))
 
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
@@ -488,10 +482,10 @@ run['metrics/time'] = elapsed_time
 run['metrics/epochs'] = num_epochs
 
 
-run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='weighted')
+run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
 run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
-conf_matrix_and_class_report(all_labels, all_predictions, 'IGTD_CNN')
+conf_matrix_and_class_report(all_labels, all_predictions, 'IGTD_CNN', dict_moa)
 
 # Upload plots
 run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'loss_train_val_' + 'IGTD' + now + '.png')

@@ -193,7 +193,7 @@ def val_vs_train_accuracy(epochs, train_acc, val_acc, now, model_name, acc_path_
     # plot
     plt.savefig(acc_path_to_save + '/' + 'acc_train_val_' + model_name + now)
 
-def conf_matrix_and_class_report(labels_val, predictions, model_name):
+def conf_matrix_and_class_report(labels_val, predictions, model_name, dict_moa = None):
     '''
     Creating a confusion matrix and classification report.
     Input:
@@ -205,13 +205,18 @@ def conf_matrix_and_class_report(labels_val, predictions, model_name):
         classification report (txt file)
         Saves the image/file locally, which is thensubsequently be uploaded to neptune.ai as a file and image.
     '''
+    list_of_MoA_names = [0] * len(dict_moa)
+    for key, value in dict_moa.items():
+        list_of_MoA_names[np.argmax(value)] = key[0:4]
     cf_matrix = confusion_matrix(labels_val, predictions)
     print(f' Confusion Matrix: {cf_matrix}')
-    plt.figure()
-    sns.heatmap(cf_matrix, annot = True, fmt='d').set(title = f'Confusion Matrix: {model_name}')
-    plt.savefig("Conf_matrix.png")
+    ax = plt.subplot()
+    sns.heatmap(cf_matrix, annot = True, fmt='d', ax = ax).set(title = f'Confusion Matrix: {model_name}')
+    ax.set_xlabel('Predicted labels'); ax.set_ylabel('True labels')
+    ax.set_xticklabels(list_of_MoA_names); ax.set_yticklabels(list_of_MoA_names)
+    plt.savefig("Conf_matrix")
    
-    class_report = classification_report(labels_val, predictions)
+    class_report = classification_report(labels_val, predictions, target_names= list_of_MoA_names)
     print(class_report)
     f = open("class_info.txt","w")
     # write file
@@ -330,8 +335,11 @@ def set_parameter_requires_grad(model, feature_extracting):
     
     if feature_extracting:
         print("feature extracting in progress")
-        for param in model.parameters():
-            param.requires_grad = False
+        for i, param in enumerate(model.parameters()):
+            if i >= len(list(model.parameters())) - 2:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
     else:
         print("fine_tuning in progress")
         for param in model.parameters():
@@ -487,37 +495,55 @@ def acquire_npy(dataset, subset_data):
         #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_train.npy', allow_pickle=True)
         #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrtrain.npy', allow_pickle=True)
         if subset_data == "erik10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_fold0_train.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_train.npy', allow_pickle=True)
+        elif subset_data == "erik10_hq":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_train.npy', allow_pickle=True)
+        elif subset_data == "erik10_8_12":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_8_12_train.npy', allow_pickle=True)
+        elif subset_data == "erik10_hq_8_12":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_8_12_train.npy', allow_pickle=True)
         elif subset_data == "tian10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_fold0_train.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_train.npy', allow_pickle=True)
         elif subset_data == "cyc_adr":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_fold0_train.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_train.npy', allow_pickle=True)
         elif subset_data == "cyc_dop":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_fold0_train.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_train.npy', allow_pickle=True)
         else: 
-            raise ValueError("subset_data must be either erik10, tian10, cyc_adr or cyc_dop")  
+            raise ValueError("subset_data must be either erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, tian10, cyc_adr or cyc_dop")  
         
     elif dataset == 'val':
         if subset_data == "erik10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_fold0_val.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_val.npy', allow_pickle=True)
+        elif subset_data == "erik10_hq":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_val.npy', allow_pickle=True)
+        elif subset_data == "erik10_8_12":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_8_12_val.npy', allow_pickle=True)
+        elif subset_data == "erik10_hq_8_12":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_8_12_val.npy', allow_pickle=True)
         elif subset_data == "tian10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_fold0_val.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_val.npy', allow_pickle=True)
         elif subset_data == "cyc_adr":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_fold0_val.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_val.npy', allow_pickle=True)
         elif subset_data == "cyc_dop":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_fold0_val.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_val.npy', allow_pickle=True)
         else: 
             raise ValueError("subset_data must be either erik10, tian10, cyc_adr or cyc_dop")  
     
     elif dataset == 'test':
         if subset_data == "erik10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_fold0_test.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_test.npy', allow_pickle=True)
+        elif subset_data == "erik10_hq":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_test.npy', allow_pickle=True)
+        elif subset_data == "erik10_8_12":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_8_12_test.npy', allow_pickle=True)
+        elif subset_data == "erik10_hq_8_12":
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_8_12_test.npy', allow_pickle=True)
         elif subset_data == "tian10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_fold0_test.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_test.npy', allow_pickle=True)
         elif subset_data == "cyc_adr":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_fold0_test.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_test.npy', allow_pickle=True)
         elif subset_data == "cyc_dop":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_fold0_test.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_test.npy', allow_pickle=True)
         else: 
             raise ValueError("subset_data must be either erik10, tian10, cyc_adr or cyc_dop")  
     else:
@@ -526,14 +552,14 @@ def acquire_npy(dataset, subset_data):
     df = pd.DataFrame(npy_set)
     return df.set_axis([*df.columns[:-1], 'sig_id'], axis=1, inplace=False)
 
-def save_tprofile_npy(dataset, split_type):
+def save_tprofile_npy(dataset, split_type, data_subset):
     '''Save the numpy array of the selected transcriptomics profiles
     Input:
         dataset: the numpy array to be saved
     '''
     path = '/scratch2-shared/erikep/data_splits_npy/'
-    file_name = input("Give filename for numpy array: ")
-    np.save(path + file_name + '_' + split_type, dataset)
+    file_name = data_subset
+    np.save(path + '_' + file_name + '_' + split_type, dataset)
 
 def pre_processing(L1000_training, L1000_validation, L1000_test, 
          clue_gene, 
@@ -581,7 +607,7 @@ def pre_processing(L1000_training, L1000_validation, L1000_test,
     else:    
         df_train = np_array_transform(profiles_gc_too_train)
         if save_npy:
-            save_tprofile_npy(df_train, 'train')
+            save_tprofile_npy(df_train, 'train', data_subset)
 
     print("extracting validation transcriptomes") 
     profiles_gc_too_valid = tprofiles_gc_too_func(L1000_validation, clue_gene)
@@ -590,7 +616,7 @@ def pre_processing(L1000_training, L1000_validation, L1000_test,
     else:    
         df_val = np_array_transform(profiles_gc_too_valid)
         if save_npy:
-            save_tprofile_npy(df_val, 'val')
+            save_tprofile_npy(df_val, 'val', data_subset)
     
     print("extracting test transcriptomes")
     profiles_gc_too_test = tprofiles_gc_too_func(L1000_test, clue_gene)
@@ -599,7 +625,7 @@ def pre_processing(L1000_training, L1000_validation, L1000_test,
     else:    
         df_test = np_array_transform(profiles_gc_too_test)
         if save_npy:
-            save_tprofile_npy(df_test, 'test')
+            save_tprofile_npy(df_test, 'test', data_subset)
     
     
     # merging the transcriptomic profiles with the corresponding MoA class using the sig_id as a key
@@ -640,7 +666,25 @@ def choose_cell_lines_to_include(df_set, clue_sig_in_SPECS, cell_lines):
     profile_ids = clue_sig_in_SPECS[["Compound ID", "sig_id", "moa", 'cell_iname']][clue_sig_in_SPECS["Compound ID"].isin(df_set["Compound_ID"].unique())]
     return profile_ids[profile_ids["cell_iname"].isin(cell_lines)]
 
-def create_splits(train, val, test, cc_q75 = 0, cell_lines = []):
+def extract_all_cell_lines(df):
+    '''
+    Extract all cell lines from the dataframe
+    Input:
+        df: pandas dataframe with all columns.
+    Output:
+        dicti: dictionary with the cell lines as keys and the one hot encoded values as values
+    '''
+    
+    enc = OneHotEncoder(handle_unknown='ignore')
+    enc.fit(df["cell_iname"].to_numpy().reshape(-1,1))          # fit the encoder to the unique values of the moa column
+    one_hot_encoded = enc.transform(enc.categories_[0].reshape(-1,1)).toarray()
+    dicti = {}
+    for i in range(0, len(enc.categories_[0])):       # create a dictionary with the one hot encoded values
+        dicti[str(enc.categories_[0][i])] = one_hot_encoded[i]
+    return dicti
+
+
+def create_splits(train, val, test, hq = "False", dose = "False", cell_lines = []):
     '''
     Input:
         train: a dataframe with training data
@@ -648,7 +692,7 @@ def create_splits(train, val, test, cc_q75 = 0, cell_lines = []):
         test: a dataframe with test data
         cc_q75: Threshold for 75th quantile of pairwise spearman correlation for individual, level 4 profiles.
         cell_lines: a dictionary, where the key is the name of the moa and value is a list with the names of cell lines to be included.
-            Default is empty. Ex. "{"cyclooxygenase inhibitor": ["A375", "HA1E"], "adrenergic receptor antagonist" : ["A375", "HA1E"] }"
+            Default is empty. Ex. "{"cyclooxygenase inhibitor": ["A375", "HA1E"], "adrenergic receptor antagonist" : ["A375", "HA1E"] }"+
     Output:
        Three pandas dataframes (for the different sets) with only necessary information
             - Compound ID
@@ -662,14 +706,19 @@ def create_splits(train, val, test, cc_q75 = 0, cell_lines = []):
     clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_sig_in_SPECS1&2.csv', delimiter = ",")
     
     # Removing transcriptomic profiles based on the correlation of the level 4 profiles
-    if cc_q75 > 0:
-        clue_sig_in_SPECS = clue_sig_in_SPECS[clue_sig_in_SPECS["cc_q75"] > cc_q75]
+    if hq == "True":
+        clue_sig_in_SPECS = clue_sig_in_SPECS[clue_sig_in_SPECS["is_hiq"] == 1]
+
+    if dose == "True":
+        clue_sig_in_SPECS = clue_sig_in_SPECS[clue_sig_in_SPECS.pert_dose.between(8, 12)]
+    else:
+        clue_sig_in_SPECS = clue_sig_in_SPECS[clue_sig_in_SPECS.pert_dose.between(0, 100)]
     
     list_with_ans = []
     for set_split in [train, val, test]:
     # Removing transcriptomic profiles based on the correlation between different cell lines
         # Cell_Lines_Deprecated
-        if cell_lines:
+        if len(cell_lines) > 0:
             profile_ids = choose_cell_lines_to_include(set_split, clue_sig_in_SPECS, cell_lines)
         else:
             profile_ids = clue_sig_in_SPECS[["Compound ID", "sig_id", "moa", 'cell_iname']][clue_sig_in_SPECS["Compound ID"].isin(set_split["Compound_ID"].unique())]
@@ -799,4 +848,93 @@ def channel_5_numpy(df, idx, pd_image_norm):
     #im = np.array(im).astype("int16")
     five_chan_img = torch.from_numpy(arr_stack)
     return five_chan_img
+
+def accessing_correct_fold_csv_files(file):
+ # download csvs with all the data pre split
+    if file == 'tian10':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
+        train_filename = 'tian10_clue_train_fold_0.csv'
+        val_filename = 'tian10_clue_val_fold_0.csv'
+        test_filename = 'tian10_clue_test_fold_0.csv'
+    elif file == 'erik10':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        train_filename = 'erik10_clue_train_fold_0.csv'
+        val_filename = 'erik10_clue_val_fold_0.csv'
+        test_filename = 'erik10_clue_test_fold_0.csv'
+    elif file == 'erik10_hq':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        train_filename = 'erik10_clue_hq_train_fold_0.csv'
+        val_filename = 'erik10_clue_hq_val_fold_0.csv'
+        test_filename = 'erik10_clue_hq_test_fold_0.csv'
+    elif file == 'erik10_8_12':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        train_filename = 'erik10_clue_8_12__train_fold_0.csv'
+        val_filename = 'erik10_clue_8_12__val_fold_0.csv'
+        test_filename = 'erik10_clue_8_12__test_fold_0.csv'
+    elif file == 'erik10_hq_8_12':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        train_filename = 'erik10_clue_hq_8_12__train_fold_0.csv'
+        val_filename = 'erik10_clue_hq_8_12__val_fold_0.csv'
+        test_filename = 'erik10_clue_hq_8_12__test_fold_0.csv'
+    elif file == 'cyc_adr':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
+        train_filename = 'cyc_adr_clue_train_fold_0.csv'
+        val_filename = 'cyc_adr_clue_val_fold_0.csv'
+        test_filename = 'cyc_adr_clue_test_fold_0.csv'
+    elif file == 'cyc_dop':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_dop/'
+        train_filename = 'cyc_dop_clue_train_fold_0.csv'
+        val_filename = 'cyc_dop_clue_val_fold_0.csv'
+        test_filename = 'cyc_dop_clue_test_fold_0.csv'
+    else:
+        raise ValueError('Please enter a valid file name')
+
+    training_set, validation_set, test_set =  load_train_valid_data(dir_path, train_filename, val_filename, test_filename)
+    return training_set, validation_set, test_set
+
+def checking_veracity_of_data(file, L1000_training, L1000_validation, L1000_test):
+    """
+    This function checks the number of profiles and unique compounds in the data set. 
+    Is a sanity check to make sure the data is being loaded correctly.
+    Asserts error if there is a discrepancy between unique compound number or transcriptomic profile number
+    and the combined datasets-
+
+    Inputs:
+        file: string, name of the data set being investigated
+        L1000_training: pandas dataframe, training set
+        L1000_validation: pandas dataframe, validation set
+        L1000_test: pandas dataframe, test set
+    
+    Returns:
+        None
+
+    Notice that the minus two is to take into account for enantiomers that Compound ID alone cannot distinguish between.
+    """
+    all_profiles = pd.concat([L1000_training, L1000_validation, L1000_test])
+    if file == 'tian10':
+        assert all_profiles.shape[0] == 13460, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == 121, 'Incorrect number of unique compounds'
+    elif file == 'erik10':
+        assert all_profiles.shape[0] == 18042, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == int(243 -2), 'Incorrect number of unique compounds'
+    elif file == 'erik10_hq':
+        assert all_profiles.shape[0] == 4564, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == int(185 -2), 'Incorrect number of unique compounds'
+    elif file == 'erik10_8_12':
+        assert all_profiles.shape[0] == 8644, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == int(238 - 2), 'Incorrect number of unique compounds'
+    elif file == 'erik10_hq_8_12':
+        assert all_profiles.shape[0] == 2387, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == 177, 'Incorrect number of unique compounds'
+    elif file == 'cyc_adr':
+        assert all_profiles.shape[0] == 1619, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == int(76 - 1), 'Incorrect number of unique compounds'
+    elif file == 'cyc_dop':
+        assert all_profiles.shape[0] == 3385, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == int(76 -1), 'Incorrect number of unique compounds'
+    else:
+        raise ValueError('Please enter a valid file name')
+    print("passed veracity test!")
+
+
 
