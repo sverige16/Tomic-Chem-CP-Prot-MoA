@@ -52,6 +52,7 @@ import matplotlib.pyplot as plt
 
 import datetime
 import time
+import re
 
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
@@ -127,24 +128,21 @@ if using_cuda:
 else:
     device = torch.device('cpu')
 print(f'Training on device {device}. ' )
-# download csvs with all the data pre split
-#cyc_adr_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
-#train_filename = 'cyc_adr_clue_train_fold_0.csv'
-#val_filename = 'cyc_adr_clue_val_fold_0.csv'
-#test_filename = 'cyc_adr_clue_test_fold_0.csv'
-#training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
 
-# download csvs with all the data pre split
-erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-train_filename = 'erik10_clue_hq_train_fold_0.csv'
-val_filename = 'erik10_clue_hq_val_fold_0.csv'
-test_filename = 'erik10_clue_hq_test_fold_0.csv'
-training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
+
+file_name = "erik10_hq_8_12"
+#file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
+training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
+hq, dose = 'False', 'False'
+if re.search('hq', file_name):
+    hq = 'True'
+if re.search('8', file_name):
+    dose = 'True'
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
 # Creating a  dictionary of the one hot encoded labels
 dict_moa = dict_splitting_into_tensor(training_set)
 
-L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set)
 
 # checking that no overlap in sig_id exists between training, test, validation sets
 inter1 = set(list(L1000_training["sig_id"])) & set(list(L1000_validation["sig_id"]))
@@ -281,7 +279,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     '''
     # lists keep track of loss and accuracy for training and validation set
     model = model.to(device)
-    early_stopper = EarlyStopper(patience=5, min_delta=0.0001)
+    early_stopper = EarlyStopper(patience=15, min_delta=0.0001)
     train_loss_per_epoch = []
     train_acc_per_epoch = []
     val_loss_per_epoch = []
@@ -429,8 +427,6 @@ def test_loop(model, loss_fn, test_loader):
         avg_test_loss = loss_test/len(test_loader)  # average loss over batch
     return correct, total, avg_test_loss, all_predictions, all_labels
 
-# In[69]:
-
 
 train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
               optimizer = optimizer,
@@ -460,7 +456,7 @@ elapsed_time = program_elapsed_time(start, end)
 
 table = [["Time to Run Program", elapsed_time],
 ['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
-['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='weighted')]]
+['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
 print(tabulate(table, tablefmt='fancy_grid'))
 
 
@@ -468,7 +464,7 @@ print(tabulate(table, tablefmt='fancy_grid'))
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
 run['model'] = str(model)
 #run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = train_filename
+run["filename"] = file_name
 run['parameters/normalize'] = "SNone"
 # run['parameters/class_weight'] = class_weight
 run['parameters/learning_rate'] = learning_rate

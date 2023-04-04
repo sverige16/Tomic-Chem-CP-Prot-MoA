@@ -88,10 +88,11 @@ import torch
 import pytorch_tabnet
 from pytorch_tabnet.tab_model import TabNetClassifier
 nn._estimator_type = "classifier"
+import re
 
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-from Erik_alll_helper_functions import *
+from Erik_alll_helper_functions import accessing_correct_fold_csv_files, create_splits, checking_veracity_of_data, pre_processing
 
 
 start = time.time()
@@ -106,34 +107,37 @@ clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Model
 
 # clue row metadata with rows representing transcription levels of specific genes
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
+file_name = "erik10_hq_8_12"
+#file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
+training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
+hq, dose = 'False', 'False'
+if re.search('hq', file_name):
+    hq = 'True'
+if re.search('8', file_name):
+    dose = 'True'
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
-'''
- # download csvs with all the data pre split
-#cyc_adr_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
-#train_filename = 'cyc_adr_clue_train_fold_0.csv'
-#val_filename = 'cyc_adr_clue_val_fold_0.csv'
-#test_filename = 'cyc_adr_clue_test_fold_0.csv'
-#training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
-'''
-    
-erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-train_filename = 'erik10_clue_hq_train_fold_0.csv'
-val_filename = 'erik10_clue_hq_val_fold_0.csv'
-test_filename = 'erik10_clue_hq_test_fold_0.csv'
-training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
-
-L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = True)
-
+checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
+#variance_thresh = int(input("Variance threshold? (Options: 0 - 1.2): "))
+#normalize_c = input("Normalize? (Options: True, False): ")
 variance_thresh = 0
-normalize_c = False
-file_str = "erik10_hq"
+normalize_c = 'False'
+if variance_thresh > 0 or normalize_c == 'True':
+    npy_exists = False
+    save_npy = False
+
+npy_exists = True
+save_npy = False
 df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
         clue_gene, 
-        npy_exists = True,
+        npy_exists = npy_exists,
         use_variance_threshold = variance_thresh, 
         normalize = normalize_c, 
-        save_npy = False,
-        data_subset = file_str)
+        save_npy = save_npy,
+        data_subset = file_name)
+checking_veracity_of_data(file_name, df_train_labels, df_val_labels, df_test_labels)
+
+
 
 num_row = 6    # Number of pixel rows in image representation
 num_col = 163    # Number of pixel columns in image representation
@@ -184,7 +188,7 @@ print("IGTD using Euclidean distance and absolute error")
 fea_dist_method = 'Euclidean'
 image_dist_method = 'Euclidean'
 error = 'abs'
-result_dir = '/scratch2-shared/erikep/Results/Euc_full'
+result_dir = '/scratch2-shared/erikep/Results/'  + file_name + '_' + fea_dist_method
 os.makedirs(name=result_dir, exist_ok=True) 
 
 print("running table to image")
@@ -199,7 +203,7 @@ print("IGTD using Pearson correlation coefficient and squared error")
 fea_dist_method = 'Pearson'
 image_dist_method = 'Manhattan'
 error = 'squared'  
-result_dir = '/scratch2-shared/erikep/Results/hq_Pear'
+result_dir = '/scratch2-shared/erikep/Results/' + file_name + '_' + fea_dist_method 
 os.makedirs(name=result_dir, exist_ok=True)
 
 print("running table to image")

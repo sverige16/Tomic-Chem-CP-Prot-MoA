@@ -1,4 +1,0 @@
-# Ignore pictures
-*.png
-# Ignore saved numpy arrays
-*.npy

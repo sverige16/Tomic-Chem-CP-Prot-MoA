@@ -21,6 +21,7 @@ from tqdm.notebook import tqdm_notebook
 import datetime
 import time
 from tabulate import tabulate
+import re
 
 # Torch
 import torch
@@ -29,14 +30,17 @@ import torchvision.models as models
 import torch.nn as nn
 import neptune.new as neptune
 
-from Erik_helper_functions import load_train_valid_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_helper_functions import  conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
+import sys
+sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
+from Erik_alll_helper_functions import smiles_to_array,  accessing_correct_fold_csv_files, create_splits, dict_splitting_into_tensor, splitting
+from Erik_alll_helper_functions import EarlyStopper,  val_vs_train_loss, val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
+from Erik_alll_helper_functions import apply_class_weights
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
 testing = False # decides if we take a subset of the data
 max_epochs = 1000 # number of epochs we are going to run 
-apply_class_weights = True # weight the classes based on number of compounds
+#apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
 
@@ -45,31 +49,7 @@ start = time.time()
 now = datetime.datetime.now()
 now = now.strftime("%d_%m_%Y-%H:%M:%S")
 print("Begin Training")
-#---------------------------------------------------------------------------------------------------------------------------------------#
-def splitting(df):
-    '''Splitting data into two parts:
-    1. input : the pointer showing where the transcriptomic profile is  
-    2. target one hot'''
-    target = df['moa']
-    input =  df.drop('moa', axis = 1)
-    
-    return input, target #target_onehot
 
-
-# A function changing SMILES to Morgan fingerprints 
-def smiles_to_array(smiles):
-    molecules = Chem.MolFromSmiles(smiles) 
-    fingerprints = AllChem.GetMorganFingerprintAsBitVect(molecules, 2)
-    x_array = []
-    arrays = np.zeros(0,)
-    DataStructs.ConvertToNumpyArray(fingerprints, arrays)
-    x_array.append(arrays)
-    x_array = np.asarray(x_array)
-    x_array = ((np.squeeze(x_array)).astype(int)) 
-    x_array = torch.from_numpy(x_array)
-    return x_array                  
-
-   
 #---------------------------------------------------------------------------------------------------------------------------------------#
 # create Torch.dataset
 class Dataset(torch.utils.data.Dataset):
@@ -120,19 +100,17 @@ now = now.strftime("%d_%m_%Y-%H:%M:%S")
 # donwload compound list for both v1 and v2
 compounds_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/compounds_v1v2.csv', delimiter = ",")
 
-# download csvs with all the data pre split
-#cyc_adr_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
-#train_filename = 'cyc_adr_clue_train_fold_0.csv'
-#val_filename = 'cyc_adr_clue_val_fold_0.csv'
-#test_filename = 'cyc_adr_clue_test_fold_0.csv'
-#training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
 
-# download csvs with all the data pre split
-erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-train_filename = 'erik10_clue_train_fold_0.csv'
-val_filename = 'erik10_clue_val_fold_0.csv'
-test_filename = 'erik10_clue_test_fold_0.csv'
-training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
+file_name = "erik10"
+#file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
+training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
+hq, dose = 'False', 'False'
+if re.search('hq', file_name):
+    hq = 'True'
+if re.search('8', file_name):
+    dose = 'True'
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
+
 
 # download dictionary which associates moa with a tensor
 
@@ -160,12 +138,12 @@ test_df, test_labels = splitting(test_set)
 
 
 
-batch_size = 50
+batch_size = 200
 # parameters
 params = {'batch_size' : batch_size,
          'num_workers' : 3,
          'shuffle' : True,
-         'prefetch_factor' : 1} 
+         'prefetch_factor' : 2} 
 
 
 device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
@@ -190,23 +168,14 @@ validation_generator = torch.utils.data.DataLoader(valid_dataset, **params)
 test_generator = torch.utils.data.DataLoader(test_dataset, **params)
 
 
-# If applying class weights
-apply_class_weights = True
-if apply_class_weights:     # if we want to apply class weights
-    counts = training_set.moa.value_counts()  # count the number of moa in each class for the ENTiRE dataset
-    print(counts)
-    class_weights = []   # create list that will hold class weights
-    for moa in training_set.moa.unique():       # for each moa   
-        #print(moa)
-        counts[moa]
-        class_weights.append(counts[moa])  # add counts to class weights
-    print(len(class_weights))
-    print(class_weights)
-    print(type(class_weights))
-    # class_weights = 1 / (class_weights / sum(class_weights)) # divide all class weights by total moas
-    class_weights = [i / sum(class_weights) for  i in class_weights]
-    class_weights= torch.tensor(class_weights,dtype=torch.float).to(device) # transform into tensor, put onto device
-print(class_weights)
+yn_class_weights = True
+class_weights = apply_class_weights(training_set, device)
+# loss_function
+
+if yn_class_weights:
+    loss_function = torch.nn.CrossEntropyLoss(class_weights)
+else:
+    loss_function = torch.nn.CrossEntropyLoss()
 
 
 # Creating Architecture
@@ -222,16 +191,14 @@ seq_model = nn.Sequential(
     nn.Linear(64, num_classes))
 
 # optimizer_algorithm
-#cnn_optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
-learning_rate = 1e-4
-optimizer = torch.optim.Adam(seq_model.parameters(), lr = learning_rate)
-# loss_function
-if apply_class_weights == True:
-    loss_function = torch.nn.CrossEntropyLoss(class_weights)
-else:
-    loss_function = torch.nn.CrossEntropyLoss()
+learning_rate = 1e-3
+optimizer = torch.optim.Adam(seq_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
 
-def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader):
+from ols import OnlineLabelSmoothing
+loss_fn_train = OnlineLabelSmoothing(alpha = 0.5, n_classes=num_classes, smoothing = 0.05 ).to(device=device)
+#optimizer = torch.optim.Adam(seq_model.parameters(), lr = learning_rate)
+
+def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_loader, valid_loader):
     '''
     n_epochs: number of epochs 
     optimizer: optimizer used to do backpropagation
@@ -242,16 +209,17 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     '''
     # lists keep track of loss and accuracy for training and validation set
     model = model.to(device)
-    early_stopper = EarlyStopper(patience=5, min_delta=0.0001)
+    early_stopper = EarlyStopper(patience=8, min_delta=0.0001)
     train_loss_per_epoch = []
     train_acc_per_epoch = []
     val_loss_per_epoch = []
     val_acc_per_epoch = []
     best_val_loss = np.inf
-    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= True):
+    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
         loss_train = 0.0
         train_total = 0
         train_correct = 0
+        loss_fn_train.train()
         for tprofiles, labels in train_loader:
             optimizer.zero_grad()
             # put model, images, labels on the same device
@@ -261,7 +229,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             outputs = model(tprofiles)
             #print(f' Outputs : {outputs}') # tensor with 10 elements
             #print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,torch.max(labels, 1)[1])
+            loss = loss_fn_train(outputs,torch.max(labels, 1)[1])
             # For L2 regularization
             l2_lambda = 0.000001
             l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
@@ -279,18 +247,19 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             #print(labels)
             train_total += labels.shape[0]
             train_correct += int((train_predicted == torch.max(labels, 1)[1]).sum())
+        loss_fn_train.eval()
         # validation metrics from batch
         val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
-        if epoch == 1 or epoch %2 == 0:
-            print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
+        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
+        loss_fn_train.next_epoch()
     # return lists with loss, accuracy every epoch
         if early_stopper.early_stop(validation_loss = val_loss):             
                 break
@@ -502,6 +471,7 @@ def test_loop(model, loss_fn, test_loader):
 train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
               optimizer = optimizer,
               model = seq_model,
+              loss_fn_train=loss_fn_train,
               loss_fn = loss_function,
               train_loader=training_generator, 
               valid_loader=validation_generator)
@@ -519,9 +489,9 @@ correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = s
                                           test_loader = test_generator)
 
 # ----------------------------------------- Plotting loss, accuracy, visualization of results ---------------------#
-
-val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'Chem_Struct', '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split') 
-val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'Chem_Struct', '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split')
+str_save = 'CS_' +  file_name
+val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, str_save, '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split') 
+val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  str_save, '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split')
 
 
 #-------------------------------- Writing interesting info into terminal ----------------------------------# 
@@ -532,13 +502,13 @@ elapsed_time = program_elapsed_time(start, end)
 
 table = [["Time to Run Program", elapsed_time],
 ['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
-['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='weighted')]]
+['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
 print(tabulate(table, tablefmt='fancy_grid'))
 
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
 run['model'] = 'Chemical Structure'
 #run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = train_filename
+run["filename"] = file_name
 run['parameters/normalize'] = 'None'
 # run['parameters/class_weight'] = class_weight
 run['parameters/learning_rate'] = learning_rate
@@ -552,14 +522,14 @@ run['metrics/loss'] = state["valid_loss"]
 run['metrics/time'] = elapsed_time
 run['metrics/epochs'] = num_epochs
 
-run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='weighted')
+run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
 run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
-conf_matrix_and_class_report(state["labels_val"], state["predictions"], 'Chem_Struct')
+conf_matrix_and_class_report(all_labels, all_predictions, str_save, dict_moa)
 
 # Upload plots
-run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split'+ '/' + 'loss_train_val_' + 'Chem_Struct' + now  + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split' +'/' + 'acc_train_val_' +'Chem_Struct' + now + '.png')
+run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split'+ '/' + 'loss_train_val_' + str_save + now  + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split' +'/' + 'acc_train_val_' + str_save + now + '.png')
 import matplotlib.image as mpimg
 conf_img = mpimg.imread('Conf_matrix.png')
 run["files/classification_info"].upload("class_info.txt")

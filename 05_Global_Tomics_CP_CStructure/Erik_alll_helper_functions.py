@@ -210,7 +210,7 @@ def conf_matrix_and_class_report(labels_val, predictions, model_name, dict_moa =
         list_of_MoA_names[np.argmax(value)] = key[0:4]
     cf_matrix = confusion_matrix(labels_val, predictions)
     print(f' Confusion Matrix: {cf_matrix}')
-    ax = plt.subplot()
+    ax = plt.figure().gca()
     sns.heatmap(cf_matrix, annot = True, fmt='d', ax = ax).set(title = f'Confusion Matrix: {model_name}')
     ax.set_xlabel('Predicted labels'); ax.set_ylabel('True labels')
     ax.set_xticklabels(list_of_MoA_names); ax.set_yticklabels(list_of_MoA_names)
@@ -494,8 +494,7 @@ def acquire_npy(dataset, subset_data):
         #npy_set = np.load(path + filename)
         #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_train.npy', allow_pickle=True)
         #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrtrain.npy', allow_pickle=True)
-        if subset_data == "erik10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_train.npy', allow_pickle=True)
+        if subset_data == "erik10":            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_train.npy', allow_pickle=True)
         elif subset_data == "erik10_hq":
             npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_train.npy', allow_pickle=True)
         elif subset_data == "erik10_8_12":
@@ -835,11 +834,11 @@ def channel_5_numpy(df, idx, pd_image_norm):
         # extract by adding C to the integer we are looping
         #row_channel_path = row["C" + str(c)]
         local_im = cv2.imread(row["C" + str(c)], -1) # row.path would be same for me, except str(row[path]))
-        
-        # directly resize down to 256 by 256
-        local_im = cv2.resize(local_im, (256, 256), interpolation = cv2.INTER_LINEAR)
-        local_im = local_im.astype(np.float32)
         local_im_norm = image_normalization(local_im, c, row['plate'], pd_image_norm)
+        # directly resize down to 256 by 256
+        local_im_norm = cv2.resize(local_im_norm, (256, 256), interpolation = cv2.INTER_LINEAR)
+        local_im_norm = local_im_norm.astype(np.float32)
+   
         # adds to array to the image vector 
         im_list.append(local_im_norm)
     
@@ -935,6 +934,12 @@ def checking_veracity_of_data(file, L1000_training, L1000_validation, L1000_test
     else:
         raise ValueError('Please enter a valid file name')
     print("passed veracity test!")
+
+def label_smoothing(labels, smooth_factor, num_classes):
+    labels = (1 - smooth_factor) * labels + smooth_factor / num_classes
+    return labels
+
+
 
 
 

@@ -48,7 +48,7 @@ import matplotlib.pyplot as plt
 import datetime
 import time
 import math
-
+import re
 
 # In[37]:
 
@@ -124,24 +124,17 @@ else:
 print(f'Training on device {device}. ' )
 
 
-# download csvs with all the data pre split
-#cyc_adr_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
-#train_filename = 'cyc_adr_clue_train_fold_0.csv'
-#val_filename = 'cyc_adr_clue_val_fold_0.csv'
-#test_filename = 'cyc_adr_clue_test_fold_0.csv'
-#training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
+file_name = "erik10_hq_8_12"
+#file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
+training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
+hq, dose = 'False', 'False'
+if re.search('hq', file_name):
+    hq = 'True'
+if re.search('8', file_name):
+    dose = 'True'
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
-# download csvs with all the data pre split
-erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-train_filename = 'erik10_clue_hq_train_fold_0.csv'
-val_filename = 'erik10_clue_hq_val_fold_0.csv'
-test_filename = 'erik10_clue_hq_test_fold_0.csv'
-training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
-
-# Creating a  dictionary of the one hot encoded labels
 dict_moa = dict_splitting_into_tensor(training_set)
-
-L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set)
 
 # checking that no overlap in sig_id exists between training, test, validation sets
 inter1 = set(list(L1000_training["sig_id"])) & set(list(L1000_validation["sig_id"]))
@@ -284,12 +277,20 @@ class CNN_Model(nn.Module):
 
 model = CNN_Model(num_features = 978, num_targets= num_classes, hidden_size= hidden_size)
 optimizer = torch.optim.RMSprop(model.parameters(),  weight_decay=WEIGHT_DECAY, lr=learning_rate)
-loss_fn = torch.nn.BCEWithLogitsLoss()
+yn_class_weights = True
+class_weights = apply_class_weights(training_set, device)
+# loss_function
+
+if yn_class_weights:
+    #loss_function = torch.nn.CrossEntropyLoss(weight = class_weights) 
+    loss_fn = torch.nn.BCEWithLogitsLoss(weight = class_weights)
+else:
+    loss_fn = torch.nn.BCEWithLogitsLoss()
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
 testing = False # decides if we take a subset of the data
-max_epochs = 100 # number of epochs we are going to run 
+max_epochs = 1000 # number of epochs we are going to run 
 # apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
@@ -314,7 +315,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     '''
     # lists keep track of loss and accuracy for training and validation set
     model = model.to(device)
-    early_stopper = EarlyStopper(patience=5, min_delta=0.0001)
+    early_stopper = EarlyStopper(patience=15, min_delta=0.0001)
     train_loss_per_epoch = []
     train_acc_per_epoch = []
     val_loss_per_epoch = []
@@ -332,7 +333,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             # Training Model
             outputs = model(tprofiles)
             #print(f' Outputs : {outputs}') # tensor with 10 elements
-            #print(f' Labels : {labels}') # tensor that is a number
+            #print(f' lsabels : {labels}') # tensor that is a number
             loss = loss_fn(outputs,labels)
             # For L2 regularization
             #l2_lambda = 0.000001
@@ -466,7 +467,6 @@ def test_loop(model, loss_fn, test_loader):
 
 # In[69]:
 
-
 train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
               optimizer = optimizer,
               model = model,
@@ -485,9 +485,9 @@ correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = m
 
 #-------------------------------- Writing interesting info into terminal ------------------------# 
 
-
-val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, '1DCNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
-val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  '1DCNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
+str_save = '1DCNN:_' +  file_name
+val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, str_save, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
+val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  str_save, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
 
 #-------------------------------- Writing interesting info into terminal ------------------------# 
 
@@ -505,9 +505,9 @@ print(tabulate(table, tablefmt='fancy_grid'))
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
 run['model'] = str(model)
 #run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = train_filename
+run["filename"] = file_name
 run['parameters/normalize'] = None
-# run['parameters/class_weight'] = class_weight
+run['parameters/class_weight'] = yn_class_weights
 run['parameters/learning_rate'] = learning_rate
 run['parameters/loss_function'] = str(loss_fn)
 #run['parameters/use_variance_threshold'] = use_variance_threshold
@@ -523,11 +523,11 @@ run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
 run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
 
-conf_matrix_and_class_report(all_labels, all_predictions, '1DCNN', dict_moa)
+conf_matrix_and_class_report(all_labels, all_predictions, str_save, dict_moa)
 
 # Upload plots
-run["images/loss"].upload("/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images"+ '/' + 'loss_train_val_1DCNN' + now + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'acc_train_val_1DCNN' + now + '.png')
+run["images/loss"].upload("/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images"+ '/' + 'loss_train_val_' + str_save + now + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'acc_train_val_' + str_save + now + '.png')
 import matplotlib.image as mpimg
 conf_img = mpimg.imread('Conf_matrix.png')
 run["files/classification_info"].upload("class_info.txt")

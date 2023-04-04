@@ -74,11 +74,13 @@ from torchsummary import summary
 nn._estimator_type = "classifier"
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-from Erik_alll_helper_functions import *
+from Erik_alll_helper_functions import apply_class_weights, EarlyStopper, val_vs_train_loss, val_vs_train_accuracy
+from Erik_alll_helper_functions import conf_matrix_and_class_report, program_elapsed_time
+
 
 
 start = time.time()
-now = datetime.datetime.now()
+now = datetime.now()
 now = now.strftime("%d_%m_%Y-%H:%M:%S")
 print("Begin Training")
 
@@ -101,6 +103,7 @@ with open('/scratch2-shared/erikep/Results/Pear/Results_imag.pkl', 'rb') as f:
 with open('/scratch2-shared/erikep/Results/Pear/Results_samp.pkl', 'rb') as f:
     samples = pickle.load(f)
 '''
+'''
 # pearson correlation with squared error
 with open('/scratch2-shared/erikep/Results/hq_Pear/Results_imag.pkl', 'rb') as f:
     data = pickle.load(f)
@@ -108,7 +111,17 @@ with open('/scratch2-shared/erikep/Results/hq_Pear/Results_imag.pkl', 'rb') as f
 
 with open('/scratch2-shared/erikep/Results/hq_Pear/Results_samp.pkl', 'rb') as f:
     samples = pickle.load(f)
+'''
+# pearson correlation with squared error
+with open('/scratch2-shared/erikep/Results/erik10_hq_8_12_Pearson/Results_imag.pkl', 'rb') as f:
+    data = pickle.load(f)
+    data_set_name = "pearson"
+    file_name = "erik_hq_8_12"
+    variance_thresh = 0
+    norm = False
 
+with open('/scratch2-shared/erikep/Results//erik10_hq_8_12_Pearson/Results_samp.pkl', 'rb') as f:
+    samples = pickle.load(f)
 generated_images = np.transpose(data, (2, 0, 1))
 
 # ------------- Load Labels -------------- #
@@ -249,6 +262,10 @@ if yn_class_weights:     # if we want to apply class weights
     class_weights = apply_class_weights(train_labels, device)
 # loss_function
 if yn_class_weights:
+    #loss_function = torch.nn.CrossEntropyLoss(class_weights)
+    #loss_function = loss_fn = torch.nn.BCEWithLogitsLoss(class_weights)
+    from ols import OnlineLabelSmoothing
+    loss_fn_train = OnlineLabelSmoothing(alpha = 0.5, n_classes=10, smoothing = 0.01).to(device=device)
     loss_function = torch.nn.CrossEntropyLoss(class_weights)
 else:
     loss_function = torch.nn.CrossEntropyLoss()
@@ -267,7 +284,7 @@ optimizer = torch.optim.SGD(
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
 
 
-def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader):
+def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_loader, valid_loader):
     '''
     n_epochs: number of epochs 
     optimizer: optimizer used to do backpropagation
@@ -277,7 +294,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     valid_loader: generator creating batches of validation data
     '''
     # lists keep track of loss and accuracy for training and validation set
-    early_stopper = EarlyStopper(patience=10, min_delta=0.0001)
+    early_stopper = EarlyStopper(patience=25, min_delta=0.0001)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
     train_loss_per_epoch = []
@@ -289,6 +306,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         loss_train = 0.0
         train_total = 0
         train_correct = 0
+        loss_fn_train.train()
         for imgs, labels in tqdm(train_loader,
                                  desc = "Train Batches w/in Epoch",
                                 position = 0,
@@ -301,7 +319,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             outputs = model(imgs)
             #print(f' Outputs : {outputs}') # tensor with 10 elements
             #print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+            #loss = loss_fn(outputs, labels)
             # For L2 regularization
             #l2_lambda = 0.000001
             #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
@@ -319,12 +338,13 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             #print(labels)
             train_total += labels.shape[0]
             train_correct += int((train_predicted == torch.max(labels, 1)[1]).sum())
+        loss_fn_train.eval()
         # validation metrics from batch
         val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
-        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
+        print(f' {datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, Validation Accuracy: {val_accuracy} ')
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
@@ -333,6 +353,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     # return lists with loss, accuracy every epoch
         if early_stopper.early_stop(validation_loss = val_loss):             
                 break
+        loss_fn_train.next_epoch()
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
 
 def validation_loop(model, loss_fn, valid_loader, best_val_loss):
@@ -358,7 +379,9 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             # Assessing outputs
             outputs = model(tprofiles)
             #probs = torch.nn.Softmax(outputs)
-            loss = loss_fn(outputs,torch.max(labels, 1)[1])
+            #loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            #loss = loss_fn(outputs, labels)
+            loss = loss_fn(outputs, torch.max(labels, 1)[1])
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
             # labels = torch.argmax(labels,1)
@@ -414,6 +437,7 @@ def test_loop(model, loss_fn, test_loader):
             # print(f' Outputs : {outputs}') # tensor with 10 elements
             # print(f' Labels : {labels}') # tensor that is a number
             loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            #loss = loss_fn(outputs, labels)
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
             #labels = torch.argmax(labels,1)
@@ -434,6 +458,7 @@ def test_loop(model, loss_fn, test_loader):
 train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
               optimizer = optimizer,
               model = IGTD_model,
+              loss_fn_train= loss_fn_train,
               loss_fn = loss_function,
               train_loader= train_generator, 
               valid_loader= valid_generator)
@@ -446,9 +471,9 @@ correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = u
                                           test_loader = test_generator)
 
 #---------------------------------------- Visual Assessment ---------------------------------# 
-
-val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'IGTD', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
-val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'IGTD', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
+str_all = "IGTD_" + file_name 
+val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, str_all, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
+val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  str_all, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
 
 # results_assessment(all_predictions, all_labels, moa_dict)
 
@@ -466,10 +491,10 @@ print(tabulate(table, tablefmt='fancy_grid'))
 run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
 run['model'] = "IGTD"
 #run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = "erik10"
+run["filename"] = file_name
 run['parameters/normalize'] = data_set_name
-run['parameters/class_weight'] = apply_class_weights
-run['parameters/variance_threshold'] = 0
+run['parameters/class_weight'] = yn_class_weights
+run['parameters/variance_threshold'] = variance_thresh
 # run['parameters/learning_rate'] = learning_rate
 run['parameters/loss_function'] = str(loss_function)
 #run['parameters/use_variance_threshold'] = use_variance_threshold
@@ -485,11 +510,11 @@ run['metrics/epochs'] = num_epochs
 run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
 run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
-conf_matrix_and_class_report(all_labels, all_predictions, 'IGTD_CNN', dict_moa)
+conf_matrix_and_class_report(all_labels, all_predictions, str_all, dict_moa)
 
 # Upload plots
-run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'loss_train_val_' + 'IGTD' + now + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images'  + '/' + 'acc_train_val_' + 'IGTD' + now + '.png') 
+run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'loss_train_val_' + str_all + now + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images'  + '/' + 'acc_train_val_' + str_all + now + '.png') 
 import matplotlib.image as mpimg
 conf_img = mpimg.imread('Conf_matrix.png')
 run["files/classification_info"].upload("class_info.txt")

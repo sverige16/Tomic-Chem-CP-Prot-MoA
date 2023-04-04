@@ -45,6 +45,7 @@ import pandas as pd
 import numpy as np
 #from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 from skmultilearn.adapt import MLkNN
+import re
 
 # CMAP (extracting relevant transcriptomic profiles)
 from cmapPy.pandasGEXpress.parse import parse
@@ -73,7 +74,7 @@ import neptune.new as neptune
 
 
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-from Erik_alll_helper_functions import pre_processing, create_splits, load_train_valid_data, dict_splitting_into_tensor
+from Erik_alll_helper_functions import *
 
 def PCA_UMAP(df_train_features, df_train_labels, file_str, dict_moa):
     # clue row metadata with rows representing transcription levels of specific genes
@@ -142,30 +143,41 @@ def PCA_UMAP(df_train_features, df_train_labels, file_str, dict_moa):
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
 
 # download csvs with all the data pre split
-# download csvs with all the data pre split
-erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-train_filename = 'erik10_clue_hq_train_fold_0.csv'
-val_filename = 'erik10_clue_hq_val_fold_0.csv'
-test_filename = 'erik10_clue_hq_test_fold_0.csv'
-training_set, validation_set, test_set =  load_train_valid_data(erik10_file, train_filename, val_filename, test_filename)
 
-L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = True)
-z
-variance_thresh = 0
-normalize_c = True
-file_str = "erik10_hq"
+
+file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
+training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
+hq, dose = 'False', 'False'
+if re.search('hq', file_name):
+    hq = 'True'
+if re.search('8', file_name):
+    dose = 'True'
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
+
+checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
+variance_thresh = int(input("Variance threshold? (Options: 0 - 1.2): "))
+normalize_c = input("Normalize? (Options: True, False): ")
+if variance_thresh > 0 or normalize_c == 'True':
+    npy_exists = False
+    save_npy = False
+
+npy_exists = True
+save_npy = False
+
 df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
-         clue_gene, 
-         npy_exists = True,
-         use_variance_threshold = variance_thresh, 
-         normalize = normalize_c, 
-         save_npy = False,
-         data_subset = file_str)
+        clue_gene, 
+        npy_exists = npy_exists,
+        use_variance_threshold = variance_thresh, 
+        normalize = normalize_c, 
+        save_npy = save_npy,
+        data_subset = file_name)
+checking_veracity_of_data(file_name, df_train_labels, df_val_labels, df_test_labels)
+
 
 run = neptune.init_run(project='erik-everett-palm/Tomics-PCA-UMAP', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
 run["parameters/moa_dictionary"] = str(dict_moa)
-run["parameters/train_filename"] = file_str
+run["parameters/train_filename"] = file_name
 run["parameters/variance_threshold"] = variance_thresh
 run["parameters/normalize"] = normalize_c
 
-PCA_UMAP(df_train_features, df_train_labels, file_str, dict_moa)
+PCA_UMAP(df_train_features, df_train_labels, file_name, dict_moa)

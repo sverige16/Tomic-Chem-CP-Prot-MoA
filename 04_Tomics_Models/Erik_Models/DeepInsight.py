@@ -87,7 +87,10 @@ nn._estimator_type = "classifier"
 
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-from Erik_alll_helper_functions import *
+from Erik_alll_helper_functions import apply_class_weights, accessing_correct_fold_csv_files, create_splits
+from Erik_alll_helper_functions import checking_veracity_of_data, LogScaler, EarlyStopper, val_vs_train_loss
+from Erik_alll_helper_functions import val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
+from Erik_alll_helper_functions import pre_processing
 
 start = time.time()
 now = datetime.datetime.now()
@@ -108,8 +111,8 @@ file = input("Which file would you like to use? (Options: tian10, erik10, erik10
 variance_threshold = input("What variance threshold would you like to use? (Options: 0 - 1.2):")
 normalize = input("Would you like to normalize the data? (Options: True, False):")
 '''  
-
-file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
+file_name = "erik10_hq_8_12"
+#file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
 training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
 hq, dose = 'False', 'False'
 if re.search('hq', file_name):
@@ -119,15 +122,16 @@ if re.search('8', file_name):
 L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
 checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
-variance_thresh = int(input("Variance threshold? (Options: 0 - 1.2): "))
-normalize_c = input("Normalize? (Options: True, False): ")
+#variance_thresh = int(input("Variance threshold? (Options: 0 - 1.2): "))
+#normalize_c = input("Normalize? (Options: True, False): ")
+variance_thresh = 0
+normalize_c = 'False'
 if variance_thresh > 0 or normalize_c == 'True':
     npy_exists = False
     save_npy = False
 
-npy_exists = False
-save_npy = True
-
+npy_exists = True
+save_npy = False
 df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
         clue_gene, 
         npy_exists = npy_exists,
@@ -157,7 +161,7 @@ X_test_norm = ln.transform(df_test_features.to_numpy().astype(float))
 
 
 # In[51]:
-from umap import UMAP
+#from umap import UMAP
 
 distance_metric = 'cosine'
 reducer = TSNE(
@@ -454,7 +458,7 @@ class DeepInsight_Model(nn.Module):
 DI_model = DeepInsight_Model()
 
 
-batch_size = 200
+batch_size = 50
 
 trainset = Reducer_profiles(X_train_tensor, y_train_tensor, dict_moa)
 train_generator = DataLoader(trainset, batch_size=batch_size, shuffle=True)
@@ -472,12 +476,34 @@ test_generator = DataLoader(testset, batch_size=batch_size, shuffle=False)
 # If applying class weights
 yn_class_weights = True
 class_weights = apply_class_weights(training_set, device)
-# loss_function
-if yn_class_weights:
-    loss_function = torch.nn.CrossEntropyLoss(class_weights)
+'''
+# loss_function 
+ols_smooth = False
+CEL = True
+if ols_smooth:
+    from ols import OnlineLabelSmoothing
+    loss_fn_train = OnlineLabelSmoothing(alpha = 0.5, n_classes=num_classes, smoothing = 0.05).to(device=device)
+    loss_function = torch.nn.CrossEntropyLoss(weight = class_weights)
 else:
-    loss_function = torch.nn.CrossEntropyLoss()
-max_epochs = 75
+    loss_fn_train = False
+    if CEL == True:
+        loss_function = torch.nn.CrossEntropyLoss(weight = class_weights)
+    else:
+        loss_function = torch.nn.BCEWithLogitsLoss(weight = class_weights)
+if yn_class_weights:
+    #loss_function = torch.nn.CrossEntropyLoss(weight = class_weights) 
+    loss_function = torch.nn.BCEWithLogitsLoss(weight = class_weights)
+'''
+from ols import OnlineLabelSmoothing
+loss_function = torch.nn.BCEWithLogitsLoss()
+loss_fn_train = OnlineLabelSmoothing(alpha = 0.5, n_classes=num_classes, smoothing = 0.1).to(device=device)
+
+#else:
+ #   loss_function = torch.nn.CrossEntropyLoss()
+#loss_function = torch.nn.CrossEntropyLoss(weight = class_weights)
+#loss_function = torch.nn.BCEWithLogitsLoss(weight = class_weights)
+
+max_epochs = 1000
 optimizer = optim.SGD(
     net.parameters(),
     lr=1e-04,
@@ -491,7 +517,7 @@ optimizer = optim.SGD(
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
 
 
-def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader):
+def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_loader, valid_loader):
     '''
     n_epochs: number of epochs 
     optimizer: optimizer used to do backpropagation
@@ -501,7 +527,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     valid_loader: generator creating batches of validation data
     '''
     # lists keep track of loss and accuracy for training and validation set
-    early_stopper = EarlyStopper(patience=30, min_delta=0.0001)
+    early_stopper = EarlyStopper(patience=15, min_delta=0.0001)
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
     train_loss_per_epoch = []
@@ -513,11 +539,16 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         loss_train = 0.0
         train_total = 0
         train_correct = 0
+        '''if ols_smooth:
+            loss_fn_train.train()
+        '''
+        loss_fn_train.train()
         for imgs, labels in tqdm(train_loader,
                                  desc = "Train Batches w/in Epoch",
                                 position = 0,
-                                leave = True):
+                                leave = False):
             optimizer.zero_grad()
+            #labels = label_smoothing(labels, 0.1, 10)
             # put model, images, labels on the same device
             imgs = imgs.to(device = device)
             labels = labels.to(device= device)
@@ -525,7 +556,22 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             outputs = model(imgs)
             #print(f' Outputs : {outputs}') # tensor with 10 elements
             #print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            '''
+            if ols_smooth:
+                #loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+                loss = loss_fn_train(outputs, labels)
+            '''
+            loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+            '''
+            else:
+                if CEL == True:
+                    loss = loss_fn(outputs, torch.max(labels, 1)[1])
+                else:
+                    loss = loss_fn(outputs, labels)
+            '''
+            #loss = l   oss_fn(outputs, torch.max(labels, 1)[1])
+            #loss = loss_fn(outputs, labels)
+
             # For L2 regularization
             #l2_lambda = 0.000001
             #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
@@ -544,6 +590,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             train_total += labels.shape[0]
             train_correct += int((train_predicted == torch.max(labels, 1)[1]).sum())
         # validation metrics from batch
+        loss_fn_train.eval()
         val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
@@ -554,9 +601,11 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
+        loss_fn_train.next_epoch()
     # return lists with loss, accuracy every epoch
         if early_stopper.early_stop(validation_loss = val_loss):             
             break
+
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
 
 def validation_loop(model, loss_fn, valid_loader, best_val_loss):
@@ -581,8 +630,12 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             labels = labels.to(device= device)
             # Assessing outputs
             outputs = model(tprofiles)
-            #probs = torch.nn.Softmax(outputs)
-            loss = loss_fn(outputs,torch.max(labels, 1)[1])
+            #loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            #if ols_smooth or CEL:
+          
+            #else:
+            loss = loss_fn(outputs, labels)
+            #loss = loss_fn(outputs, labels)
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
             # labels = torch.argmax(labels,1)
@@ -636,7 +689,8 @@ def test_loop(model, loss_fn, test_loader):
             outputs = model(compounds)
             # print(f' Outputs : {outputs}') # tensor with 10 elements
             # print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            #loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            loss = loss_fn(outputs, labels)
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
             #labels = torch.argmax(labels,1)
@@ -657,6 +711,7 @@ def test_loop(model, loss_fn, test_loader):
 train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
               optimizer = optimizer,
               model = DI_model,
+              loss_fn_train= loss_fn_train,
               loss_fn = loss_function,
               train_loader= train_generator, 
               valid_loader= valid_generator)
@@ -669,9 +724,9 @@ correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = u
                                           test_loader = test_generator)
 
 #---------------------------------------- Visual Assessment ---------------------------------# 
-
-val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'DI', '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images') 
-val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'DI', '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images')
+str_save = 'DI: ' +  file_name
+val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, str_save, '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images') 
+val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  str_save, '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images')
 
 # results_assessment(all_predictions, all_labels, moa_dict)
 
@@ -710,12 +765,13 @@ run['metrics/epochs'] = num_epochs
 run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
 run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
-conf_matrix_and_class_report(all_labels, all_predictions, 'DI', dict_moa)
+conf_matrix_and_class_report(all_labels, all_predictions, str_save, dict_moa)
 
-# Upload plots
-run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'loss_train_val_' + 'DI' + now + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'acc_train_val_' + 'DI' + now + '.png') 
 import matplotlib.image as mpimg
 conf_img = mpimg.imread('Conf_matrix.png')
 run["files/classification_info"].upload("class_info.txt")
 run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
+# Upload plots
+run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'loss_train_val_' + 'DI' + now + '.png')
+run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'acc_train_val_' + 'DI' + now + '.png') 
+
