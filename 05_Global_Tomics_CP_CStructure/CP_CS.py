@@ -216,9 +216,9 @@ modelCS = nn.Sequential(
     nn.Linear(128,64),
     nn.ReLU(),
     nn.Linear(64, num_classes))
-modelCS.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_models/pre_split/' + 'ChemStruc_least_loss_model')['model_state_dict'])
+modelCS.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CS_model')['model_state_dict'])
 modelCP = image_network()
-modelCP.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_models' +'/' + 'CP_least_loss_model')['model_state_dict'])
+modelCP.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CP_model')['model_state_dict'])
 
 # -----------------------------------------Prepping Ensemble Model ---------------------#
 class CS_CP_Dataset(torch.utils.data.Dataset):
@@ -447,7 +447,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss, device):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models' + 'CS_CP_least_loss_model'
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CS_CP_model'
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss
@@ -635,7 +635,7 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               device = device)
 #----------------------------------------- Assessing model on test data -----------------------------------------#
 model_test = CS_CP
-model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models/' + 'CS_CP_least_loss_model')['model_state_dict'])
+model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CS_CP_model')['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = model_test,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator,
@@ -670,7 +670,7 @@ run['parameters/use_variance_threshold'] = variance_thresh
 run['parameters/optimizer'] = str(optimizer)
 run['parameters/num_epochs_fs'] = num_epochs_fs
 #f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
-state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models/' + 'CS_CP_least_loss_model')
+state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CS_CP_model')
 run['metrics/f1_score'] = state["f1_score"]
 run['metrics/accuracy'] = state["accuracy"]
 run['metrics/loss'] = state["valid_loss"]

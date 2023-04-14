@@ -56,7 +56,12 @@ import re
 
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-from Erik_alll_helper_functions import *
+sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
+from Erik_alll_helper_functions import apply_class_weights, accessing_correct_fold_csv_files, create_splits, extract_tprofile
+from Erik_alll_helper_functions import checking_veracity_of_data, LogScaler, EarlyStopper, val_vs_train_loss
+from Erik_alll_helper_functions import val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
+from Erik_alll_helper_functions import pre_processing, create_terminal_table, upload_to_neptune, dict_splitting_into_tensor
+from Erik_alll_helper_functions import tprofiles_gc_too_func
 
 # In[63]:
 
@@ -67,6 +72,7 @@ hidden_size = 1000
 
 # In[39]:
 
+model_name = 'SimpleNN'
 
 # Downloading all relevant data frames and csv files ----------------------------------------------------------
 
@@ -130,7 +136,7 @@ else:
 print(f'Training on device {device}. ' )
 
 
-file_name = "erik10_hq_8_12"
+file_name = "erik10"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
 training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
 hq, dose = 'False', 'False'
@@ -140,6 +146,7 @@ if re.search('8', file_name):
     dose = 'True'
 L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
+checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
 # Creating a  dictionary of the one hot encoded labels
 dict_moa = dict_splitting_into_tensor(training_set)
 
@@ -244,11 +251,15 @@ class SimpleNN_Model(nn.Module):
 
 # In[66]:
 
-
+yn_class_weights = True
+class_weights = apply_class_weights(training_set, device)
 model = SimpleNN_Model(num_features = 978, num_targets= num_classes, hidden_size= hidden_size)
-optimizer = torch.optim.RMSprop(model.parameters(),  weight_decay=WEIGHT_DECAY, lr=learning_rate)
-loss_fn = torch.nn.BCEWithLogitsLoss()
-
+optimizer = torch.optim.Adam(model.parameters(),  weight_decay=WEIGHT_DECAY, lr=learning_rate)
+from ols import OnlineLabelSmoothing
+#loss_fn = torch.nn.BCEWithLogitsLoss(weight = class_weights)
+#loss_fn_train = False
+loss_fn_train = OnlineLabelSmoothing(alpha = 0.5, n_classes=num_classes, smoothing = 0.01).to(device=device)
+loss_fn = torch.nn.CrossEntropyLoss(weight = class_weights)
 
 # In[67]:
 
@@ -268,7 +279,7 @@ print("Begin Training")
 
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
 
-def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader):
+def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader, loss_fn_train = "false"):
     '''
     n_epochs: number of epochs 
     optimizer: optimizer used to do backpropagation
@@ -285,6 +296,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     val_loss_per_epoch = []
     val_acc_per_epoch = []
     best_val_loss = np.inf
+    if loss_fn_train != "false":
+        loss_fn_train.train()
     for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
         loss_train = 0.0
         train_total = 0
@@ -298,11 +311,14 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             outputs = model(tprofiles)
             #print(f' Outputs : {outputs}') # tensor with 10 elements
             #print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
+            if loss_fn_train != "false":
+                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+       
+            #loss = loss_fn(outputs,labels)
             # For L2 regularization
-            l2_lambda = 0.000001
-            l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
-            loss = loss + l2_lambda * l2_norm
+            #l2_lambda = 0.000001
+            #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
+            #loss = loss + l2_lambda * l2_norm
             # Update weights
             loss.backward()
             optimizer.step()
@@ -316,6 +332,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             #print(labels)
             train_total += labels.shape[0]
             train_correct += int((train_predicted == labels).sum())
+        if loss_fn_train != "false":
+            loss_fn_train.eval()
         # validation metrics from batch
         val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
         best_val_loss = best_val_loss_upd
@@ -327,6 +345,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
+        if loss_fn_train != "false":
+            loss_fn_train.next_epoch()
         if early_stopper.early_stop(validation_loss = val_loss):             
             break
     # return lists with loss, accuracy every epoch
@@ -356,7 +376,8 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             # Assessing outputs
             outputs = model(tprofiles)
             #probs = torch.nn.Softmax(outputs)
-            loss = loss_fn(outputs,labels)
+            #loss = loss_fn(outputs,labels)
+            loss = loss_fn(outputs, torch.max(labels, 1)[1])
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
             labels = torch.argmax(labels,1)
@@ -379,7 +400,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'Tomics_SimpleNN'
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss
@@ -412,7 +433,8 @@ def test_loop(model, loss_fn, test_loader):
             outputs = model(compounds)
             # print(f' Outputs : {outputs}') # tensor with 10 elements
             # print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
+            #loss = loss_fn(outputs,labels)
+            loss = loss_fn(outputs, torch.max(labels, 1)[1])
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
             #labels = torch.argmax(labels,1)
@@ -433,16 +455,17 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               model = model,
               loss_fn = loss_fn,
               train_loader=training_generator, 
-              valid_loader=validation_generator)
+              valid_loader=validation_generator,
+              loss_fn_train= loss_fn_train)
 
 
 
-val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'SimpleNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
-val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'SimpleNN', '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
+val_vs_train_loss_path = val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
+val_vs_train_acc_path = val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
 
 #----------------------------------------- Assessing model on test data -----------------------------------------#
 model_test = SimpleNN_Model(num_features = 978, num_targets= num_classes, hidden_size= hidden_size)  
-model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'Tomics_SimpleNN')['model_state_dict'])
+model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name)['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = model_test,
                                           loss_fn = loss_fn, 
                                           test_loader = test_generator)
@@ -454,39 +477,19 @@ correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = m
 end = time.time()
 elapsed_time = program_elapsed_time(start, end)
 
-table = [["Time to Run Program", elapsed_time],
-['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
-['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
-print(tabulate(table, tablefmt='fancy_grid'))
-
-
-
-run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
-run['model'] = str(model)
-#run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = file_name
-run['parameters/normalize'] = "SNone"
-# run['parameters/class_weight'] = class_weight
-run['parameters/learning_rate'] = learning_rate
-run['parameters/loss_function'] = str(loss_fn)
-#run['parameters/use_variance_threshold'] = use_variance_threshold
-#f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
-state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'Tomics_SimpleNN')
-run['metrics/f1_score'] = state["f1_score"]
-run['metrics/accuracy'] = state["accuracy"]
-run['metrics/loss'] = state["valid_loss"]
-run['metrics/time'] = elapsed_time
-run['metrics/epochs'] = num_epochs
-
-run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
-run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
-
-conf_matrix_and_class_report(all_labels, all_predictions, 'SimpleNN', dict_moa)
-
-# Upload plots
-run["images/loss"].upload("/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images"+ '/' + 'loss_train_val_SimpleNN' + now + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images' + '/' + 'acc_train_val_SimpleNN' + now + '.png')
-import matplotlib.image as mpimg
-conf_img = mpimg.imread('Conf_matrix.png')
-run["files/classification_info"].upload("class_info.txt")
-run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
+create_terminal_table(elapsed_time, all_labels, all_predictions)
+upload_to_neptune('erik-everett-palm/Tomics-Models',
+                    file_name = file_name,
+                    model_name = model_name,
+                    normalize = 'False',
+                    yn_class_weights = yn_class_weights,
+                    learning_rate = learning_rate, 
+                    elapsed_time = elapsed_time, 
+                    num_epochs = num_epochs,
+                    loss_fn = loss_fn,
+                    all_labels = all_labels,
+                    init_learning_rate = learning_rate,
+                    all_predictions = all_predictions,
+                    dict_moa = dict_moa,
+                    val_vs_train_loss_path = val_vs_train_loss_path,
+                    val_vs_train_acc_path = val_vs_train_acc_path,)

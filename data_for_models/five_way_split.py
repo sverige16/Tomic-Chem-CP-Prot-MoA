@@ -117,7 +117,7 @@ def main(subset, file_tosplit, compounds_v1v2, str_help, hq = "False", dosage = 
     else:
         raise ValueError("subset must be either cyc_adr, erik10, tian10, or 0")
    
-    check_veracity_cmpd_num(file_tosplit, X)
+    #check_veracity_cmpd_num(file_tosplit, X)
 
     skf = StratifiedKFold(n_splits = 5, shuffle = True,  random_state=5)
     y = y.astype(object).replace(np.nan, 'None')

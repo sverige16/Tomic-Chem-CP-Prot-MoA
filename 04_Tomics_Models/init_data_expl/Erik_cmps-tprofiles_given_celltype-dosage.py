@@ -158,8 +158,8 @@ elif moa_subset == "cyc_dop":
 else:
     moa_subset = ['Aurora kinase inhibitor', 'tubulin polymerization inhibitor', 'JAK inhibitor', 'protein synthesis inhibitor', 'HDAC inhibitor',
             'topoisomerase inhibitor', 'PARP inhibitor', 'ATPase inhibitor', 'retinoid receptor agonist', 'HSP inhibitor']
-cell_name = [all_names, all_names]
-cell_name_string = ["all", "all"] 
-lower_doses = [0, 8]
-higher_doses = [100, 12]
+cell_name = [ all_names]
+cell_name_string = [ "all"] 
+lower_doses = [8]
+higher_doses = [12]
 compound_moa_classes(clue_sig_in_SPECS, compounds_v1v2, moa_subset, cell_name_string, cell_name, lower_doses, higher_doses, head_num = 10)

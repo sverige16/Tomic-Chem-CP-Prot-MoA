@@ -142,7 +142,7 @@ def variance_threshold(x_train, x_val, var_threshold, x_test = pd.DataFrame() ):
 
 # ----------------------------------------- Visualization of Model Results ----------------------------------------------# 
 # -----------------------------------------------------------------------------------------------------------------------#
-def val_vs_train_loss(epochs, train_loss, val_loss, now, model_name, file_name, loss_path_to_save):
+def val_vs_train_loss(epochs, train_loss, val_loss, now, model_name, loss_path_to_save):
     ''' 
     Plotting validation versus training loss over time
     Input:
@@ -162,13 +162,13 @@ def val_vs_train_loss(epochs, train_loss, val_loss, now, model_name, file_name, 
     # Figure description
     plt.xlabel('# of Epochs')
     plt.ylabel('Loss')
-    plt.title(f'Validation versus Training Loss: {model_name + " " + file_name}')
+    plt.title(f'Validation versus Training Loss: {model_name}')
     plt.legend()
     # plot
-    plt.savefig(loss_path_to_save + '/' + 'loss_train_val_' + model_name + '_' + file_name + '_' + now  + '.png')
-    return loss_path_to_save + '/' + 'loss_train_val_' + model_name + '_' + file_name + '_' + now   + '.png'
+    plt.savefig(loss_path_to_save + '/' + 'loss_train_val_' + model_name + now)
+    return loss_path_to_save + '/' + 'loss_train_val_' + model_name + now
 
-def val_vs_train_accuracy(epochs, train_acc, val_acc, now, model_name, file_name, acc_path_to_save):
+def val_vs_train_accuracy(epochs, train_acc, val_acc, now, model_name, acc_path_to_save):
     '''
     Plotting validation versus training accuracy over time
     Input:
@@ -188,11 +188,11 @@ def val_vs_train_accuracy(epochs, train_acc, val_acc, now, model_name, file_name
     # Figure description
     plt.xlabel('# of Epochs')
     plt.ylabel('Accuracy')
-    plt.title(f'Validation versus Training Accuracy: {model_name + " " + file_name}')
+    plt.title(f'Validation versus Training Accuracy: {model_name}')
     plt.legend()
     # plot
-    plt.savefig(acc_path_to_save + '/' + 'acc_train_val_' + model_name + '_' + file_name + '_' + now + '.png')
-    return acc_path_to_save + '/' + 'acc_train_val_' + model_name + '_' + file_name + '_' + now + '.png'
+    plt.savefig(acc_path_to_save + '/' + 'acc_train_val_' + model_name + now)
+    return acc_path_to_save + '/' + 'acc_train_val_' + model_name + now
 
 def conf_matrix_and_class_report(labels_val, predictions, model_name, dict_moa = None):
     '''
@@ -215,11 +215,11 @@ def conf_matrix_and_class_report(labels_val, predictions, model_name, dict_moa =
     sns.heatmap(cf_matrix, annot = True, fmt='d', ax = ax).set(title = f'Confusion Matrix: {model_name}')
     ax.set_xlabel('Predicted labels'); ax.set_ylabel('True labels')
     ax.set_xticklabels(list_of_MoA_names); ax.set_yticklabels(list_of_MoA_names)
-    plt.savefig("/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/conf_matrix")
+    plt.savefig("Conf_matrix")
    
     class_report = classification_report(labels_val, predictions, target_names= list_of_MoA_names)
     print(class_report)
-    f = open("/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/class_info.txt","w")
+    f = open("class_info.txt","w")
     # write file
     f.write(str(class_report) )
     # close file
@@ -774,19 +774,6 @@ def image_normalization(image, channel, plate, pd_image_norm):
     im_np =  (image - mean) / std
     return im_np
 
-def dubbelchecking_image_normalization(pd_image_norm):
-    # SPECS1
-    # Used by Tian et al. to normalize the images for his project
-    # SPECS2
-    # Used by me to normalize the images for my project
-    
-    # SPECS3
-    '''
-    For every plate in pandas norm, check if the mean and std are the same for all channels in the imnorm that I am using
-    '''
-    
-    # 
-    
 def channel_5_numpy_CID(df, CID, pd_image_norm):
     '''
     Puts together all channels from CP imaging into a single 5 x 256 x 256 tensor (c x h x w) from all_data.csv.
@@ -869,21 +856,11 @@ def accessing_correct_fold_csv_files(file):
         train_filename = 'tian10_clue_train_fold_0.csv'
         val_filename = 'tian10_clue_val_fold_0.csv'
         test_filename = 'tian10_clue_test_fold_0.csv'
-    elif file == 'tian10_all':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
-        train_filename = 'tian10_all_train_fold_0.csv'
-        val_filename = 'tian10_all_val_fold_0.csv'
-        test_filename = 'tian10_all_test_fold_0.csv'
     elif file == 'erik10':
         dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
         train_filename = 'erik10_clue_train_fold_0.csv'
         val_filename = 'erik10_clue_val_fold_0.csv'
         test_filename = 'erik10_clue_test_fold_0.csv'
-    elif file == 'erik10_all':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_all_train_fold_0.csv'
-        val_filename = 'erik10_all_val_fold_0.csv'
-        test_filename = 'erik10_all_test_fold_0.csv'
     elif file == 'erik10_hq':
         dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
         train_filename = 'erik10_clue_hq_train_fold_0.csv'
@@ -942,7 +919,7 @@ def checking_veracity_of_data(file, L1000_training, L1000_validation, L1000_test
         assert all_profiles["Compound ID"].nunique() == int(243 -2), 'Incorrect number of unique compounds'
     elif file == 'erik10_hq':
         assert all_profiles.shape[0] == 4564, 'Incorrect number of profiles'
-        assert all_profiles["Compound ID"].nunique() == 185, 'Incorrect number of unique compounds'
+        assert all_profiles["Compound ID"].nunique() == int(185 -2), 'Incorrect number of unique compounds'
     elif file == 'erik10_8_12':
         assert all_profiles.shape[0] == 8644, 'Incorrect number of profiles'
         assert all_profiles["Compound ID"].nunique() == int(238 - 2), 'Incorrect number of unique compounds'
@@ -970,7 +947,7 @@ def create_terminal_table(elapsed_time, all_labels, all_predictions):
     ['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
     print(tabulate(table, tablefmt='fancy_grid'))
 
-def upload_to_neptune(neptune_project_name,
+def neptune_uploading(neptune_project_name,
                     file_name, 
                     model_name,
                     normalize,
@@ -981,22 +958,23 @@ def upload_to_neptune(neptune_project_name,
                     loss_fn,
                     all_labels,
                     all_predictions,
+                    model_data_subset,
                     dict_moa,
                     val_vs_train_loss_path,
                     val_vs_train_acc_path,
-                    init_learning_rate,
+                    class_info_path,
+                    conf_matrix_path,
+                    model_path,
                     variance_thresh = False,
                     pixel_size = False,
-                    loss_fn_train = False, 
-                    learning_rate_scheduler = 'default'):
+                    loss_fn_train = False):
     '''
     This function uploads the results of the model to Neptune.ai
     '''
     run = neptune.init_run(project= neptune_project_name, api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
     run['model'] = model_name
+    #run["feat_selec/feat_sel"] = feat_sel
     run["filename"] = file_name
-    model_data_subset = model_name + '_' + file_name
-
     # uploading parameters
     run['parameters/normalize'] = normalize
     run['parameters/variance_threshold'] = variance_thresh
@@ -1004,8 +982,6 @@ def upload_to_neptune(neptune_project_name,
     run['parameters/learning_rate'] = learning_rate
     run['parameters/loss_fn_train'] = str(loss_fn_train)
     run['parameters/loss_function'] = str(loss_fn)
-    run['parameters/init_learning_rate'] = init_learning_rate
-    run['parameters/learning_rate_scheduler'] = learning_rate_scheduler
     run['parameters/pixel_size'] = pixel_size
     
     # Uploading validation metrics
@@ -1029,11 +1005,11 @@ def upload_to_neptune(neptune_project_name,
     run["images/accuracy"].upload(val_vs_train_acc_path) 
 
     # Upload classification info
-    run["files/classif_info"].upload('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/class_info.txt')
-    run["images/conf_matrix"].upload('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/conf_matrix.png')
+    run["files/classification_info"].upload(class_info_path)
+    run["images/Conf_matrix.png"].upload(conf_matrix_path)
 
     # Upload model
-    run["optimal_model_checkpoint"].upload('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name)
+    run["optimal_model_checkpoint"].upload(model_path)
 
 
 

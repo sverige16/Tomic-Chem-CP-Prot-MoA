@@ -34,7 +34,7 @@ import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 from Erik_alll_helper_functions import smiles_to_array,  accessing_correct_fold_csv_files, create_splits, dict_splitting_into_tensor, splitting
 from Erik_alll_helper_functions import EarlyStopper,  val_vs_train_loss, val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
-from Erik_alll_helper_functions import apply_class_weights
+from Erik_alll_helper_functions import apply_class_weights, create_terminal_table, upload_to_neptune
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
@@ -43,6 +43,7 @@ max_epochs = 1000 # number of epochs we are going to run
 #apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
+model_name = "Chemical_Structure"
 
 #----------------------------------------- pre-processing -----------------------------------------#
 start = time.time()
@@ -101,7 +102,7 @@ now = now.strftime("%d_%m_%Y-%H:%M:%S")
 compounds_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/compounds_v1v2.csv', delimiter = ",")
 
 
-file_name = "erik10"
+file_name = "erik10_all"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
 training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
 hq, dose = 'False', 'False'
@@ -192,7 +193,7 @@ seq_model = nn.Sequential(
 
 # optimizer_algorithm
 learning_rate = 1e-3
-optimizer = torch.optim.Adam(seq_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
+optimizer = torch.optim.Adam(seq_model.parameters(),weight_decay = 1e-6, lr = learning_rate, betas = (0.9, 0.999), eps = 1e-07)
 
 from ols import OnlineLabelSmoothing
 loss_fn_train = OnlineLabelSmoothing(alpha = 0.5, n_classes=num_classes, smoothing = 0.05 ).to(device=device)
@@ -312,121 +313,11 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'weighted'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_models/pre_split/' + 'ChemStruc_least_loss_model'
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss
 
-#def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader):
-    '''
-    n_epochs: number of epochs 
-    optimizer: optimizer used to do backpropagation
-    model: deep learning architecture
-    loss_fn: loss function
-    train_loader: generator creating batches of training data
-    valid_loader: generator creating batches of validation data
-    '''
-    '''
-    # lists keep track of loss and accuracy for training and validation set
-    #optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
-    train_loss_per_epoch = []
-    train_acc_per_epoch = []
-    val_loss_per_epoch = []
-    val_acc_per_epoch = []
-    best_val_loss = np.inf
-    for epoch in tqdm(range(1, max_epochs +1), desc = "Epoch", position = 0, leave = True):
-        loss_train = 0.0
-        train_total = 0
-        train_correct = 0
-        for compounds, labels in train_loader:
-            optimizer.zero_grad()
-            # put model, images, labels on the same device
-            model = model.to(device)
-            compounds = compounds.to(device = device)
-            labels = labels.to(device= device)
-            #print(f' Compounds {compounds}')
-            #print(f' Labels {labels}')
-            
-            #print(labels)
-            # Training Model
-            outputs = model(compounds)
-            #print(f' Outputs : {outputs}') # tensor with 10 elements
-            #print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
-            # Update weights
-            loss.backward()
-            optimizer.step()
-            # Training Metrics
-            loss_train += loss.item()
-            #print(f' loss: {loss.item()}')
-            train_predicted = torch.argmax(outputs, 1)
-            #print(f' train_predicted {train_predicted}')
-            # NEW
-            #labels = torch.argmax(labels,1)
-            #print(labels)
-            train_total += labels.shape[0]
-            train_correct += int((train_predicted == labels).sum())
-        # validation metrics from batch
-        val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss, epoch)
-        val_accuracy = val_correct/val_total
-        # printing results for epoch
-        if epoch == 1 or epoch %2 == 0:
-            print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
-        # adding epoch loss, accuracy to lists 
-        val_loss_per_epoch.append(val_loss)
-        train_loss_per_epoch.append(loss_train/len(train_loader))
-        val_acc_per_epoch.append(val_accuracy)
-        train_acc_per_epoch.append(train_correct/train_total)
-    # return lists with loss, accuracy every epoch
-    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
-'''
-
-# In[494]:
-
-
-#def validation_loop(model, loss_fn, valid_loader, best_val_loss, epoch):
-    '''
-    Assessing trained model on valiidation dataset 
-    model: deep learning architecture getting updated by model
-    loss_fn: loss function
-    valid_loader: generator creating batches of validation data
-    '''
-    '''
-    loss_val = 0.0
-    correct = 0
-    total = 0
-    model.eval()
-    with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
-        for compounds, labels in valid_loader:
-            # Move to device MAY NOT BE NECESSARY
-            model = model.to(device)
-            compounds = compounds.to(device = device)
-            labels = labels.to(device= device)
-            # Assessing outputs
-            outputs = model(compounds)
-            #print(f' Outputs : {outputs}') # tensor with 10 elements
-            #print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
-            loss_val += loss.item()
-            predicted = torch.argmax(outputs, 1)
-            #labels = torch.argmax(labels,1)
-            #print(predicted)
-            #print(labels)
-            total += labels.shape[0]
-            correct += int((predicted == labels).sum())
-        avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
-        if best_val_loss > loss_val:
-            best_val_loss = loss_val
-            torch.save(
-                {'epoch': epoch,
-                    'model_state_dict' : model.state_dict(),
-                    'valid_loss' : loss_val
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_models/pre_split/' + 'ChemStruc_least_loss_model'
-            )
-    model.train()
-    return correct, total, avg_val_loss, best_val_loss
-
-'''
 def test_loop(model, loss_fn, test_loader):
     '''
     Assessing trained model on test dataset 
@@ -483,54 +374,39 @@ model_test = nn.Sequential(
     nn.Linear(128,64),
     nn.ReLU(),
     nn.Linear(64, num_classes))
-model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_models/pre_split/' + 'ChemStruc_least_loss_model')['model_state_dict'])
+model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name)['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = seq_model,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator)
 
 # ----------------------------------------- Plotting loss, accuracy, visualization of results ---------------------#
-str_save = 'CS_' +  file_name
-val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, str_save, '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split') 
-val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  str_save, '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split')
+
+val_vs_train_loss_path = val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split') 
+val_vs_train_acc_path = val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now, model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split')
 
 
 #-------------------------------- Writing interesting info into terminal ----------------------------------# 
 end = time.time()
 
 elapsed_time = program_elapsed_time(start, end)
+end = time.time()
 
+elapsed_time = program_elapsed_time(start, end)
 
-table = [["Time to Run Program", elapsed_time],
-['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
-['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
-print(tabulate(table, tablefmt='fancy_grid'))
-
-run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
-run['model'] = 'Chemical Structure'
-#run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = file_name
-run['parameters/normalize'] = 'None'
-# run['parameters/class_weight'] = class_weight
-run['parameters/learning_rate'] = learning_rate
-run['parameters/loss_function'] = str(loss_function)
-#run['parameters/use_variance_threshold'] = use_variance_threshold
-#f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
-state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_models/pre_split/' + 'ChemStruc_least_loss_model')
-run['metrics/f1_score'] = state["f1_score"]
-run['metrics/accuracy'] = state["accuracy"]
-run['metrics/loss'] = state["valid_loss"]
-run['metrics/time'] = elapsed_time
-run['metrics/epochs'] = num_epochs
-
-run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
-run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
-
-conf_matrix_and_class_report(all_labels, all_predictions, str_save, dict_moa)
-
-# Upload plots
-run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split'+ '/' + 'loss_train_val_' + str_save + now  + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_images/pre_split' +'/' + 'acc_train_val_' + str_save + now + '.png')
-import matplotlib.image as mpimg
-conf_img = mpimg.imread('Conf_matrix.png')
-run["files/classification_info"].upload("class_info.txt")
-run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
+create_terminal_table(elapsed_time, all_labels, all_predictions)
+upload_to_neptune('erik-everett-palm/Tomics-Models',
+                    file_name = file_name,
+                    model_name = model_name,
+                    normalize = "False",
+                    yn_class_weights = yn_class_weights,
+                    learning_rate = learning_rate, 
+                    elapsed_time = elapsed_time, 
+                    num_epochs = num_epochs,
+                    loss_fn = loss_function,
+                    all_labels = all_labels,
+                    init_learning_rate = learning_rate,
+                    all_predictions = all_predictions,
+                    dict_moa = dict_moa,
+                    val_vs_train_loss_path = val_vs_train_loss_path,
+                    val_vs_train_acc_path = val_vs_train_acc_path,
+                    loss_fn_train = loss_fn_train)

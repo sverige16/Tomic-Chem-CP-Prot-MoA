@@ -22,11 +22,13 @@ from tabulate import tabulate
 import albumentations as A
 import random
 
-
-
 # Torch
 import torch
 torch.cuda.empty_cache()
+torch.backends.cudnn.benchmark = True  
+torch.backends.cudnn.deterministic = False
+torch.backends.cuda.max_memory_allocated = 4*1024*1024*1024
+
 from torchvision import transforms
 import torchvision.transforms.functional as TF
 import torchvision.models as models
@@ -94,7 +96,7 @@ class Dataset(torch.utils.data.Dataset):
         if self.transform:                         # uses Albumentations image pipeline to return an augmented image
             image = self.transform(image)
         #return image.float(), label.long()
-        return image.float(), label_tensor.long()  
+        return image.float(), label_tensor.float()  
 
     
 class MyRotationTransform:
@@ -125,7 +127,7 @@ valid_transforms = A.Compose([])
 '''
 paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/paths_channels_treated_v1v2.csv')
 
-file_name = "erik10_hq_8_12"
+file_name = "erik10"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
 training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
 hq, dose = 'False', 'False'
@@ -138,6 +140,16 @@ L1000_training, L1000_validation, L1000_test = create_splits(training_set, valid
 # download dictionary which associates moa with a number
 dict_moa = dict_splitting_into_tensor(training_set)
 assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique())
+
+# extract the compounds only found in specs1
+tian10_specs1 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Phil_all_data.csv')
+tian10_specs1_cmpd_lst = list(tian10_specs1.compound.unique())
+
+cmpds_specs1 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/specs935-v1-compounds.csv')
+
+training_set = training_set[training_set["Compound_ID"].isin(tian10_specs1_cmpd_lst)]
+validation_set = validation_set[validation_set["Compound_ID"].isin(tian10_specs1_cmpd_lst)]
+test_set = test_set[test_set["Compound_ID"].isin(tian10_specs1_cmpd_lst)]
 
 # extract compound IDs
 test_data_lst= list(test_set["Compound_ID"].unique())
@@ -170,7 +182,6 @@ test_df = test_df[test_df.moa.str.contains("|", regex = False, na = True) == Fal
 assert set(training_df.moa.unique()) == set(validation_df.moa.unique()) == set(test_df.moa.unique())
 num_classes = len(training_set.moa.unique())
 
-
 # split data into labels and inputs
 training_df, train_labels = splitting(training_df)
 validation_df, validation_labels = splitting(validation_df)
@@ -184,7 +195,7 @@ world_size = torch.cuda.device_count()
 pd_image_norm = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/dmso_stats_v1v2.csv')
 
 
-batch_size = 1
+batch_size = 15
 # parameters
 params = {'batch_size' : batch_size,
          'num_workers' : 3,
@@ -243,7 +254,8 @@ updated_model = image_network()
 #num_classes = len(set(train['classes'].tolist())) 
 # torchinfo.summary(updated_model, (batch_size, 5, 256,256), col_names=["kernel_size", "output_size", "num_params"])
 
-yn_class_weights = False
+
+yn_class_weights = True
 class_weights = apply_class_weights(training_set, device)
 # loss_function
 
@@ -260,8 +272,11 @@ loss_fn_train = False
 
 
 # optimizer_algorithm
-learning_rate = 0.001
-cnn_optimizer = torch.optim.Adam(updated_model.parameters(), weight_decay = 0.01, lr = learning_rate, betas = (0.9, 0.999), eps = 1e-07)
+learning_rate = 0.1
+cnn_optimizer = torch.optim.SGD(updated_model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-4)
+scheduler = torch.optim.lr_scheduler.MultiStepLR(cnn_optimizer, 
+                        milestones=[8, 16, 22, 28, 32, 36], # List of epoch indices
+                        gamma = 0.5)
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
 
 
@@ -301,12 +316,12 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
             #print(f' Outputs : {outputs}') # tensor with 10 elements
             #print(f' Labels : {labels}') # tensor that is a number
             #loss = loss_fn_train(outputs,torch.max(labels, 1)[1])
-            #loss = loss_fn_train(outputs,torch.max(labels, 1)[1])
+            #loss = loss_fn(outputs,torch.max(labels, 1)[1])
             loss = loss_fn(outputs, labels)
             # For L2 regularization
-            l2_lambda = 0.000001
-            l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
-            loss = loss + l2_lambda * l2_norm
+            #l2_lambda = 0.000001
+            #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
+            #loss = loss + l2_lambda * l2_norm
             # Update weights
             loss.backward()
             optimizer.step()
@@ -327,13 +342,14 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
-        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
+        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, Accuracy: {val_accuracy} ')
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
-        #loss_fn_train.train()
+        #loss_fn_train.next_epoch()
+        scheduler.step()
     # return lists with loss, accuracy every epoch
         if early_stopper.early_stop(validation_loss = val_loss):             
                 break
@@ -362,7 +378,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             # Assessing outputs
             outputs = model(imgs)
             #probs = torch.nn.Softmax(outputs)
-            #loss = loss_fn_train(outputs,torch.max(labels, 1)[1])
+            #loss = loss_fn(outputs,torch.max(labels, 1)[1])
             loss = loss_fn(outputs, labels)
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
@@ -386,7 +402,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_models' +'/' + 'CP_least_loss_model'
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CP_model'
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss                      
@@ -418,7 +434,7 @@ def test_loop(model, loss_fn, test_loader):
             outputs = model(cp_imgs)
             # print(f' Outputs : {outputs}') # tensor with 10 elements
             # print(f' Labels : {labels}') # tensor that is a number
-            #loss = loss_fn_train(outputs,torch.max(labels, 1)[1])
+            #loss = loss_fn(outputs,torch.max(labels, 1)[1])
             loss = loss_fn(outputs, labels)
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
@@ -447,7 +463,7 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
 
 #--------------------------------- Assessing model on test data ------------------------------#
 updated_model_test = image_network()
-updated_model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_models/CP_least_loss_model')['model_state_dict'])
+updated_model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CP_model')['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = updated_model_test,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator)
@@ -480,7 +496,7 @@ run['parameters/learning_rate'] = learning_rate
 run['parameters/loss_function'] = str(loss_function)
 #run['parameters/use_variance_threshold'] = use_variance_threshold
 #f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
-state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_models' +'/' + 'CP_least_loss_model')
+state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CP_model')
 run['metrics/f1_score'] = state["f1_score"]
 run['metrics/accuracy'] = state["accuracy"]
 run['metrics/loss'] = state["valid_loss"]
