@@ -88,10 +88,7 @@ class Dataset(torch.utils.data.Dataset):
         '''Retreiving the image '''
         # ID = self.list_ID[idx]
         image = channel_5_numpy(self.paths_df, idx, self.im_norm) # extract image from csv using index
-        #print(image)
-        #print(f' return from function: {image}')
         label = self.img_labels[idx]          # extract calssification using index
-        #print(label)
         #label = torch.tensor(label, dtype=torch.short)
         label_tensor = torch.from_numpy(self.dict_moa[label]) # convert label to tensor
         if self.transform:                         # uses Albumentations image pipeline to return an augmented image
@@ -259,7 +256,7 @@ else:
 
 #from ols import OnlineLabelSmoothing
 #loss_fn_train = OnlineLabelSmoothing(alpha = 0.5, n_classes=num_classes, smoothing = 0.05).to(device=device)
-loss_fn_train = False
+loss_fn_train = 'false'
 #------------------------ Class weights, optimizer, and loss function ---------------------------------#
 
 
@@ -272,7 +269,7 @@ scheduler = torch.optim.lr_scheduler.MultiStepLR(cnn_optimizer,
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
 
 
-def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_loader, valid_loader):
+def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader, loss_fn_train = "false"):
     '''
     n_epochs: number of epochs 
     optimizer: optimizer used to do backpropagation
@@ -294,7 +291,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
         loss_train = 0.0
         train_total = 0
         train_correct = 0
-        #loss_fn_train.train()
+        if loss_fn_train != "false":
+            loss_fn_train.train()
         for imgs, labels in tqdm(train_loader,
                                  desc = "Train Batches w/in Epoch",
                                 position = 0,
@@ -305,10 +303,11 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
             labels = labels.to(device= device)
             # Training Model
             outputs = model(imgs)
-            #print(f' Outputs : {outputs}') # tensor with 10 elements
-            #print(f' Labels : {labels}') # tensor that is a number
             #loss = loss_fn_train(outputs,torch.max(labels, 1)[1])
             #loss = loss_fn(outputs,torch.max(labels, 1)[1])
+            if loss_fn_train != "false":
+                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+       
             loss = loss_fn(outputs, labels)
             # For L2 regularization
             #l2_lambda = 0.000001
@@ -320,15 +319,13 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
 
             # Training Metrics
             loss_train += loss.item()
-            #print(f' loss: {loss.item()}')
             train_predicted = torch.argmax(outputs, 1)
-            #print(f' train_predicted {train_predicted}')
             # NEW
             #labels = torch.argmax(labels,1)
-            #print(labels)
             train_total += labels.shape[0]
             train_correct += int((train_predicted == torch.max(labels, 1)[1]).sum())
-        #loss_fn_train.eval()
+        if loss_fn_train != "false":
+            loss_fn_train.eval()
         # validation metrics from batch
         val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
         best_val_loss = best_val_loss_upd
@@ -345,6 +342,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
     # return lists with loss, accuracy every epoch
         if early_stopper.early_stop(validation_loss = val_loss):             
                 break
+        if loss_fn_train != "false":
+            loss_fn_train.next_epoch()
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
 
 def validation_loop(model, loss_fn, valid_loader, best_val_loss):
@@ -394,7 +393,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss                      
@@ -424,19 +423,13 @@ def test_loop(model, loss_fn, test_loader):
             labels = labels.to(device= device)
             # Assessing outputs
             outputs = model(cp_imgs)
-            # print(f' Outputs : {outputs}') # tensor with 10 elements
-            # print(f' Labels : {labels}') # tensor that is a number
             #loss = loss_fn(outputs,torch.max(labels, 1)[1])
             loss = loss_fn(outputs, labels)
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
             #labels = torch.argmax(labels,1)
-            #print(predicted)
-            #print(labels)
             total += labels.shape[0]
             correct += int((predicted == torch.max(labels, 1)[1]).sum())
-            #print(f' Predicted: {predicted.tolist()}')
-            #print(f' Labels: {predicted.tolist()}')
             all_predictions = all_predictions + predicted.tolist()
             all_labels = all_labels + torch.max(labels, 1)[1].tolist()
         
@@ -455,7 +448,7 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
 
 #--------------------------------- Assessing model on test data ------------------------------#
 updated_model_test = image_network()
-updated_model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name)['model_state_dict'])
+updated_model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + ".pt")['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = updated_model_test,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator)
@@ -473,10 +466,6 @@ end = time.time()
 
 elapsed_time = program_elapsed_time(start, end)
 
-end = time.time()
-
-elapsed_time = program_elapsed_time(start, end)
-
 create_terminal_table(elapsed_time, all_labels, all_predictions)
 upload_to_neptune('erik-everett-palm/Tomics-Models',
                     file_name = file_name,
@@ -488,9 +477,10 @@ upload_to_neptune('erik-everett-palm/Tomics-Models',
                     num_epochs = num_epochs,
                     loss_fn = loss_function,
                     all_labels = all_labels,
-                    init_learning_rate = learning_rate,
                     all_predictions = all_predictions,
                     dict_moa = dict_moa,
                     val_vs_train_loss_path = val_vs_train_loss_path,
                     val_vs_train_acc_path = val_vs_train_acc_path,
-                    loss_fn_train = loss_fn_train)
+                    loss_fn_train = loss_fn_train 
+                )
+

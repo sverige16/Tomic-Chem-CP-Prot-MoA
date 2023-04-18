@@ -9,7 +9,7 @@ clue_siginfo_beta.txt: Metadata for each signature in the Level 5 matrix (metada
 gene_expression_data.ipynb: looking at which compounds/transcriptomic profiles that exist and if we have enough data 
 	to perform deep learning.
 testing_GCTX_extract.ipynb: testing the various methods to extract specific transcriptomic profiles from GCTX files
- 
+
 ## links on GCTX, GCT and clue.io data
 
 

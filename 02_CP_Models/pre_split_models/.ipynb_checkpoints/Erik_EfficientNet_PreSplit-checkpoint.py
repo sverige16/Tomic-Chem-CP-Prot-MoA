@@ -43,7 +43,7 @@ sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/
 
 from Erik_alll_helper_functions import channel_5_numpy, accessing_correct_fold_csv_files, dict_splitting_into_tensor
 from Erik_alll_helper_functions import splitting, apply_class_weights,  program_elapsed_time, val_vs_train_loss
-from Erik_alll_helper_functions import EarlyStopper, create_splits, val_vs_train_accuracy, conf_matrix_and_class_report
+from Erik_alll_helper_functions import EarlyStopper, create_splits, val_vs_train_accuracy, create_terminal_table, upload_to_neptune
 
 # Image analysis packages
 import albumentations as A 
@@ -63,6 +63,7 @@ testing = False # decides if we take a subset of the data
 max_epochs = 1000 # number of epochs we are going to run 
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
+model_name = "Cell_Painting"
 
 #----------------------------------------- pre-processing -----------------------------------------#
 start = time.time()
@@ -127,7 +128,7 @@ valid_transforms = A.Compose([])
 '''
 paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/paths_channels_treated_v1v2.csv')
 
-file_name = "erik10"
+file_name = "erik10_all"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
 training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
 hq, dose = 'False', 'False'
@@ -393,7 +394,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CP_model'
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss                      
@@ -454,15 +455,15 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
 
 #--------------------------------- Assessing model on test data ------------------------------#
 updated_model_test = image_network()
-updated_model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CP_model')['model_state_dict'])
+updated_model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name)['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = updated_model_test,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator)
 
 #---------------------------------------- Visual Assessment ---------------------------------# 
-str_all = 'CP_' + file_name
-val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, str_all, '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images') 
-val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  str_all, '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images')
+
+val_vs_train_loss_path = val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images') 
+val_vs_train_acc_path = val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images')
 
 # results_assessment(all_predictions, all_labels, moa_dict)
 
@@ -472,37 +473,24 @@ end = time.time()
 
 elapsed_time = program_elapsed_time(start, end)
 
-table = [["Time to Run Program", elapsed_time],
-['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
-['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
-print(tabulate(table, tablefmt='fancy_grid'))
+end = time.time()
 
-run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
-run['model'] = "CP"
-#run["feat_selec/feat_sel"] = feat_sel
-run["filename"] = file_name
-run['parameters/normalize'] = "mean and std"
-run['parameters/class_weight'] = yn_class_weights
-run['parameters/learning_rate'] = learning_rate
-run['parameters/loss_function'] = str(loss_function)
-#run['parameters/use_variance_threshold'] = use_variance_threshold
-#f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
-state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CP_model')
-run['metrics/f1_score'] = state["f1_score"]
-run['metrics/accuracy'] = state["accuracy"]
-run['metrics/loss'] = state["valid_loss"]
-run['metrics/time'] = elapsed_time
-run['metrics/epochs'] = num_epochs
+elapsed_time = program_elapsed_time(start, end)
 
-run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
-run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
-
-conf_matrix_and_class_report(all_labels, all_predictions, str_all, dict_moa)
-
-# Upload plots
-run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'loss_train_val_' + str_all + now + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images' + '/' + 'acc_train_val_' + str_all + now + '.png') 
-import matplotlib.image as mpimg
-conf_img = mpimg.imread('Conf_matrix.png')
-run["files/classification_info"].upload("class_info.txt")
-run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
+create_terminal_table(elapsed_time, all_labels, all_predictions)
+upload_to_neptune('erik-everett-palm/Tomics-Models',
+                    file_name = file_name,
+                    model_name = model_name,
+                    normalize = "mean and std",
+                    yn_class_weights = yn_class_weights,
+                    learning_rate = learning_rate, 
+                    elapsed_time = elapsed_time, 
+                    num_epochs = num_epochs,
+                    loss_fn = loss_function,
+                    all_labels = all_labels,
+                    init_learning_rate = learning_rate,
+                    all_predictions = all_predictions,
+                    dict_moa = dict_moa,
+                    val_vs_train_loss_path = val_vs_train_loss_path,
+                    val_vs_train_acc_path = val_vs_train_acc_path,
+                    loss_fn_train = loss_fn_train)

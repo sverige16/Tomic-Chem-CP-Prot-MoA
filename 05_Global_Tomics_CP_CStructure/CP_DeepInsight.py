@@ -114,12 +114,7 @@ clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Model
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
 
 # download csvs with all the data pre split
-#cyc_adr_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
-#train_filename = 'cyc_adr_clue_train_fold_0.csv'
-#val_filename = 'cyc_adr_clue_val_fold_0.csv'
-#test_filename = 'cyc_adr_clue_test_fold_0.csv'
-#training_set, validation_set, test_set =  load_train_valid_data(cyc_adr_file, train_filename, val_filename, test_filename)
- 
+
 erik10_file = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
 train_filename = 'erik10_clue_hq_train_fold_0.csv'
 val_filename = 'erik10_clue_hq_val_fold_0.csv'

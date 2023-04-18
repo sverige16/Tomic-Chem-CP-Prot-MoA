@@ -56,12 +56,11 @@ import re
 
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 from Erik_alll_helper_functions import apply_class_weights, accessing_correct_fold_csv_files, create_splits, extract_tprofile
 from Erik_alll_helper_functions import checking_veracity_of_data, LogScaler, EarlyStopper, val_vs_train_loss
 from Erik_alll_helper_functions import val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
 from Erik_alll_helper_functions import pre_processing, create_terminal_table, upload_to_neptune, dict_splitting_into_tensor
-from Erik_alll_helper_functions import tprofiles_gc_too_func
+from Erik_alll_helper_functions import tprofiles_gc_too_func, set_bool_hqdose
 
 # In[63]:
 
@@ -82,11 +81,6 @@ clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Model
 # clue row metadata with rows representing transcription levels of specific genes
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
 
-
-# In[40]:
-def save_val(val_tensor, file_type):
-    torch.save(val_tensor, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/pickles/val_order_pickles/' + file_type )
-    print('Done writing binary file')
 
 
 class Transcriptomic_Profiles(torch.utils.data.Dataset):
@@ -139,11 +133,7 @@ print(f'Training on device {device}. ' )
 file_name = "erik10"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
 training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
-hq, dose = 'False', 'False'
-if re.search('hq', file_name):
-    hq = 'True'
-if re.search('8', file_name):
-    dose = 'True'
+hq, dose = set_bool_hqdose(file_name)
 L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
 checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
@@ -183,30 +173,13 @@ num_classes = len(L1000_training["moa"].unique())
 
 # create generator that randomly takes indices from the training set
 training_dataset = Transcriptomic_Profiles(profiles_gc_too_train, L1000_training, dict_moa)
-
-
-
 training_generator = torch.utils.data.DataLoader(training_dataset, **params)
 
-# In[50]:
-
-
-# generator: validation
-# create a subset with only valid indices
-
-# create generator that randomly takes indices from the validation set
 validation_dataset = Transcriptomic_Profiles(profiles_gc_too_valid, L1000_validation, dict_moa)
-
-
-
 validation_generator = torch.utils.data.DataLoader(validation_dataset, **params)
 
 test_dataset = Transcriptomic_Profiles(profiles_gc_too_test, L1000_test, dict_moa)
 test_generator = torch.utils.data.DataLoader(Transcriptomic_Profiles(profiles_gc_too_test, L1000_test, dict_moa), **params)
-
-
-
-
 
 
 class SimpleNN_Model(nn.Module):

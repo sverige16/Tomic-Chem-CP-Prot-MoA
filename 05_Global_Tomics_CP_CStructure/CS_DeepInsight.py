@@ -73,7 +73,7 @@ from Erik_alll_helper_functions import checking_veracity_of_data, dict_splitting
 from Erik_alll_helper_functions import conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
 from Erik_alll_helper_functions import apply_class_weights, set_parameter_requires_grad, LogScaler
 from Erik_alll_helper_functions import pre_processing, save_tprofile_npy, acquire_npy, np_array_transform, splitting
-from Erik_alll_helper_functions import accessing_correct_fold_csv_files, create_splits, smiles_to_array
+from Erik_alll_helper_functions import accessing_correct_fold_csv_files, create_splits, smiles_to_array, create_terminal_table, upload_to_neptune
 from Helper_Models import DeepInsight_Model, Chem_Dataset, Reducer_profiles
 
 import torch
@@ -98,18 +98,8 @@ world_size = torch.cuda.device_count()
 start = time.time()
 now = datetime.datetime.now()
 now = now.strftime("%d_%m_%Y-%H:%M:%S")
+model_name = 'CS_DeepInsight'
 print("Begin Training")
-#---------------------------------------------------------------------------------------------------------------------------------------#
-'''
-def splitting(df):
-    #Splitting data into two parts:
-    #1. input : the pointer showing where the transcriptomic profile is  
-    #2. target one hot
-    target = df['moa']
-    input =  df.drop('moa', axis = 1)
-    
-    return input, target #target_onehot
-'''   
 
 #---------------------------------------------------------------------------------------------------------------------------------------#
 
@@ -496,7 +486,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss, device):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CS_DI_model'
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss
@@ -684,7 +674,7 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               device = device)
 #----------------------------------------- Assessing model on test data -----------------------------------------#
 model_test = CStructure_DI
-model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CS_DI_model')['model_state_dict'])
+model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + ".pt")['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = model_test,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator,
@@ -692,8 +682,8 @@ correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = m
 
 # ----------------------------------------- Plotting loss, accuracy, visualization of results ---------------------#
 
-val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, 'CS_DI','/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images') 
-val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  'CS_DI', '/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images')
+val_vs_train_loss_path = val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, model_name, file_name,'/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images') 
+val_vs_train_acc_path = val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images')
 
 
 #-------------------------------- Writing interesting info into neptune.ai----------------------------------# 
@@ -701,40 +691,22 @@ end = time.time()
 
 elapsed_time = program_elapsed_time(start, end)
 
-
-table = [["Time to Run Program", elapsed_time],
-['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
-['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
-print(tabulate(table, tablefmt='fancy_grid'))
-
-run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
-run['model'] = 'CS_DI'
-run["feat_selec/variance_threshold"] = variance_thresh
-run["filename"] = file_name
-run['parameters/normalize'] = normalize_c
-run['parameters/class_weight'] = incl_class_weights
-run['parameters/learning_rate'] = learning_rate
-run['parameters/loss_function'] = str(loss_function)
-run['parameters/optimizer'] = str(optimizer)
-run['parameters/num_epochs_fs'] = num_epochs_fs
-#run['parameters/use_variance_threshold'] = use_variance_threshold
-#f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
-state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CS_DI_model')
-run['metrics/f1_score'] = state["f1_score"]
-run['metrics/accuracy'] = state["accuracy"]
-run['metrics/loss'] = state["valid_loss"]
-run['metrics/time'] = elapsed_time
-run['metrics/epochs'] = num_epochs
-
-run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
-run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
-
-conf_matrix_and_class_report(all_labels, all_predictions, 'CS_DI', dict_moa)
-
-# Upload plots
-run["images/loss"].upload('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images'+ '/' + 'loss_train_val_' + 'CS_DI' + now  + '.png')
-run["images/accuracy"].upload('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images' +'/' + 'acc_train_val_' +'CS_DI' + now + '.png')
-import matplotlib.image as mpimg
-conf_img = mpimg.imread('Conf_matrix.png')
-run["files/classification_info"].upload("class_info.txt")
-run["images/Conf_matrix.png"] =  neptune.types.File.as_image(conf_img)
+create_terminal_table(elapsed_time, all_labels, all_predictions)
+upload_to_neptune('erik-everett-palm/Tomics-Models',
+                    file_name = file_name,
+                    model_name = model_name,
+                    normalize = normalize_c,
+                    yn_class_weights = incl_class_weights,
+                    learning_rate = learning_rate, 
+                    elapsed_time = elapsed_time, 
+                    num_epochs = num_epochs,
+                    loss_fn = loss_function,
+                    all_labels = all_labels,
+                    init_learning_rate = learning_rate,
+                    all_predictions = all_predictions,
+                    dict_moa = dict_moa,
+                    val_vs_train_loss_path = val_vs_train_loss_path,
+                    val_vs_train_acc_path = val_vs_train_acc_path,
+                    variance_thresh = variance_thresh,
+                    pixel_size = pixel_size,
+                    loss_fn_train = False)

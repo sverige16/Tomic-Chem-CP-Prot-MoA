@@ -74,7 +74,9 @@ import neptune.new as neptune
 
 
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-from Erik_alll_helper_functions import *
+from Erik_alll_helper_functions import checking_veracity_of_data, accessing_correct_fold_csv_files
+from Erik_alll_helper_functions import create_splits
+
 
 def PCA_UMAP(df_train_features, df_train_labels, file_str, dict_moa):
     # clue row metadata with rows representing transcription levels of specific genes

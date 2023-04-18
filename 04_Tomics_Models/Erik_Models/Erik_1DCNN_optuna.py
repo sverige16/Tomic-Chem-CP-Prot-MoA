@@ -48,23 +48,25 @@ import matplotlib.pyplot as plt
 import datetime
 import time
 import math
-
+import re
 import optuna
-import neptune.new as neptune
-
+import heapq
 
 # In[37]:
 
+import sys
+sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
+from Erik_alll_helper_functions import apply_class_weights, accessing_correct_fold_csv_files, create_splits
+from Erik_alll_helper_functions import dict_splitting_into_tensor, extract_tprofile, EarlyStopper, val_vs_train_loss
+from Erik_alll_helper_functions import val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
+from Erik_alll_helper_functions import tprofiles_gc_too_func, create_terminal_table, upload_to_neptune
+from Erik_alll_helper_functions import set_bool_hqdose, set_bool_npy, find_two_lowest_numbers
 
-from ML_battery_L1000_dim_reduc import tprofiles_gc_too_func, extract_tprofile, load_train_valid_data 
-from ML_battery_L1000_dim_reduc import variance_threshold, normalize_func
-
-
-# In[63]:
 
 
 using_cuda = True
 hidden_size = 4096
+model_name = '1DCNN_optuna'
 
 
 # In[39]:
@@ -84,19 +86,6 @@ def save_val(val_tensor, file_type):
     torch.save(val_tensor, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/pickles/val_order_pickles/' + file_type )
     print('Done writing binary file')
 
-
-def dict_splitting_into_tensor(df):
-    '''Splitting data into two parts:
-    1. input : the pointer showing where the transcriptomic profile is  
-    2. target one hot : labels (the correct MoA) '''
-    
-    enc = OneHotEncoder(handle_unknown='ignore')
-    enc.fit(df["moa"].unique().reshape(-1,1))
-    one_hot_encoded = enc.transform(enc.categories_[0].reshape(-1,1)).toarray()
-    dicti = {}
-    for i in range(0, len(enc.categories_[0])):
-        dicti[str(enc.categories_[0][i])] = one_hot_encoded[i]
-    return dicti
 
 class Transcriptomic_Profiles(torch.utils.data.Dataset):
     def __init__(self, gc_too, split, dict_moa):
@@ -128,27 +117,9 @@ class Transcriptomic_Profiles(torch.utils.data.Dataset):
         return torch.squeeze(t_profile_features), t_moa 
 
 
-class EarlyStopper:
-    def __init__(self, patience=1, min_delta=0):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.counter = 0
-        self.min_validation_loss = np.inf
-
-    def early_stop(self, validation_loss):
-        if validation_loss < self.min_validation_loss:  # if the validation loss is less than the minimum validation loss we have seen so far
-            self.min_validation_loss = validation_loss  # update the minimum validation loss
-            self.counter = 0
-        elif validation_loss > (self.min_validation_loss + self.min_delta): # if the validation loss is greater than the minimum validation loss we have seen so far + the minimum delta
-            self.counter += 1                       # increment the counter
-            if self.counter >= self.patience:       # if the counter is greater than the patience
-                return True
-        return False
-
-
 batch_size = 50
 WEIGHT_DECAY = 1e-5
-learning_rate = 5e-3 
+learning_rate = 0.1
 # parameters
 params = {'batch_size' : batch_size,
          'num_workers' : 3,
@@ -161,20 +132,31 @@ else:
 print(f'Training on device {device}. ' )
 
 
-train_filename = 'L1000_training_set_nv_my10.csv'
-valid_filename = 'L1000_test_set_nv_my10.csv'
-L1000_training, L1000_validation = load_train_valid_data(train_filename, valid_filename)
-# Creating a  dictionary of the one hot encoded labels
-dict_moa = dict_splitting_into_tensor(L1000_training)
+file_name = "erik10_hq_8_12"
+#file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
+training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
+hq, dose = set_bool_hqdose(file_name)
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
+
+dict_moa = dict_splitting_into_tensor(training_set)
+
+# checking that no overlap in sig_id exists between training, test, validation sets
+inter1 = set(list(L1000_training["sig_id"])) & set(list(L1000_validation["sig_id"]))
+inter2 = set(list(L1000_training["sig_id"])) & set(list(L1000_test["sig_id"]))
+inter3 = set(list(L1000_validation["sig_id"])) & set(list(L1000_test["sig_id"]))
+assert len(inter1) + len(inter2) + len(inter3) == 0, ("There is an intersection between the training, validation and test sets")
 
 # shuffling training and validation data
 L1000_training = L1000_training.sample(frac = 1, random_state = 1)
 L1000_validation = L1000_validation.sample(frac = 1, random_state = 1)
+L1000_test = L1000_test.sample(frac = 1, random_state = 1)
 
 print("extracting training transcriptomes")
 profiles_gc_too_train = tprofiles_gc_too_func(L1000_training, clue_gene)
 print("extracting validation transcriptomes")
 profiles_gc_too_valid = tprofiles_gc_too_func(L1000_validation, clue_gene)
+print("extracting test transcriptomes")
+profiles_gc_too_test = tprofiles_gc_too_func(L1000_test, clue_gene)
 
 
 
@@ -185,34 +167,16 @@ num_classes = len(L1000_training["moa"].unique())
 
 
 
-# In[48]:
-
-# In[49]:
-
-
-# generator: training
-# create a subset with only train indices
-
 # create generator that randomly takes indices from the training set
 training_dataset = Transcriptomic_Profiles(profiles_gc_too_train, L1000_training, dict_moa)
-
-
-
 training_generator = torch.utils.data.DataLoader(training_dataset, **params)
-#train_profile, train_labels = next(iter(training_generator))
-
-# In[50]:
-
-
-# generator: validation
-# create a subset with only valid indices
 
 # create generator that randomly takes indices from the validation set
 validation_dataset = Transcriptomic_Profiles(profiles_gc_too_valid, L1000_validation, dict_moa)
-
-
-
 validation_generator = torch.utils.data.DataLoader(validation_dataset, **params)
+
+test_dataset = Transcriptomic_Profiles(profiles_gc_too_test, L1000_test, dict_moa)
+test_generator = torch.utils.data.DataLoader(test_dataset, **params)
 
 
 class CNN_Model(nn.Module):
@@ -315,7 +279,7 @@ print("Begin Training")
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
 
 
-def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader):
+def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader, my_lr_scheduler, loss_fn_train = "false"):
     '''
     n_epochs: number of epochs 
     optimizer: optimizer used to do backpropagation
@@ -325,19 +289,20 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     valid_loader: generator creating batches of validation data
     '''
     # lists keep track of loss and accuracy for training and validation set
-    
-    
     model = model.to(device)
+    early_stopper = EarlyStopper(patience=10, min_delta=0.0001)
     train_loss_per_epoch = []
     train_acc_per_epoch = []
     val_loss_per_epoch = []
     val_acc_per_epoch = []
     best_val_loss = np.inf
-    for epoch in tqdm(range(1, max_epochs +1), desc = "Epoch", position=0, leave= True):
+    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
         loss_train = 0.0
         train_total = 0
         train_correct = 0
-        for tprofiles, labels in tqdm(train_loader, desc = "Epoch", position=0, leave=True):
+        if loss_fn_train != "false":
+            loss_fn_train.train()
+        for tprofiles, labels in train_loader:
             optimizer.zero_grad()
             # put model, images, labels on the same device
             tprofiles = tprofiles.to(device = device)
@@ -345,12 +310,15 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             # Training Model
             outputs = model(tprofiles)
             #print(f' Outputs : {outputs}') # tensor with 10 elements
-            #print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
+            #print(f' lsabels : {labels}') # tensor that is a number
+            if loss_fn_train != "false":
+                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+            else:
+                loss = loss_fn(outputs,labels)
             # For L2 regularization
-            l2_lambda = 0.000001
-            l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
-            loss = loss + l2_lambda * l2_norm
+            #l2_lambda = 0.000001
+            #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
+            #loss = loss + l2_lambda * l2_norm
             # Update weights
             loss.backward()
             optimizer.step()
@@ -364,25 +332,30 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             #print(labels)
             train_total += labels.shape[0]
             train_correct += int((train_predicted == labels).sum())
+        if loss_fn_train != "false":
+            loss_fn_train.eval()
         # validation metrics from batch
-        val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
+        val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss, loss_fn_train)
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
-        if epoch == 1 or epoch %2 == 0:
-            print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss} ')
-        if early_stopper.early_stop(validation_loss = val_loss):             
-            break
+        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, Accuracy: {val_accuracy}')
+       
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
+        if loss_fn_train != "false":
+            loss_fn_train.next_epoch()
     # return lists with loss, accuracy every epoch
-    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
+        if early_stopper.early_stop(validation_loss = val_loss):             
+            break
+        my_lr_scheduler.step()
+    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
                                 
 
-def validation_loop(model, loss_fn, valid_loader, best_val_loss):
+def validation_loop(model, loss_fn, valid_loader, best_val_loss, loss_fn_train):
     '''
     Assessing trained model on valiidation dataset 
     model: deep learning architecture getting updated by model
@@ -405,7 +378,10 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             # Assessing outputs
             outputs = model(tprofiles)
             #probs = torch.nn.Softmax(outputs)
-            loss = loss_fn(outputs,labels)
+            if loss_fn_train != "false":
+                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+            else:
+                loss = loss_fn(outputs,labels)
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
             labels = torch.argmax(labels,1)
@@ -422,19 +398,64 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             labels_cpu =  torch.cat(all_labels).cpu()
             torch.save(
                 {   'predict_proba' : m(torch.cat(predict_proba)),
-                    'predictions' : pred_cpu,
+                    'predictions' : pred_cpu.numpy(),
+                    'labels_val' : labels_cpu.numpy(),
                     'model_state_dict' : model.state_dict(),
                     'valid_loss' : loss_val,
-                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'weighted'),
+                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models' +'/' + 'Tomics_1DCNN'
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss
 
 
 
-def objectiv(trial, num_feat, num_classes, training_generator, validation_generator):
+def test_loop(model, loss_fn, test_loader, loss_fn_train):
+    '''
+    Assessing trained model on test dataset 
+    model: deep learning architecture getting updated by model
+    loss_fn: loss function
+    test_loader: generator creating batches of test data
+    '''
+    model = model.to(device)
+    model.eval()
+    loss_test = 0.0
+    correct = 0
+    total = 0
+    all_predictions = []
+    all_labels = []
+    with torch.no_grad():  # does not keep track of gradients so as to not train on test data.
+        for compounds, labels in tqdm(test_loader,
+                                            desc = "Test Batches w/in Epoch",
+                                              position = 0,
+                                              leave = True):
+            # Move to device MAY NOT BE NECESSARY
+            compounds = compounds.to(device = device)
+            labels = labels.to(device= device)
+            #cell_line = cell_line.to(device = device)
+            # Assessing outputs
+            outputs = model(compounds)
+            # print(f' Outputs : {outputs}') # tensor with 10 elements
+            # print(f' Labels : {labels}') # tensor that is a number
+            if loss_fn_train != "false":
+                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+            else:
+                loss = loss_fn(outputs,labels)
+            loss_test += loss.item()
+            predicted = torch.argmax(outputs, 1)
+            #labels = torch.argmax(labels,1)
+            #print(predicted)
+            #print(labels)
+            total += labels.shape[0]
+            correct += int((predicted == torch.max(labels, 1)[1]).sum())
+            all_predictions = all_predictions + predicted.tolist()
+            all_labels = all_labels + torch.max(labels, 1)[1].tolist()
+        avg_test_loss = loss_test/len(test_loader)  # average loss over batch
+    return correct, total, avg_test_loss, all_predictions, all_labels
+
+
+def objectiv(trial, num_feat, num_classes, training_generator, validation_generator, testing_generator):
     dropout_rate1 = trial.suggest_float('dropout_rate1', 0.2, 0.5)
     dropout_rate2 = trial.suggest_float('dropout_rate2', 0.2, 0.5)
     dropout_rate3 = trial.suggest_float('dropout_rate3', 0.2, 0.5)
@@ -453,73 +474,52 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
     optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'RMSprop', 'SGD'])
     lr = trial.suggest_float('lr', 1e-5, 1e-1, log=True)
     optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
+    scheduler_name = trial.suggest_categorical("scheduler", ["StepLR", "ExponentialLR", "CosineAnnealingLR"])
+    if scheduler_name == "StepLR":
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_uniform("gamma", 0.1, 0.9))
+    elif scheduler_name == "ExponentialLR":
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=trial.suggest_float("gamma", 0.1, 0.9))
+    elif scheduler_name == "CosineAnnealingLR":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=trial.suggest_int("T_max", 5, 30))
 
-    loss_fn = torch.nn.BCEWithLogitsLoss()
-    max_epochs = 30
+    class_weights = apply_class_weights(training_set, device)
+    loss_fn = torch.nn.CrossEntropyLoss(class_weights)
+
+    from ols import OnlineLabelSmoothing
+    loss_fn_train = OnlineLabelSmoothing(alpha = trial.suggest_float('alpha', 0.1, 0.9),
+                                          n_classes=num_classes, 
+                                          smoothing = trial.suggest_float('smoothing', 0.001, 0.3)).to(device=device)
+
+    max_epochs = 1000
+
+    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
+                optimizer = optimizer,
+                model = model,
+                loss_fn = loss_fn,
+                loss_fn_train = loss_fn_train,
+                train_loader=training_generator, 
+                valid_loader=validation_generator,
+                my_lr_scheduler = scheduler)
 
 
-    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch = training_loop(n_epochs = max_epochs,
-              optimizer = optimizer,
-              model = model,
-              loss_fn = loss_fn,
-              train_loader=training_generator, 
-              valid_loader=validation_generator)
-    return min(val_loss_per_epoch)
+    lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
+    return (lowest1 + lowest2)/2
 
 study = optuna.create_study(direction='minimize')
 study.optimize(lambda trial: objectiv(trial, num_feat = 978, 
                                       num_classes = num_classes, 
                                       training_generator= training_generator, 
-                                      validation_generator = validation_generator), 
-                                      n_trials=50)
-
+                                      validation_generator = validation_generator,
+                                      testing_generator = test_generator), 
+                                      n_trials=100)
+print("Number of finished trials: {}".format(len(study.trials)))
 print(study.best_params)
-print(study.best_value)# In[69]:
+print(study.best_value)
 
-
-#-------------------------------- Writing interesting info into terminal ------------------------# 
-
-end = time.time()
-def program_elapsed_time(start, end):
-    program_time = round(end - start, 2) 
-    print(program_time)
-    if program_time > float(60) and program_time < 60*60:
-        program_time =  program_time/60
-        time_elapsed = str(program_time) + ' min'
-    elif program_time > 60*60:
-        program_time = program_time/3600
-        time_elapsed = str(program_time) + ' hrs'
-    else:
-        time_elapsed = str(program_time) + ' sec'
-    return time_elapsed
-elapsed_time = program_elapsed_time(start, end)
-
-#test_set_acc = f' {round(correct/total*100, 2)} %'
-table = [["Time to Run Program", elapsed_time]]
-#['Accuracy of Test Set', test_set_acc]]
-print(tabulate(table, tablefmt='fancy_grid'))
-
-
-run = neptune.init_run(project='erik-everett-palm/Tomics-Models', api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
-run['model'] = 'Tomics_1DCNN_optuna'
-run["metric/best_loss"] = study.best_value
-run["filename"] = train_filename
-run['parameters/normalize'] = None
-run['parameters/best_params'] = str(study.best_params)
-# run['parameters/class_weight'] = class_weight
-run['parameters/learning_rate'] = learning_rate
-run['parameters/loss_function'] = 'BCEWithLogitsLoss'
-run['metric/time_elapsed'] = elapsed_time
-run['parameters/dropout_rate1'] = study.best_params['dropout_rate1']
-run['parameters/dropout_rate2'] = study.best_params['dropout_rate2']
-run['parameters/dropout_rate3'] = study.best_params['dropout_rate3']
-run['parameters/dropout_rate4'] = study.best_params['dropout_rate4']
-run['parameters/dropout_rate5'] = study.best_params['dropout_rate5']
-run['parameters/dropout_rate6'] = study.best_params['dropout_rate6']
-run['parameters/channel_num'] = study.best_params['channel_num']
-run['parameters/optimizer'] = study.best_params['optimizer']
-run['parameters/learning_rate'] = study.best_params['lr']
-run['parameters/num_epochs'] = max_epochs
-
-#run['parameters/use_variance_threshold'] = use_variance_threshold
-#f1_score_p, accuracy_p = printing_results(class_alg, df_val[df_val.columns[-1]].values, predictions)
+f = open("/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/" + model_name + '_' + now +'_best_params.txt',"w")
+# write file
+f.write(model_name)
+f.write("Best Parameters: " + str(study.best_params))
+f.write("Best Value: " + str(study.best_value))
+# close file
+f.close()

@@ -73,11 +73,12 @@ from pytorch_tabnet.tab_model import TabNetClassifier
 from torchsummary import summary
 nn._estimator_type = "classifier"
 import sys
+import optuna
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 from Erik_alll_helper_functions import apply_class_weights, accessing_correct_fold_csv_files, create_splits
 from Erik_alll_helper_functions import checking_veracity_of_data, LogScaler, EarlyStopper, val_vs_train_loss
 from Erik_alll_helper_functions import val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
-from Erik_alll_helper_functions import pre_processing, create_terminal_table, upload_to_neptune
+from Erik_alll_helper_functions import pre_processing, create_terminal_table, upload_to_neptune, find_two_lowest_numbers
 
 
 
@@ -132,6 +133,7 @@ with open('/scratch2-shared/erikep/Results/labels_hq_moadict.pkl', 'rb') as f:
     all_labels = pickle.load(f)
 train_labels, valid_labels, test_labels, dict_moa, dict_indexes = all_labels
 
+num_classes = len(dict_moa)
 
 last_training_index = train_labels.shape[0]
 last_validat_index = last_training_index + valid_labels.shape[0]
@@ -173,52 +175,17 @@ class IGTD_profiles(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.X)
-'''
-class CNN(nn.Module):
-    def __init__(self):
-        super(CNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=(3, 3), stride=1, padding=1)
-        self.relu1 = nn.ReLU()
-        self.pool1 = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=(3, 3), stride=1, padding=1)
-        self.relu2 = nn.ReLU()
-        self.pool2 = nn.MaxPool2d(kernel_size=(2, 2), stride=2)
-        self.conv3 = nn.Conv2d(32, 64, kernel_size=(3, 3), stride=1, padding=1)
-        self.relu3 = nn.ReLU()
-        self.fc1 = nn.Linear(64*1*40, 500)
-        self.relu4 = nn.ReLU()
-        self.fc2 = nn.Linear(500,128)
-        self.relu5 = nn.ReLU()
-        self.fc3 = nn.Linear(128, 10)
-        
-    def forward(self, x):
-        x = x.unsqueeze(1)  # add a channel dimension to match the input shape of the first conv layer
-        x = self.conv1(x)
-        x = self.relu1(x)
-        x = self.pool1(x)
-        x = self.conv2(x)
-        x = self.relu2(x)
-        x = self.pool2(x)
-        x = self.conv3(x)
-        x = self.relu3(x)
-        x = x.view(-1, 64*1*40 )
-        x = self.fc1(x)
-        x = self.relu4(x)
-        x = self.fc2(x)
-        x = self.relu5(x)
-        x = self.fc3(x)
-        return x
-'''
+
 class IGTD_Model(nn.Module):
-    def __init__(self):
+    def __init__(self, channel_number, hidden_layer1, hidden_layer2, dropout_rate1):
         super(IGTD_Model, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=4, kernel_size=(2,2), padding=1)
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels= channel_number, kernel_size=(2,2), padding=1)
         self.conv2 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=(2,2), padding=1)
         self.pool = nn.MaxPool2d(kernel_size=(1,2), stride=2)
-        self.dropout = nn.Dropout(p=0.25)
-        self.fc1 = nn.Linear(16*4* 82, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, 10)
+        self.dropout = nn.Dropout(dropout_rate1)
+        self.fc1 = nn.Linear(16*4* 82, hidden_layer1)
+        self.fc2 = nn.Linear(hidden_layer1, hidden_layer2)
+        self.fc3 = nn.Linear(hidden_layer2, 10)
         
     def forward(self, x):
         #x = x.unsqueeze(1)
@@ -241,8 +208,6 @@ class IGTD_Model(nn.Module):
         return x     
 #DI_model = DeepInsight_Model(net)     
 IGTD_model = IGTD_Model()
-
-
 batch_size = 50
 train_transform = transforms.GaussianBlur(kernel_size=(3,3), sigma = (0.1, 0.2))
 
@@ -281,13 +246,7 @@ optimizer = torch.optim.SGD(
     weight_decay=1e-05
 )
 
-
-
-
-# In[52]:
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
-
-
 def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_loader, valid_loader):
     '''
     n_epochs: number of epochs 
@@ -458,47 +417,69 @@ def test_loop(model, loss_fn, test_loader):
     return correct, total, avg_test_loss, all_predictions, all_labels
 
 
-#------------------------------   Calling functions --------------------------- #
-train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
-              optimizer = optimizer,
-              model = IGTD_model,
-              loss_fn_train= loss_fn_train,
-              loss_fn = loss_function,
-              train_loader= train_generator, 
-              valid_loader= valid_generator)
+def objectiv(trial, num_feat, num_classes, training_generator, validation_generator, testing_generator):
+    dropout_rate1 = trial.suggest_float('dropout_rate1', 0.2, 0.5)
+    hidden_layer1 = trial.suggest_int('hidden_layer1', 512, 4096)
+    hidden_layer2 = trial.suggest_int('hidden_layer2', 128, 4096)
+    channel_num = trial.suggest_int('channel_num', 2, 12)
+    num_feat = num_feat
+    num_classes = num_classes
+        # generate the model
+    model = IGTD_Model(trial, hidden_layer1= hidden_layer1,
+                       hidden_layer2=hidden_layer2,
+                       dropout_rate1=dropout_rate1, 
+                       channel_number=channel_num).to(device)
+    
+    # generate the optimizer
+    optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'RMSprop', 'SGD'])
+    lr = trial.suggest_float('lr', 1e-5, 1e-1, log=True)
+    optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
+    scheduler_name = trial.suggest_categorical("scheduler", ["StepLR", "ExponentialLR", "CosineAnnealingLR"])
+    if scheduler_name == "StepLR":
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_uniform("gamma", 0.1, 0.9))
+    elif scheduler_name == "ExponentialLR":
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=trial.suggest_float("gamma", 0.1, 0.9))
+    elif scheduler_name == "CosineAnnealingLR":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=trial.suggest_int("T_max", 5, 30))
 
-#--------------------------------- Assessing model on test data ------------------------------#
-updated_model_test = IGTD_model
-updated_model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt')['model_state_dict'])
-correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = updated_model_test,
-                                          loss_fn = loss_function, 
-                                          test_loader = test_generator)
+    class_weights = apply_class_weights(training_set, device)
+    loss_fn = torch.nn.CrossEntropyLoss(class_weights)
 
-#---------------------------------------- Visual Assessment ---------------------------------# 
-val_vs_train_loss_path = val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
-val_vs_train_acc_path = val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
+    from ols import OnlineLabelSmoothing
+    loss_fn_train = OnlineLabelSmoothing(alpha = trial.suggest_float('alpha', 0.1, 0.9),
+                                          n_classes=num_classes, 
+                                          smoothing = trial.suggest_float('smoothing', 0.001, 0.3)).to(device=device)
 
-# results_assessment(all_predictions, all_labels, moa_dict)
+    max_epochs = 1000
 
-#-------------------------------- Writing interesting info into terminal ------------------------# 
+    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
+                optimizer = optimizer,
+                model = model,
+                loss_fn = loss_fn,
+                loss_fn_train = loss_fn_train,
+                train_loader=training_generator, 
+                valid_loader=validation_generator,
+                my_lr_scheduler = scheduler)
 
-end = time.time()
 
-elapsed_time = program_elapsed_time(start, end)
+    lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
+    return (lowest1 + lowest2)/2
 
-create_terminal_table(elapsed_time, all_labels, all_predictions)
-upload_to_neptune('erik-everett-palm/Tomics-Models',
-                    file_name = file_name,
-                    model_name = model_name,
-                    normalize = "False",
-                    yn_class_weights = yn_class_weights,
-                    learning_rate = learning_rate, 
-                    elapsed_time = elapsed_time, 
-                    num_epochs = num_epochs,
-                    loss_fn = loss_function,
-                    all_labels = all_labels,
-                    all_predictions = all_predictions,
-                    dict_moa = dict_moa,
-                    val_vs_train_loss_path = val_vs_train_loss_path,
-                    val_vs_train_acc_path = val_vs_train_acc_path,
-                    loss_fn_train = loss_fn_train)
+study = optuna.create_study(direction='minimize')
+study.optimize(lambda trial: objectiv(trial, num_feat = 978, 
+                                      num_classes = num_classes, 
+                                      training_generator= train_generator, 
+                                      validation_generator = valid_generator,
+                                      testing_generator = test_generator), 
+                                      n_trials=100)
+print("Number of finished trials: {}".format(len(study.trials)))
+print(study.best_params)
+print(study.best_value)
+
+f = open("/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/" + model_name + '_' + now +'_best_params.txt',"w")
+# write file
+f.write(model_name)
+f.write("Best Parameters: " + str(study.best_params))
+f.write("Best Value: " + str(study.best_value))
+# close file
+f.close()

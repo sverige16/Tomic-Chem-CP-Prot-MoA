@@ -51,6 +51,8 @@ import datetime
 import time
 import math
 import cv2 
+import re
+import heapq
 
 # ---------------------------------------------- data loading ----------------------------------------------#
 # ----------------------------------------------------------------------------------------------------------#
@@ -491,59 +493,55 @@ def acquire_npy(dataset, subset_data):
     '''
     path = '/scratch2-shared/erikep/data_splits_npy'
     if dataset == 'train':
-        #filename = input('Give name of npy file (str): ')
-        #npy_set = np.load(path + filename)
-        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_my10_train.npy', allow_pickle=True)
-        #npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/nv_cyc_adrtrain.npy', allow_pickle=True)
         if subset_data == "erik10":            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_train.npy', allow_pickle=True)
         elif subset_data == "erik10_hq":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_train.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_erik10_hq_train.npy', allow_pickle=True)
         elif subset_data == "erik10_8_12":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_8_12_train.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_erik10_8_12_train.npy', allow_pickle=True)
         elif subset_data == "erik10_hq_8_12":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_8_12_train.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_erik10_hq_8_12_train.npy', allow_pickle=True)
         elif subset_data == "tian10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_train.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_tian10_train.npy', allow_pickle=True)
         elif subset_data == "cyc_adr":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_train.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_cyc_adr_train.npy', allow_pickle=True)
         elif subset_data == "cyc_dop":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_train.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_cyc_dop_train.npy', allow_pickle=True)
         else: 
             raise ValueError("subset_data must be either erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, tian10, cyc_adr or cyc_dop")  
         
     elif dataset == 'val':
         if subset_data == "erik10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_val.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_erik10_val.npy', allow_pickle=True)
         elif subset_data == "erik10_hq":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_val.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_erik10_hq_val.npy', allow_pickle=True)
         elif subset_data == "erik10_8_12":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_8_12_val.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_erik10_8_12_val.npy', allow_pickle=True)
         elif subset_data == "erik10_hq_8_12":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_8_12_val.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_erik10_hq_8_12_val.npy', allow_pickle=True)
         elif subset_data == "tian10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_val.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_tian10_val.npy', allow_pickle=True)
         elif subset_data == "cyc_adr":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_val.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_cyc_adr_val.npy', allow_pickle=True)
         elif subset_data == "cyc_dop":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_val.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_cyc_dop_val.npy', allow_pickle=True)
         else: 
             raise ValueError("subset_data must be either erik10, tian10, cyc_adr or cyc_dop")  
     
     elif dataset == 'test':
         if subset_data == "erik10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_test.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_erik10_test.npy', allow_pickle=True)
         elif subset_data == "erik10_hq":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_test.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_erik10_hq_test.npy', allow_pickle=True)
         elif subset_data == "erik10_8_12":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_8_12_test.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_erik10_8_12_test.npy', allow_pickle=True)
         elif subset_data == "erik10_hq_8_12":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/erik10_hq_8_12_test.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_erik10_hq_8_12_test.npy', allow_pickle=True)
         elif subset_data == "tian10":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/tian10_test.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_tian10_test.npy', allow_pickle=True)
         elif subset_data == "cyc_adr":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_adr_test.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_cyc_adr_test.npy', allow_pickle=True)
         elif subset_data == "cyc_dop":
-            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/cyc_dop_test.npy', allow_pickle=True)
+            npy_set = np.load('/scratch2-shared/erikep/data_splits_npy/_cyc_dop_test.npy', allow_pickle=True)
         else: 
             raise ValueError("subset_data must be either erik10, tian10, cyc_adr or cyc_dop")  
     else:
@@ -863,7 +861,16 @@ def channel_5_numpy(df, idx, pd_image_norm):
     return five_chan_img
 
 def accessing_correct_fold_csv_files(file):
- # download csvs with all the data pre split
+    '''
+    This function returns the correct, fold-0 train, valid and test split data csvs given a file name
+    Input:
+        file: the name of the file (type = string)
+    Output:
+        training_set: the training set (type = pandas dataframe)
+        validation_set: the validation set (type = pandas dataframe)
+        test_set: the test set (type = pandas dataframe)
+    '''
+ # download csvs with all the data pre split''
     if file == 'tian10':
         dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
         train_filename = 'tian10_clue_train_fold_0.csv'
@@ -871,9 +878,9 @@ def accessing_correct_fold_csv_files(file):
         test_filename = 'tian10_clue_test_fold_0.csv'
     elif file == 'tian10_all':
         dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
-        train_filename = 'tian10_all_train_fold_0.csv'
-        val_filename = 'tian10_all_val_fold_0.csv'
-        test_filename = 'tian10_all_test_fold_0.csv'
+        train_filename = 'tian10_all_train_fold_1.csv'
+        val_filename = 'tian10_all_val_fold_1.csv'
+        test_filename = 'tian10_all_test_fold_1.csv'
     elif file == 'erik10':
         dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
         train_filename = 'erik10_clue_train_fold_0.csv'
@@ -915,6 +922,220 @@ def accessing_correct_fold_csv_files(file):
     training_set, validation_set, test_set =  load_train_valid_data(dir_path, train_filename, val_filename, test_filename)
     return training_set, validation_set, test_set
 
+def accessing_all_folds_csv(file, fold_int):
+    ''' 
+    This functions returns the training, validation and test sets for a given file and fold number
+    Input:
+        file: the name of the file (type = string)
+        fold_int: the fold number (type = int)
+    Output:
+        training_set: the training set (type = pandas dataframe)
+        validation_set: the validation set (type = pandas dataframe)
+        test_set: the test set (type = pandas dataframe)'''
+    if file == 'tian10':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
+        if fold_int == 0:
+            train_filename = 'tian10_clue_train_fold_0.csv'
+            val_filename = 'tian10_clue_val_fold_0.csv'
+            test_filename = 'tian10_clue_test_fold_0.csv'
+        elif fold_int == 1:
+            train_filename = 'tian10_clue_train_fold_1.csv'
+            val_filename = 'tian10_clue_val_fold_1.csv'
+            test_filename = 'tian10_clue_test_fold_1.csv'
+        elif fold_int == 2:
+            train_filename = 'tian10_clue_train_fold_2.csv'
+            val_filename = 'tian10_clue_val_fold_2.csv'
+            test_filename = 'tian10_clue_test_fold_2.csv'
+        elif fold_int == 3:
+            train_filename = 'tian10_clue_train_fold_3.csv'
+            val_filename = 'tian10_clue_val_fold_3.csv'
+            test_filename = 'tian10_clue_test_fold_3.csv'
+        else:
+            train_filename = 'tian10_clue_train_fold_4.csv'
+            val_filename = 'tian10_clue_val_fold_4.csv'
+            test_filename = 'tian10_clue_test_fold_4.csv'
+    elif file == 'tian10_all':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
+        if fold_int ==0:
+            train_filename = 'tian10_all_train_fold_0.csv'
+            val_filename = 'tian10_all_val_fold_0.csv'
+            test_filename = 'tian10_all_test_fold_0.csv'
+        elif fold_int == 1:
+            train_filename = 'tian10_all_train_fold_1.csv'
+            val_filename = 'tian10_all_val_fold_1.csv'
+            test_filename = 'tian10_all_test_fold_1.csv'
+        elif fold_int == 2:
+            train_filename = 'tian10_all_train_fold_2.csv'
+            val_filename = 'tian10_all_val_fold_2.csv'
+            test_filename = 'tian10_all_test_fold_2.csv'
+        elif fold_int == 3:
+            train_filename = 'tian10_all_train_fold_3.csv'
+            val_filename = 'tian10_all_val_fold_3.csv'
+            test_filename = 'tian10_all_test_fold_3.csv'
+        else:
+            train_filename = 'tian10_all_train_fold_4.csv'
+            val_filename = 'tian10_all_val_fold_4.csv'
+            test_filename = 'tian10_all_test_fold_4.csv'
+    elif file == 'erik10':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        if fold_int ==0:
+            train_filename = 'erik10_clue_train_fold_0.csv'
+            val_filename = 'erik10_clue_val_fold_0.csv'
+            test_filename = 'erik10_clue_test_fold_0.csv'
+        elif fold_int == 1:
+            train_filename = 'erik10_clue_train_fold_1.csv'
+            val_filename = 'erik10_clue_val_fold_1.csv'
+            test_filename = 'erik10_clue_test_fold_1.csv'
+        elif fold_int == 2:
+            train_filename = 'erik10_clue_train_fold_2.csv'
+            val_filename = 'erik10_clue_val_fold_2.csv'
+            test_filename = 'erik10_clue_test_fold_2.csv'
+        elif fold_int == 3:
+            train_filename = 'erik10_clue_train_fold_3.csv'
+            val_filename = 'erik10_clue_val_fold_3.csv'
+            test_filename = 'erik10_clue_test_fold_3.csv'
+        else:
+            train_filename = 'erik10_clue_train_fold_4.csv'
+            val_filename = 'erik10_clue_val_fold_4.csv'
+            test_filename = 'erik10_clue_test_fold_4.csv'
+    elif file == 'erik10_all':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        if fold_int ==0:
+            train_filename = 'erik10_all_train_fold_0.csv'
+            val_filename = 'erik10_all_val_fold_0.csv'
+            test_filename = 'erik10_all_test_fold_0.csv'
+        elif fold_int == 1:
+            train_filename = 'erik10_all_train_fold_1.csv'
+            val_filename = 'erik10_all_val_fold_1.csv'
+            test_filename = 'erik10_all_test_fold_1.csv'
+        elif fold_int == 2:
+            train_filename = 'erik10_all_train_fold_2.csv'
+            val_filename = 'erik10_all_val_fold_2.csv'
+            test_filename = 'erik10_all_test_fold_2.csv'
+        elif fold_int == 3:
+            train_filename = 'erik10_all_train_fold_3.csv'
+            val_filename = 'erik10_all_val_fold_3.csv'
+            test_filename = 'erik10_all_test_fold_3.csv'
+        else:
+            train_filename = 'erik10_all_train_fold_4.csv'
+            val_filename = 'erik10_all_val_fold_4.csv'
+            test_filename = 'erik10_all_test_fold_4.csv'
+    elif file == 'erik10_hq':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        if fold_int ==0:
+            train_filename = 'erik10_clue_hq_train_fold_0.csv'
+            val_filename = 'erik10_clue_hq_val_fold_0.csv'
+            test_filename = 'erik10_clue_hq_test_fold_0.csv'
+        elif fold_int == 1:
+            train_filename = 'erik10_clue_hq_train_fold_1.csv'
+            val_filename = 'erik10_clue_hq_val_fold_1.csv'
+            test_filename = 'erik10_clue_hq_test_fold_1.csv'
+        elif fold_int == 2:
+            train_filename = 'erik10_clue_hq_train_fold_2.csv'
+            val_filename = 'erik10_clue_hq_val_fold_2.csv'
+            test_filename = 'erik10_clue_hq_test_fold_2.csv'
+        elif fold_int == 3:
+            train_filename = 'erik10_clue_hq_train_fold_3.csv'
+            val_filename = 'erik10_clue_hq_val_fold_3.csv'
+            test_filename = 'erik10_clue_hq_test_fold_3.csv'
+        else:
+            train_filename = 'erik10_clue_hq_train_fold_4.csv'
+            val_filename = 'erik10_clue_hq_val_fold_4.csv'
+            test_filename = 'erik10_clue_hq_test_fold_4.csv'
+    elif file == 'erik10_8_12':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        if fold_int ==0:
+            train_filename = 'erik10_clue_8_12__train_fold_0.csv'
+            val_filename = 'erik10_clue_8_12__val_fold_0.csv'
+            test_filename = 'erik10_clue_8_12__test_fold_0.csv'
+        elif fold_int == 1:
+            train_filename = 'erik10_clue_8_12__train_fold_1.csv'
+            val_filename = 'erik10_clue_8_12__val_fold_1.csv'
+            test_filename = 'erik10_clue_8_12__test_fold_1.csv'
+        elif fold_int == 2:
+            train_filename = 'erik10_clue_8_12__train_fold_2.csv'
+            val_filename = 'erik10_clue_8_12__val_fold_2.csv'
+            test_filename = 'erik10_clue_8_12__test_fold_2.csv'
+        elif fold_int == 3:
+            train_filename = 'erik10_clue_8_12__train_fold_3.csv'
+            val_filename = 'erik10_clue_8_12__val_fold_3.csv'
+            test_filename = 'erik10_clue_8_12__test_fold_3.csv'
+        else:
+            train_filename = 'erik10_clue_8_12__train_fold_4.csv'
+            val_filename = 'erik10_clue_8_12__val_fold_4.csv'
+            test_filename = 'erik10_clue_8_12__test_fold_4.csv'
+    elif file == 'erik10_hq_8_12':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        if fold_int ==0:
+            train_filename = 'erik10_clue_hq_8_12__train_fold_0.csv'
+            val_filename = 'erik10_clue_hq_8_12__val_fold_0.csv'
+            test_filename = 'erik10_clue_hq_8_12__test_fold_0.csv'
+        elif fold_int == 1:
+            train_filename = 'erik10_clue_hq_8_12__train_fold_1.csv'
+            val_filename = 'erik10_clue_hq_8_12__val_fold_1.csv'
+            test_filename = 'erik10_clue_hq_8_12__test_fold_1.csv'
+        elif fold_int == 2:
+            train_filename = 'erik10_clue_hq_8_12__train_fold_2.csv'
+            val_filename = 'erik10_clue_hq_8_12__val_fold_2.csv'
+            test_filename = 'erik10_clue_hq_8_12__test_fold_2.csv'
+        elif fold_int == 3:
+            train_filename = 'erik10_clue_hq_8_12__train_fold_3.csv'
+            val_filename = 'erik10_clue_hq_8_12__val_fold_3.csv'
+            test_filename = 'erik10_clue_hq_8_12__test_fold_3.csv'
+        else:
+            train_filename = 'erik10_clue_hq_8_12__train_fold_4.csv'
+            val_filename = 'erik10_clue_hq_8_12__val_fold_4.csv'
+            test_filename = 'erik10_clue_hq_8_12__test_fold_4.csv'
+    elif file == 'cyc_adr':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
+        if fold_int ==0:
+            train_filename = 'cyc_adr_clue_train_fold_0.csv'
+            val_filename = 'cyc_adr_clue_val_fold_0.csv'
+            test_filename = 'cyc_adr_clue_test_fold_0.csv'
+        elif fold_int == 1:
+            train_filename = 'cyc_adr_clue_train_fold_1.csv'
+            val_filename = 'cyc_adr_clue_val_fold_1.csv'
+            test_filename = 'cyc_adr_clue_test_fold_1.csv'
+        elif fold_int == 2:
+            train_filename = 'cyc_adr_clue_train_fold_2.csv'
+            val_filename = 'cyc_adr_clue_val_fold_2.csv'
+            test_filename = 'cyc_adr_clue_test_fold_2.csv'
+        elif fold_int == 3:
+            train_filename = 'cyc_adr_clue_train_fold_3.csv'
+            val_filename = 'cyc_adr_clue_val_fold_3.csv'
+            test_filename = 'cyc_adr_clue_test_fold_3.csv'
+        else:
+            train_filename = 'cyc_adr_clue_train_fold_4.csv'
+            val_filename = 'cyc_adr_clue_val_fold_4.csv'
+            test_filename = 'cyc_adr_clue_test_fold_4.csv'
+    elif file == 'cyc_dop':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_dop/'
+        if fold_int ==0:
+            train_filename = 'cyc_dop_clue_train_fold_0.csv'
+            val_filename = 'cyc_dop_clue_val_fold_0.csv'
+            test_filename = 'cyc_dop_clue_test_fold_0.csv'
+        elif fold_int == 1:
+            train_filename = 'cyc_dop_clue_train_fold_1.csv'
+            val_filename = 'cyc_dop_clue_val_fold_1.csv'
+            test_filename = 'cyc_dop_clue_test_fold_1.csv'
+        elif fold_int == 2:
+            train_filename = 'cyc_dop_clue_train_fold_2.csv'
+            val_filename = 'cyc_dop_clue_val_fold_2.csv'
+            test_filename = 'cyc_dop_clue_test_fold_2.csv'
+        elif fold_int == 3:
+            train_filename = 'cyc_dop_clue_train_fold_3.csv'
+            val_filename = 'cyc_dop_clue_val_fold_3.csv'
+            test_filename = 'cyc_dop_clue_test_fold_3.csv'
+        else:
+            train_filename = 'cyc_dop_clue_train_fold_4.csv'
+            val_filename = 'cyc_dop_clue_val_fold_4.csv'
+            test_filename = 'cyc_dop_clue_test_fold_4.csv'
+    else:
+        raise ValueError('Please enter a valid file name')
+
+    training_set, validation_set, test_set =  load_train_valid_data(dir_path, train_filename, val_filename, test_filename)
+    return training_set, validation_set, test_set
+
 def checking_veracity_of_data(file, L1000_training, L1000_validation, L1000_test):
     """
     This function checks the number of profiles and unique compounds in the data set. 
@@ -935,7 +1156,7 @@ def checking_veracity_of_data(file, L1000_training, L1000_validation, L1000_test
     """
     all_profiles = pd.concat([L1000_training, L1000_validation, L1000_test])
     if file == 'tian10':
-        assert all_profiles.shape[0] == 13460, 'Incorrect number of profiles'
+        assert all_profiles.shape[0] == 13660, 'Incorrect number of profiles'
         assert all_profiles["Compound ID"].nunique() == 121, 'Incorrect number of unique compounds'
     elif file == 'erik10':
         assert all_profiles.shape[0] == 18042, 'Incorrect number of profiles'
@@ -960,11 +1181,27 @@ def checking_veracity_of_data(file, L1000_training, L1000_validation, L1000_test
     print("passed veracity test!")
 
 def label_smoothing(labels, smooth_factor, num_classes):
+    '''
+    Applies label smoothing to labels
+    Inputs:
+        labels: tensor, labels
+        smooth_factor: float, smoothing factor
+        num_classes: int, number of target classes
+    Returns:
+        labels: tensor, smoothed labels
+    '''
     labels = (1 - smooth_factor) * labels + smooth_factor / num_classes
     return labels
 
 def create_terminal_table(elapsed_time, all_labels, all_predictions):
-    '''Creates table for terminal output displaying test set accuracy and F1 score'''
+    '''Creates table for terminal output displaying test set accuracy and F1 score
+    Inputs:
+        elapsed_time: float, time to run program
+        all_labels: list, list of all labels
+        all_predictions: list, list of all predictions
+    Returns:
+        None
+    '''
     table = [["Time to Run Program", elapsed_time],
     ['Accuracy of Test Set', accuracy_score(all_labels, all_predictions)],
     ['F1 Score of Test Set', f1_score(all_labels, all_predictions, average='macro')]]
@@ -974,23 +1211,41 @@ def upload_to_neptune(neptune_project_name,
                     file_name, 
                     model_name,
                     normalize,
-                    yn_class_weights, 
-                    learning_rate, 
+                    yn_class_weights,  
                     elapsed_time, 
-                    num_epochs,
-                    loss_fn,
                     all_labels,
                     all_predictions,
                     dict_moa,
-                    val_vs_train_loss_path,
-                    val_vs_train_acc_path,
-                    init_learning_rate,
+                    loss_fn = False,
+                    num_epochs = False,
+                    learning_rate = False,
+                    val_vs_train_loss_path = False,
+                    val_vs_train_acc_path = False,
                     variance_thresh = False,
                     pixel_size = False,
                     loss_fn_train = False, 
                     learning_rate_scheduler = 'default'):
     '''
     This function uploads the results of the model to Neptune.ai
+
+    Inputs:
+        neptune_project_name: string, name of the project in Neptune.ai
+        file_name: string, name of the data set used
+        model_name: string, name of the model used
+        normalize: boolean, whether or not the data was normalized using QuauntileTransformer
+        yn_class_weights: boolean, whether or not class weights were used
+        learning_rate: float, initial learning rate used
+        elapsed_time: float, time it took to run the model
+        num_epochs: int, number of epochs used
+        loss_fn: string, name of the loss function used
+        all_labels: list, list of all the labels
+        all_predictions: list, list of all the predictions
+        dict_moa: dictionary, dictionary of the MoA classes associated with one hot encoding
+        val_vs_train_loss_path: string, path to the plot of the validation vs training loss
+        val_vs_train_acc_path: string, path to the plot of the validation vs training accuracy
+        variance_thresh: float, variance threshold used for feature selection
+        pixel_size: int, pixel size used for DeepInsight or Cell Painting
+        loss_fn_train: string, name of the loss function used for training, specifically for label smoothing
     '''
     run = neptune.init_run(project= neptune_project_name, api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
     run['model'] = model_name
@@ -1001,41 +1256,87 @@ def upload_to_neptune(neptune_project_name,
     run['parameters/normalize'] = normalize
     run['parameters/variance_threshold'] = variance_thresh
     run['parameters/class_weight'] = yn_class_weights
-    run['parameters/learning_rate'] = learning_rate
-    run['parameters/loss_fn_train'] = str(loss_fn_train)
-    run['parameters/loss_function'] = str(loss_fn)
-    run['parameters/init_learning_rate'] = init_learning_rate
-    run['parameters/learning_rate_scheduler'] = learning_rate_scheduler
-    run['parameters/pixel_size'] = pixel_size
+    if learning_rate:
+        run['parameters/learning_rate'] = learning_rate
+    if loss_fn_train:
+        run['parameters/loss_fn_train'] = str(loss_fn_train)
+    if loss_fn:
+        run['parameters/loss_function'] = str(loss_fn)
+    if learning_rate_scheduler:
+        run['parameters/learning_rate_scheduler'] = learning_rate_scheduler
+    if pixel_size:
+        run['parameters/pixel_size'] = pixel_size
     
-    # Uploading validation metrics
-    state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name)
-    run['metrics/f1_score'] = state["f1_score"]
-    run['metrics/accuracy'] = state["accuracy"]
-    run['metrics/loss'] = state["valid_loss"]
 
     # length of time to train model
     run['metrics/time'] = elapsed_time
-    run['metrics/epochs'] = num_epochs
+    if num_epochs:
+        run['metrics/epochs'] = num_epochs
 
     # Uploading test Metrics
     run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
     run['metrics/test_accuracy'] = accuracy_score(all_labels, all_predictions)
 
+    # Upload loss and accuracy plots
+    if val_vs_train_loss_path:
+        run["images/loss"].upload(val_vs_train_loss_path)
+    if val_vs_train_acc_path:
+        run["images/accuracy"].upload(val_vs_train_acc_path) 
+
+    if val_vs_train_acc_path or val_vs_train_acc_path:
+         # Upload model
+        run["optimal_model_checkpoint"].upload('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt')
+         # Uploading validation metrics
+        state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt')
+        run['metrics/f1_score'] = state["f1_score"]
+        run['metrics/accuracy'] = state["accuracy"]
+        run['metrics/loss'] = state["valid_loss"]
+
     conf_matrix_and_class_report(all_labels, all_predictions, model_data_subset, dict_moa)
 
-    # Upload loss and accuracy plots
-    run["images/loss"].upload(val_vs_train_loss_path)
-    run["images/accuracy"].upload(val_vs_train_acc_path) 
-
-    # Upload classification info
+        # Upload classification info
     run["files/classif_info"].upload('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/class_info.txt')
     run["images/conf_matrix"].upload('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/conf_matrix.png')
 
-    # Upload model
-    run["optimal_model_checkpoint"].upload('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name)
+def set_bool_hqdose(file_name):
+    '''Sets boolean values for hq and dose
+    Inputs:
+        file_name: string, name of the data set used
+    Returns:
+        hq: boolean, whether or not the data set being used only has high quality profiles
+        dose: boolean, whether or not the data set being used only has dose within 8 - 12'''
+    hq, dose = 'False', 'False'
+    if re.search('hq', file_name):
+        hq = 'True'
+    if re.search('8', file_name):
+        dose = 'True'
+    return hq, dose
+    
+def set_bool_npy(variance_thresh, normalize_c):
+    '''Sets boolean values for npy_exists and save_npy
+    Inputs:
+        variance_thresh: float, variance threshold used for feature selection
+        normalize_c: boolean, whether or not the data was normalized using QuantileTransformer
+    Returns:
+        npy_exists: boolean, whether or not the npy file exists
+        save_npy: boolean, whether or not to save the npy file'''
+    if variance_thresh > 0 or normalize_c == 'True':
+        npy_exists = False
+        save_npy = False    
+    else:
+        npy_exists = True
+        save_npy = False
+    return npy_exists, save_npy
 
-
+def find_two_lowest_numbers(lst):
+    '''Find the two lowest numbers in a list. Idea is to find the two lowest validation losses and
+    divide by two to make sure some random drop in validation loss is not a better model
+    than some other model that has a lower average validation loss.
+    Input: 
+        lst: list of numbers
+    Output: 
+        lowest1, lowest2: two lowest numbers in the list'''
+    return heapq.nsmallest(2, lst)
 
 
 

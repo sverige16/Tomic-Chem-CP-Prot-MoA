@@ -58,6 +58,7 @@ from Erik_alll_helper_functions import apply_class_weights, accessing_correct_fo
 from Erik_alll_helper_functions import dict_splitting_into_tensor, extract_tprofile, EarlyStopper, val_vs_train_loss
 from Erik_alll_helper_functions import val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
 from Erik_alll_helper_functions import tprofiles_gc_too_func, create_terminal_table, upload_to_neptune
+from Erik_alll_helper_functions import set_bool_hqdose, set_boo_npy
 
 
 
@@ -132,11 +133,7 @@ print(f'Training on device {device}. ' )
 file_name = "erik10_hq_8_12"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
 training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
-hq, dose = 'False', 'False'
-if re.search('hq', file_name):
-    hq = 'True'
-if re.search('8', file_name):
-    dose = 'True'
+hq, dose = set_bool_hqdose(file_name)
 L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
 dict_moa = dict_splitting_into_tensor(training_set)
@@ -168,40 +165,16 @@ num_classes = len(L1000_training["moa"].unique())
 
 
 
-# In[48]:
-
-# In[49]:
-
-
-# generator: training
-# create a subset with only train indices
-
 # create generator that randomly takes indices from the training set
 training_dataset = Transcriptomic_Profiles(profiles_gc_too_train, L1000_training, dict_moa)
-
-
-
 training_generator = torch.utils.data.DataLoader(training_dataset, **params)
-
-
-# In[50]:
-
-
-# generator: validation
-# create a subset with only valid indices
 
 # create generator that randomly takes indices from the validation set
 validation_dataset = Transcriptomic_Profiles(profiles_gc_too_valid, L1000_validation, dict_moa)
-
-
-
 validation_generator = torch.utils.data.DataLoader(validation_dataset, **params)
 
 test_dataset = Transcriptomic_Profiles(profiles_gc_too_test, L1000_test, dict_moa)
 test_generator = torch.utils.data.DataLoader(test_dataset, **params)
-
-
-
 
 
 class CNN_Model(nn.Module):
@@ -450,7 +423,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss, loss_fn_train):
 
 
 
-def test_loop(model, loss_fn, test_loader):
+def test_loop(model, loss_fn, test_loader, loss_fn_train):
     '''
     Assessing trained model on test dataset 
     model: deep learning architecture getting updated by model
@@ -477,7 +450,10 @@ def test_loop(model, loss_fn, test_loader):
             outputs = model(compounds)
             # print(f' Outputs : {outputs}') # tensor with 10 elements
             # print(f' Labels : {labels}') # tensor that is a number
-            loss = loss_fn(outputs,labels)
+            if loss_fn_train != "false":
+                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+            else:
+                loss = loss_fn(outputs,labels)
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
             #labels = torch.argmax(labels,1)
@@ -507,7 +483,8 @@ model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_mod
 #----------------------------------------- Assessing model on test data -----------------------------------------#
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = model_test,
                                           loss_fn = loss_fn, 
-                                          test_loader = test_generator)
+                                          test_loader = test_generator,
+                                          loss_fn_train = loss_fn_train)
 
 
 

@@ -38,7 +38,6 @@ from Erik_alll_helper_functions import apply_class_weights, create_terminal_tabl
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
-testing = False # decides if we take a subset of the data
 max_epochs = 1000 # number of epochs we are going to run 
 #apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
@@ -82,11 +81,6 @@ class Dataset(torch.utils.data.Dataset):
         return compound_array.float(), label_tensor.long() # returns the image and the correct label
 
 #---------------------------------------------------------------------------------------------------------------------------------------#
-
-now = datetime.datetime.now()
-now = now.strftime("%d_%m_%Y-%H:%M:%S")
-
-
 # # Pseudo Code
 # 1. download train, validation and test data
 # 2. keep only columns with relevant data (compound name, smile strings, moa)
@@ -199,7 +193,7 @@ from ols import OnlineLabelSmoothing
 loss_fn_train = OnlineLabelSmoothing(alpha = 0.5, n_classes=num_classes, smoothing = 0.05 ).to(device=device)
 #optimizer = torch.optim.Adam(seq_model.parameters(), lr = learning_rate)
 
-def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_loader, valid_loader):
+def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader, loss_fn_train = "false"):
     '''
     n_epochs: number of epochs 
     optimizer: optimizer used to do backpropagation
@@ -221,6 +215,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
         train_total = 0
         train_correct = 0
         loss_fn_train.train()
+        if loss_fn_train != "false":
+            loss_fn_train.train()
         for tprofiles, labels in train_loader:
             optimizer.zero_grad()
             # put model, images, labels on the same device
@@ -228,8 +224,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
             labels = labels.to(device= device)
             # Training Model
             outputs = model(tprofiles)
-            #print(f' Outputs : {outputs}') # tensor with 10 elements
-            #print(f' Labels : {labels}') # tensor that is a number
+            # Loss function
             loss = loss_fn_train(outputs,torch.max(labels, 1)[1])
             # For L2 regularization
             l2_lambda = 0.000001
@@ -245,10 +240,10 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
             #print(f' train_predicted {train_predicted}')
             # NEW
             #labels = torch.argmax(labels,1)
-            #print(labels)
             train_total += labels.shape[0]
             train_correct += int((train_predicted == torch.max(labels, 1)[1]).sum())
-        loss_fn_train.eval()
+        if loss_fn_train != "false":
+            loss_fn_train.eval()
         # validation metrics from batch
         val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
         best_val_loss = best_val_loss_upd
@@ -260,7 +255,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
-        loss_fn_train.next_epoch()
+        if loss_fn_train != "false":
+            loss_fn_train.next_epoch()
     # return lists with loss, accuracy every epoch
         if early_stopper.early_stop(validation_loss = val_loss):             
                 break
@@ -313,7 +309,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'weighted'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss
@@ -374,7 +370,7 @@ model_test = nn.Sequential(
     nn.Linear(128,64),
     nn.ReLU(),
     nn.Linear(64, num_classes))
-model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name)['model_state_dict'])
+model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt')['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = seq_model,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator)
@@ -386,9 +382,6 @@ val_vs_train_acc_path = val_vs_train_accuracy(num_epochs, train_acc_per_epoch, v
 
 
 #-------------------------------- Writing interesting info into terminal ----------------------------------# 
-end = time.time()
-
-elapsed_time = program_elapsed_time(start, end)
 end = time.time()
 
 elapsed_time = program_elapsed_time(start, end)

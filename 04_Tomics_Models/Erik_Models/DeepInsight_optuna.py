@@ -100,11 +100,11 @@ nn._estimator_type = "classifier"
 
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-from Erik_alll_helper_functions import (apply_class_weights, accessing_correct_fold_csv_files, create_splits, extract_tprofile,
-                                        checking_veracity_of_data, LogScaler, EarlyStopper, val_vs_train_loss,
-                                        val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report,
-                                        pre_processing, create_terminal_table, upload_to_neptune, dict_splitting_into_tensor,
-                                        tprofiles_gc_too_func, set_bool_npy, set_bool_hqdose)
+from Erik_alll_helper_functions import apply_class_weights, accessing_correct_fold_csv_files, create_splits
+from Erik_alll_helper_functions import checking_veracity_of_data, LogScaler, EarlyStopper, val_vs_train_loss
+from Erik_alll_helper_functions import val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
+from Erik_alll_helper_functions import pre_processing, create_terminal_table, upload_to_neptune
+
 start = time.time()
 now = datetime.datetime.now()
 now = now.strftime("%d_%m_%Y-%H:%M:%S")
@@ -128,7 +128,11 @@ normalize = input("Would you like to normalize the data? (Options: True, False):
 file_name = "erik10_hq_8_12"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
 training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
-hq, dose = set_bool_hqdose(file_name)
+hq, dose = 'False', 'False'
+if re.search('hq', file_name):
+    hq = 'True'
+if re.search('8', file_name):
+    dose = 'True'
 L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
 checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
@@ -136,7 +140,13 @@ checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_tes
 #normalize_c = input("Normalize? (Options: True, False): ")
 variance_thresh = 0
 normalize_c = 'False'
-npy_exists, save_npy = set_bool_npy(variance_thresh, normalize_c)
+if variance_thresh > 0 or normalize_c == 'True':
+    npy_exists = False
+    save_npy = False
+else:
+    npy_exists = True
+    save_npy = False
+
 df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
         clue_gene, 
         npy_exists = npy_exists,
@@ -151,11 +161,11 @@ df_train_labels = df_train_labels["moa"]
 df_val_labels = df_val_labels["moa"]
 df_test_labels = df_test_labels["moa"]
 
-X_train = df_train_features.values.astype(np.float32)
-X_val = df_val_features.values.astype(np.float32)
+X_train = df_train_features.values
+X_val = df_val_features.values
 y_train = df_train_labels.values
 y_val = df_val_labels.values
-X_test = df_test_features.values.astype(np.float32)
+X_test = df_test_features.values
 y_test = df_test_labels.values
 
 
@@ -204,12 +214,7 @@ X_train_img = it.transform(X_train_norm)
 X_val_img = it.transform(X_val_norm)
 X_test_img = it.transform(X_test_norm)
 
-
-# In[43]:
-
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 
 import torchvision.models as models
 
@@ -222,9 +227,9 @@ X_train_tensor = torch.stack([preprocess(img) for img in X_train_img]).float()
 y_train_tensor = df_train_labels
 X_val_tensor = torch.stack([preprocess(img) for img in X_val_img]).float()
 y_val_tensor = df_val_labels
-
 X_test_tensor = torch.stack([preprocess(img) for img in X_test_img]).float()
 y_test_tensor = df_test_labels
+
 class Reducer_profiles(torch.utils.data.Dataset):
     def __init__(self, X, y, dict_moa):
         self.X = X
@@ -678,51 +683,79 @@ def test_loop(model, loss_fn, test_loader):
         avg_test_loss = loss_test/len(test_loader)  # average loss over batch
     return correct, total, avg_test_loss, all_predictions, all_labels
 
+def define_model(trial, num_feat, num_classes):
+    # optimizing hidden layers, hidden units and drop out ratio
+    n_layers = trial.suggest_int('n_layers', 1, 4)
+    layers = []
+    in_features = num_feat
+    for i in range(n_layers):
+        out_features = trial.suggest_int('n_units_l{}'.format(i), 4, 128)
+        layers.append(nn.Linear(in_features, out_features))
+        layers.append(nn.LeakyReLU())
+        layers.append(nn.BatchNorm1d(out_features))
+        p = trial.suggest_float('dropout_l{}'.format(i), 0.2, 0.5)
+        layers.append(nn.Dropout(p))
+        in_features = out_features
+    layers.append(nn.Linear(out_features, num_classes))
+    return nn.Sequential(*layers)
 
-#------------------------------   Calling functions --------------------------- #
-train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
-              optimizer = optimizer,
-              model = DI_model,
-              loss_fn_train= loss_fn_train,
-              loss_fn = loss_fn,
-              train_loader= train_generator, 
-              valid_loader= valid_generator)
+def objectiv(trial, num_feat, num_classes, training_generator, validation_generator):
+    # generate the model
+    model = define_model(trial, num_feat, num_classes).to(device)
+    
+    # generate the optimizer
+    optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'RMSprop', 'SGD'])
+    lr = trial.suggest_float('lr', 1e-5, 1e-1, log=True)
+    optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
+    scheduler_name = trial.suggest_categorical("scheduler", ["StepLR", "ExponentialLR", "CosineAnnealingLR"])
+    if scheduler_name == "StepLR":
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_uniform("gamma", 0.1, 0.9))
+    elif scheduler_name == "ExponentialLR":
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=trial.suggest_float("gamma", 0.1, 0.9))
+    elif scheduler_name == "CosineAnnealingLR":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=trial.suggest_int("T_max", 5, 30))
 
-#--------------------------------- Assessing model on test data ------------------------------#
-updated_model_test = DI_model
-updated_model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + ".pt")['model_state_dict'])
-correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = updated_model_test,
-                                          loss_fn = loss_fn, 
-                                          test_loader = test_generator)
+    class_weights = apply_class_weights(training_set, device)
+    loss_fn = torch.nn.CrossEntropyLoss(class_weights)
 
-#---------------------------------------- Visual Assessment ---------------------------------# 
+    from ols import OnlineLabelSmoothing
+    loss_fn_train = OnlineLabelSmoothing(alpha = trial.suggest_float('alpha', 0.1, 0.9),
+                                          n_classes=num_classes, 
+                                          smoothing = trial.suggest_float('smoothing', 0.001, 0.3)).to(device=device)
 
-val_vs_train_loss_path = val_vs_train_loss(num_epochs, train_loss_per_epoch, val_loss_per_epoch, now, model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images') 
-val_vs_train_acc_path = val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
+    max_epochs = 1000
 
-# results_assessment(all_predictions, all_labels, moa_dict)
+    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
+                optimizer = optimizer,
+                model = model,
+                loss_fn = loss_fn,
+                loss_fn_train = loss_fn_train,
+                train_loader=training_generator, 
+                valid_loader=validation_generator,
+                my_lr_scheduler = scheduler)
+    
+  
+
+    lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
+    return (lowest1 + lowest2)/2
+
+study = optuna.create_study(direction='minimize')
+study.optimize(lambda trial: objectiv(trial, num_feat = 978, 
+                                      num_classes = num_classes, 
+                                      training_generator= training_generator, 
+                                      validation_generator = validation_generator), 
+                                      n_trials=50)
 
 #-------------------------------- Writing interesting info into terminal ------------------------# 
 
-end = time.time()
+print("Number of finished trials: {}".format(len(study.trials)))
+print(study.best_params)
+print(study.best_value)
 
-elapsed_time = program_elapsed_time(start, end)
-
-create_terminal_table(elapsed_time, all_labels, all_predictions)
-upload_to_neptune('erik-everett-palm/Tomics-Models',
-                    file_name = file_name,
-                    model_name = model_name,
-                    normalize = normalize_c,
-                    yn_class_weights = yn_class_weights,
-                    learning_rate = learning_rate, 
-                    elapsed_time = elapsed_time, 
-                    num_epochs = num_epochs,
-                    loss_fn = loss_fn,
-                    all_labels = all_labels,
-                    all_predictions = all_predictions,
-                    dict_moa = dict_moa,
-                    val_vs_train_loss_path = val_vs_train_loss_path,
-                    val_vs_train_acc_path = val_vs_train_acc_path,
-                    variance_thresh = variance_thresh,
-                    pixel_size = pixel_size,
-                    loss_fn_train = loss_fn_train)
+f = open("/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/" + model_name + '_' + now +'_best_params.txt',"w")
+# write file
+f.write(model_name)
+f.write("Best Parameters: " + str(study.best_params))
+f.write("Best Value: " + str(study.best_value))
+# close file
+f.close()
