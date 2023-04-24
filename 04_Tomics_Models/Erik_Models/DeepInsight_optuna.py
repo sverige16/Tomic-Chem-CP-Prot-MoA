@@ -213,7 +213,7 @@ print("Transforming...")
 X_train_img = it.transform(X_train_norm)
 X_val_img = it.transform(X_val_norm)
 X_test_img = it.transform(X_test_norm)
-
+'''
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 import torchvision.models as models

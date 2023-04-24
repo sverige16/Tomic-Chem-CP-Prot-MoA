@@ -60,7 +60,7 @@ from Erik_alll_helper_functions import apply_class_weights, accessing_correct_fo
 from Erik_alll_helper_functions import dict_splitting_into_tensor, extract_tprofile, EarlyStopper, val_vs_train_loss
 from Erik_alll_helper_functions import val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
 from Erik_alll_helper_functions import tprofiles_gc_too_func, create_terminal_table, upload_to_neptune
-from Erik_alll_helper_functions import set_bool_hqdose, set_bool_npy, find_two_lowest_numbers
+from Erik_alll_helper_functions import set_bool_hqdose, set_bool_npy, find_two_lowest_numbers, FocalLoss
 
 
 
@@ -85,7 +85,6 @@ clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_d
 def save_val(val_tensor, file_type):
     torch.save(val_tensor, '/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/pickles/val_order_pickles/' + file_type )
     print('Done writing binary file')
-
 
 class Transcriptomic_Profiles(torch.utils.data.Dataset):
     def __init__(self, gc_too, split, dict_moa):
@@ -265,7 +264,7 @@ class CNN_Model(nn.Module):
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
 testing = False # decides if we take a subset of the data
-max_epochs = 39 # number of epochs we are going to run 
+max_epochs = 250 # number of epochs we are going to run 
 # apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
@@ -315,6 +314,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
                 loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
             else:
                 loss = loss_fn(outputs,labels)
+                
             # For L2 regularization
             #l2_lambda = 0.000001
             #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
@@ -335,12 +335,11 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         if loss_fn_train != "false":
             loss_fn_train.eval()
         # validation metrics from batch
-        val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss, loss_fn_train)
+        val_correct, val_total, val_loss, best_val_loss_upd, val_f1_score = validation_loop(model, loss_fn, valid_loader, best_val_loss,loss_fn_train)
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
-        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, Accuracy: {val_accuracy}')
-       
+        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, F1 Score: {val_f1_score} ')
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
@@ -348,11 +347,11 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
         train_acc_per_epoch.append(train_correct/train_total)
         if loss_fn_train != "false":
             loss_fn_train.next_epoch()
-    # return lists with loss, accuracy every epoch
         if early_stopper.early_stop(validation_loss = val_loss):             
             break
-        my_lr_scheduler.step()
-    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
+    my_lr_scheduler.step()
+    # return lists with loss, accuracy every epoch
+    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch, val_f1_score
                                 
 
 def validation_loop(model, loss_fn, valid_loader, best_val_loss, loss_fn_train):
@@ -391,6 +390,8 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss, loss_fn_train):
             predict_proba.append(outputs)
             predictions.append(predicted)
         avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
+        pred_cpu = torch.cat(predictions).cpu()
+        labels_cpu =  torch.cat(all_labels).cpu()
         if best_val_loss > avg_val_loss:
             best_val_loss = avg_val_loss
             m = torch.nn.Softmax(dim=1)
@@ -404,10 +405,11 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss, loss_fn_train):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
             )
     model.train()
-    return correct, total, avg_val_loss, best_val_loss
+    return correct, total, avg_val_loss, best_val_loss,  f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro')
+
 
 
 
@@ -476,24 +478,24 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
     optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
     scheduler_name = trial.suggest_categorical("scheduler", ["StepLR", "ExponentialLR", "CosineAnnealingLR"])
     if scheduler_name == "StepLR":
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_uniform("gamma", 0.1, 0.9))
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_float("gamma", 0.1, 0.9))
     elif scheduler_name == "ExponentialLR":
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=trial.suggest_float("gamma", 0.1, 0.9))
     elif scheduler_name == "CosineAnnealingLR":
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=trial.suggest_int("T_max", 5, 30))
 
     class_weights = apply_class_weights(training_set, device)
-    loss_fn = torch.nn.CrossEntropyLoss(class_weights)
-
+    loss_fn = FocalLoss(alpha=trial.suggest_float('alpha', 0.1, 0.9), gamma=trial.suggest_float('gamma', 0.1, 0.9)).to(device=device)
+    loss_fn_train = 'false'
+    '''
     from ols import OnlineLabelSmoothing
     loss_fn_train = OnlineLabelSmoothing(alpha = trial.suggest_float('alpha', 0.1, 0.9),
                                           n_classes=num_classes, 
                                           smoothing = trial.suggest_float('smoothing', 0.001, 0.3)).to(device=device)
+    '''
 
-    max_epochs = 1000
-
-    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
-                optimizer = optimizer,
+    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs, val_f1_score = training_loop(n_epochs = max_epochs,
+                  optimizer = optimizer,
                 model = model,
                 loss_fn = loss_fn,
                 loss_fn_train = loss_fn_train,
@@ -504,6 +506,7 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
 
     lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
     return (lowest1 + lowest2)/2
+    #return val_f1_score
 
 study = optuna.create_study(direction='minimize')
 study.optimize(lambda trial: objectiv(trial, num_feat = 978, 
@@ -511,7 +514,7 @@ study.optimize(lambda trial: objectiv(trial, num_feat = 978,
                                       training_generator= training_generator, 
                                       validation_generator = validation_generator,
                                       testing_generator = test_generator), 
-                                      n_trials=100)
+                                      n_trials=150)
 print("Number of finished trials: {}".format(len(study.trials)))
 print(study.best_params)
 print(study.best_value)

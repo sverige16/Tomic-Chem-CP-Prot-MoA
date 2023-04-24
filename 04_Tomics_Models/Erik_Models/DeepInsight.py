@@ -1,8 +1,199 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[16]:
 
+from pyDeepInsight import ImageTransformer, Norm2Scaler
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.manifold import TSNE
+import pandas as pd
+import numpy as np
+# Import Statements
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split # Functipn to split data into training, validation and test sets
+from sklearn.metrics import classification_report, confusion_matrix
+import pickle
+import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
+import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
+import random       
+from tqdm import tqdm 
+from tqdm.notebook import tqdm_notebook
+import datetime
+import time
+from tabulate import tabulate
+
+# Torch
+import torch
+from torchvision import transforms
+import torchvision.models as models
+import torch.nn as nn
+# Neptune
+import neptune.new as neptune
+
+
+from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier, BaggingClassifier
+from sklearn.linear_model import RidgeClassifierCV
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis,  QuadraticDiscriminantAnalysis
+from sklearn.metrics import precision_recall_curve,log_loss, accuracy_score, f1_score, classification_report
+from sklearn.metrics import average_precision_score,roc_auc_score
+from sklearn.ensemble import VotingClassifier
+import os
+import time
+from time import time
+import datetime
+import pandas as pd
+import numpy as np
+#from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
+from skmultilearn.adapt import MLkNN
+
+# CMAP (extracting relevant transcriptomic profiles)
+from cmapPy.pandasGEXpress.parse import parse
+import cmapPy.pandasGEXpress.subset_gctoo as sg
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from datetime import datetime as dt
+import time
+import joblib
+
+from sklearn.decomposition import PCA,FactorAnalysis
+from sklearn.preprocessing import StandardScaler,QuantileTransformer
+from sklearn.metrics import precision_recall_curve,log_loss
+from sklearn.metrics import average_precision_score,roc_auc_score
+from sklearn.feature_selection import VarianceThreshold
+import os
+import pandas as pd
+import numpy as np
+import torch
+import pytorch_tabnet
+from pytorch_tabnet.tab_model import TabNetClassifier
+import re
+nn._estimator_type = "classifier"
+
+import sys
+sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
+from Erik_alll_helper_functions import apply_class_weights, accessing_correct_fold_csv_files, create_splits
+from Erik_alll_helper_functions import checking_veracity_of_data, LogScaler, EarlyStopper, val_vs_train_loss
+from Erik_alll_helper_functions import val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
+from Erik_alll_helper_functions import pre_processing
+
+start = time.time()
+now = datetime.datetime.now()
+now = now.strftime("%d_%m_%Y-%H:%M:%S")
+print("Begin Training")
+
+# Downloading all relevant data frames and csv files ----------------------------------------------------------
+
+# clue column metadata with columns representing compounds in common with SPECs 1 & 2
+clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_sig_in_SPECS1&2.csv', delimiter = ",")
+
+# clue row metadata with rows representing transcription levels of specific genes
+clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
+
+# ------------------------------------------------------------------------------------------------------------------------------
+'''
+file = input("Which file would you like to use? (Options: tian10, erik10, erik10_hq, erik10, erik10_hq_dos, erik10_dos, cyc_adr, cyc_dop):")
+variance_threshold = input("What variance threshold would you like to use? (Options: 0 - 1.2):")
+normalize = input("Would you like to normalize the data? (Options: True, False):")
+'''  
+file_name = "erik10_hq_8_12"
+#file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
+training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
+hq, dose = 'False', 'False'
+if re.search('hq', file_name):
+    hq = 'True'
+if re.search('8', file_name):
+    dose = 'True'
+L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
+
+checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
+#variance_thresh = int(input("Variance threshold? (Options: 0 - 1.2): "))
+#normalize_c = input("Normalize? (Options: True, False): ")
+variance_thresh = 0
+normalize_c = 'False'
+if variance_thresh > 0 or normalize_c == 'True':
+    npy_exists = False
+    save_npy = False
+
+npy_exists = True
+save_npy = False
+df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
+        clue_gene, 
+        npy_exists = npy_exists,
+        use_variance_threshold = variance_thresh, 
+        normalize = normalize_c, 
+        save_npy = save_npy,
+        data_subset = file_name)
+checking_veracity_of_data(file_name, df_train_labels, df_val_labels, df_test_labels)
+
+# save moa labels, remove compounds
+df_train_labels = df_train_labels["moa"]
+df_val_labels = df_val_labels["moa"]
+df_test_labels = df_test_labels["moa"]
+
+X_train = df_train_features.values
+X_val = df_val_features.values
+y_train = df_train_labels.values
+y_val = df_val_labels.values
+X_test = df_test_features.values
+y_test = df_test_labels.values
+
+
+ln = LogScaler()
+X_train_norm = ln.fit_transform(df_train_features.to_numpy().astype(float))
+X_val_norm = ln.transform(df_val_features.to_numpy().astype(float))
+X_test_norm = ln.transform(df_test_features.to_numpy().astype(float))
+
+
+# In[51]:
+import umap 
+'''
+distance_metric = 'cosine'
+reducer = TSNE(
+    n_components=2,
+    metric=distance_metric,
+    init='random',
+    learning_rate='auto',
+    perplexity=5,
+    n_jobs=-1
+)
+'''
+reducer = umap.UMAP(
+    n_components=2,
+    random_state=456
+)
+# In[52]:
+
+
+#pixel_size = (10, 10)
+#pixel_size = (20, 20)
+#pixel_size = (30, 30)
+pixel_size = (50,50)
+#pixel_size = (100,100)
+#pixel_size = (224,224)
+it = ImageTransformer(
+    feature_extractor=reducer, 
+    pixels=pixel_size)
+
+
+
+# In[53]:
+
+# fitting Image Transformer
+print("Fitting Image Transformer...")
+it.fit(df_train_features, y= df_train_labels, plot=True)
+print("Transforming...")
+X_train_img = it.transform(X_train_norm)
+X_val_img = it.transform(X_val_norm)
+X_test_img = it.transform(X_test_norm)
+
+# In[16]:
+'''
 
 from pyDeepInsight import ImageTransformer, Norm2Scaler
 from sklearn.model_selection import train_test_split
@@ -121,9 +312,9 @@ clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_d
 
 # ------------------------------------------------------------------------------------------------------------------------------
 '''
-file = input("Which file would you like to use? (Options: tian10, erik10, erik10_hq, erik10, erik10_hq_dos, erik10_dos, cyc_adr, cyc_dop):")
-variance_threshold = input("What variance threshold would you like to use? (Options: 0 - 1.2):")
-normalize = input("Would you like to normalize the data? (Options: True, False):")
+#file = input("Which file would you like to use? (Options: tian10, erik10, erik10_hq, erik10, erik10_hq_dos, erik10_dos, cyc_adr, cyc_dop):")
+#Variance_threshold = input("What variance threshold would you like to use? (Options: 0 - 1.2):")
+#normalize = input("Would you like to normalize the data? (Options: True, False):")
 '''  
 file_name = "erik10_hq_8_12"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
@@ -151,11 +342,11 @@ df_train_labels = df_train_labels["moa"]
 df_val_labels = df_val_labels["moa"]
 df_test_labels = df_test_labels["moa"]
 
-X_train = df_train_features.values.astype(np.float32)
-X_val = df_val_features.values.astype(np.float32)
+X_train = df_train_features.values
+X_val = df_val_features.values
 y_train = df_train_labels.values
 y_val = df_val_labels.values
-X_test = df_test_features.values.astype(np.float32)
+X_test = df_test_features.values
 y_test = df_test_labels.values
 
 
@@ -178,18 +369,19 @@ reducer = TSNE(
     n_jobs=-1
 )
 '''
-reducer = UMAP(
-    n_components=2,
-    random_state=456
-)
+#reducer = UMAP(
+ #  n_components=2,
+  #  random_state=456
+#)
 '''
 # In[52]:
 
 
-#pixel_size = (10, 10)
+
+pixel_size = (10, 10)
 #pixel_size = (20, 20)
 #pixel_size = (30, 30)
-pixel_size = (50,50)
+#pixel_size = (50,50)
 #pixel_size = (100,100)
 #pixel_size = (224,224)
 it = ImageTransformer(
@@ -198,12 +390,13 @@ it = ImageTransformer(
 
 # fitting Image Transformer
 print("Fitting Image Transformer...")
-it.fit(df_train_features, y= df_train_labels, plot=True)
+it.fit(X_train)
 print("Transforming...")
 X_train_img = it.transform(X_train_norm)
 X_val_img = it.transform(X_val_norm)
 X_test_img = it.transform(X_test_norm)
 
+'''
 
 # In[43]:
 

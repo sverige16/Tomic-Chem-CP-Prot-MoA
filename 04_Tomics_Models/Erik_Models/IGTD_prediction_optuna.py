@@ -180,7 +180,7 @@ class IGTD_Model(nn.Module):
     def __init__(self, channel_number, hidden_layer1, hidden_layer2, dropout_rate1):
         super(IGTD_Model, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=1, out_channels= channel_number, kernel_size=(2,2), padding=1)
-        self.conv2 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=(2,2), padding=1)
+        self.conv2 = nn.Conv2d(in_channels=channel_number, out_channels=16, kernel_size=(2,2), padding=1)
         self.pool = nn.MaxPool2d(kernel_size=(1,2), stride=2)
         self.dropout = nn.Dropout(dropout_rate1)
         self.fc1 = nn.Linear(16*4* 82, hidden_layer1)
@@ -207,7 +207,7 @@ class IGTD_Model(nn.Module):
         x = self.fc3(x)
         return x     
 #DI_model = DeepInsight_Model(net)     
-IGTD_model = IGTD_Model()
+#IGTD_model = IGTD_Model()
 batch_size = 50
 train_transform = transforms.GaussianBlur(kernel_size=(3,3), sigma = (0.1, 0.2))
 
@@ -223,7 +223,7 @@ test_generator = torch.utils.data.DataLoader(testset, batch_size=batch_size, shu
 
 
 # In[50]:
-
+'''
 # If applying class weights
 yn_class_weights = True
 if yn_class_weights:     # if we want to apply class weights
@@ -245,9 +245,10 @@ optimizer = torch.optim.SGD(
     momentum=0.8,
     weight_decay=1e-05
 )
-
+'''
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
-def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_loader, valid_loader):
+
+def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader, my_lr_scheduler, loss_fn_train = "false"):
     '''
     n_epochs: number of epochs 
     optimizer: optimizer used to do backpropagation
@@ -273,7 +274,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
         for imgs, labels in tqdm(train_loader,
                                  desc = "Train Batches w/in Epoch",
                                 position = 0,
-                                leave = True):
+                                leave = False):
             optimizer.zero_grad()
             # put model, images, labels on the same device
             imgs = imgs.to(device = device)
@@ -303,23 +304,25 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
             train_correct += int((train_predicted == torch.max(labels, 1)[1]).sum())
         loss_fn_train.eval()
         # validation metrics from batch
-        val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
+        val_correct, val_total, val_loss, best_val_loss_upd, val_f1_score = validation_loop(model, loss_fn, valid_loader, best_val_loss,loss_fn_train)
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
-        print(f' {datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, Validation Accuracy: {val_accuracy} ')
+        print(f' {datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, F1 Score: {val_f1_score} ')
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
-    # return lists with loss, accuracy every epoch
+        if loss_fn_train != "false":
+            loss_fn_train.next_epoch()
         if early_stopper.early_stop(validation_loss = val_loss):             
-                break
-        loss_fn_train.next_epoch()
-    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
-
-def validation_loop(model, loss_fn, valid_loader, best_val_loss):
+            break
+    # return lists with loss, accuracy every epoch
+    my_lr_scheduler.step()
+    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch, val_f1_score
+       
+def validation_loop(model, loss_fn, valid_loader, best_val_loss, loss_fn_train = "false"):
     '''
     Assessing trained model on valiidation dataset 
     model: deep learning architecture getting updated by model
@@ -344,7 +347,10 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             #probs = torch.nn.Softmax(outputs)
             #loss = loss_fn(outputs, torch.max(labels, 1)[1])
             #loss = loss_fn(outputs, labels)
-            loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            if loss_fn_train != "false":
+                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+            else:
+                loss = loss_fn(outputs,labels)
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
             # labels = torch.argmax(labels,1)
@@ -354,6 +360,8 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             predict_proba.append(outputs)
             predictions.append(predicted)
         avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
+        pred_cpu = torch.cat(predictions).cpu()
+        labels_cpu =  torch.cat(all_labels).cpu()
         if best_val_loss > avg_val_loss:
             best_val_loss = avg_val_loss
             m = torch.nn.Softmax(dim=1)
@@ -367,10 +375,9 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            }, '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
-            )
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt')
     model.train()
-    return correct, total, avg_val_loss, best_val_loss                      
+    return correct, total, avg_val_loss, best_val_loss,  f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro')
 
 
 def test_loop(model, loss_fn, test_loader):
@@ -425,10 +432,9 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
     num_feat = num_feat
     num_classes = num_classes
         # generate the model
-    model = IGTD_Model(trial, hidden_layer1= hidden_layer1,
+    model = IGTD_Model( channel_number=channel_num, hidden_layer1= hidden_layer1,
                        hidden_layer2=hidden_layer2,
-                       dropout_rate1=dropout_rate1, 
-                       channel_number=channel_num).to(device)
+                       dropout_rate1=dropout_rate1).to(device)
     
     # generate the optimizer
     optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'RMSprop', 'SGD'])
@@ -436,14 +442,13 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
     optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
     scheduler_name = trial.suggest_categorical("scheduler", ["StepLR", "ExponentialLR", "CosineAnnealingLR"])
     if scheduler_name == "StepLR":
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_uniform("gamma", 0.1, 0.9))
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_float("gamma", 0.1, 0.9))
     elif scheduler_name == "ExponentialLR":
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=trial.suggest_float("gamma", 0.1, 0.9))
     elif scheduler_name == "CosineAnnealingLR":
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=trial.suggest_int("T_max", 5, 30))
 
-    class_weights = apply_class_weights(training_set, device)
-    loss_fn = torch.nn.CrossEntropyLoss(class_weights)
+    loss_fn = torch.nn.CrossEntropyLoss()
 
     from ols import OnlineLabelSmoothing
     loss_fn_train = OnlineLabelSmoothing(alpha = trial.suggest_float('alpha', 0.1, 0.9),
@@ -452,7 +457,7 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
 
     max_epochs = 1000
 
-    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
+    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs, val_f1_score  = training_loop(n_epochs = max_epochs,
                 optimizer = optimizer,
                 model = model,
                 loss_fn = loss_fn,
@@ -462,16 +467,16 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
                 my_lr_scheduler = scheduler)
 
 
-    lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
-    return (lowest1 + lowest2)/2
+    #lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
+    return val_f1_score
 
-study = optuna.create_study(direction='minimize')
+study = optuna.create_study(direction='maximize')
 study.optimize(lambda trial: objectiv(trial, num_feat = 978, 
                                       num_classes = num_classes, 
                                       training_generator= train_generator, 
                                       validation_generator = valid_generator,
                                       testing_generator = test_generator), 
-                                      n_trials=100)
+                                      n_trials=150)
 print("Number of finished trials: {}".format(len(study.trials)))
 print(study.best_params)
 print(study.best_value)

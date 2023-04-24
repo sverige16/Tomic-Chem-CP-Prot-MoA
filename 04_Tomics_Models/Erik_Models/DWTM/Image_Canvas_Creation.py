@@ -143,7 +143,7 @@ class ImageDatasetCreation(object):
             q = 1
             y = t
             while True:
-              print(y)
+              #print(y)
               if arr[y][s] != f[k-1] or y >= 127:
                 break
               y =y+1
@@ -157,17 +157,17 @@ class ImageDatasetCreation(object):
     return start_point, feature_font
     
   def preinsertion(self,c,r,m,n,global_col_len):
-    # r = [
-    #     0.82,
-    #     0.82,   # eta lagbe 1st module theke
-    #     0.82,
-    #     0.76,
-    #     0.72,
-    #     0.71,
-    #     0.7,
-    #     0.68,
-    #     0.42
-    #     ]
+    ''' r = [
+         0.82,
+         0.82,   # eta lagbe 1st module theke
+         0.82,
+       0.76,
+        0.72,
+        0.71,
+        0.7,
+       0.68,
+       0.42
+         ]'''
     total = sum(r)
     area = []
     #R is ratio of R scores
@@ -192,7 +192,11 @@ class ImageDatasetCreation(object):
 
     for i in range(0, len(c)):
         x = math.sqrt(area[i]/c[i])
-        h.append(math.floor(x))
+        #if math.floor(x) == 0:
+           # h.append(0.1)
+        #else:
+        #h.append(math.floor(x))
+        h.append(math.ceil(x))
 
     for i in range(0, len(c)):
         y = area[i]/h[i]
@@ -231,7 +235,7 @@ class ImageDatasetCreation(object):
         count = count+1
         if count>50:
             break
-    print(arr)
+    #print(arr)
     start_point, font_size = self.array_traversal(arr,F,m,n)
     
     return start_point, font_size
@@ -241,7 +245,7 @@ class ImageDatasetCreation(object):
     
     c = []
     dataset_list = self.dff.values.tolist()
-    print(dataset_list)
+    #print(dataset_list)
     for i in range(1,len(dataset_list[1])):
       minn = 1
       for j in range(len(dataset_list)):

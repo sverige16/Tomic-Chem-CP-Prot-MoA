@@ -81,7 +81,37 @@ clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Model
 # clue row metadata with rows representing transcription levels of specific genes
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
 
+import torch
+import torch.nn as nn
 
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        log_probs = torch.log_softmax(inputs, dim=-1)
+
+        if len(targets.shape) == 1:
+            targets_one_hot = torch.zeros_like(log_probs)
+            targets_one_hot.scatter_(1, targets.view(-1, 1), 1)
+        else:
+            targets_one_hot = targets
+
+        # Compute the cross-entropy loss using log_probs and one-hot targets
+        ce_loss = -torch.sum(targets_one_hot * log_probs, dim=-1)
+
+        pt = torch.exp(-ce_loss)
+        focal_loss = self.alpha * ((1 - pt) ** self.gamma) * ce_loss
+
+        if self.reduction == 'mean':
+            return torch.mean(focal_loss)
+        elif self.reduction == 'sum':
+            return torch.sum(focal_loss)
+        else:
+            return focal_loss
 
 class Transcriptomic_Profiles(torch.utils.data.Dataset):
     def __init__(self, gc_too, split, dict_moa):
@@ -173,7 +203,7 @@ test_generator = torch.utils.data.DataLoader(test_dataset, **params)
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
-max_epochs = 30 # number of epochs we are going to run 
+max_epochs = 250 # number of epochs we are going to run 
 # apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
 world_size = torch.cuda.device_count()
@@ -189,7 +219,7 @@ print("Begin Training")
 
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
 
-def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader, my_lr_scheduler, loss_fn_train = "false"):
+def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader, my_lr_scheduler, device, loss_fn_train = "false"):
     '''
     n_epochs: number of epochs 
     optimizer: optimizer used to do backpropagation
@@ -200,7 +230,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     '''
     # lists keep track of loss and accuracy for training and validation set
     model = model.to(device)
-    early_stopper = EarlyStopper(patience=15, min_delta=0.0001)
+    early_stopper = EarlyStopper(patience=8, min_delta=0.0001)
     train_loss_per_epoch = []
     train_acc_per_epoch = []
     val_loss_per_epoch = []
@@ -223,14 +253,18 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             #print(f' Labels : {labels}') # tensor that is a number
             if loss_fn_train != "false":
                 loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
-       
+            else:
+                loss = loss_fn(outputs,labels)
             #loss = loss_fn(outputs,labels)
             # For L2 regularization
             #l2_lambda = 0.000001
             #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
             #loss = loss + l2_lambda * l2_norm
             # Update weights
+            if torch.isnan(loss):
+                raise ValueError("Loss is NaN. Stopping training.")
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
             optimizer.step()
             # Training Metrics
             loss_train += loss.item()
@@ -244,12 +278,14 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             train_correct += int((train_predicted == labels).sum())
         if loss_fn_train != "false":
             loss_fn_train.eval()
+        else:
+            loss = loss_fn(outputs,labels)
         # validation metrics from batch
-        val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
+        val_correct, val_total, val_loss, best_val_loss_upd, val_f1_score = validation_loop(model, loss_fn, valid_loader, best_val_loss)
         best_val_loss = best_val_loss_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
-        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, Accuracy: {val_accuracy} ')
+        print(f' {datetime.datetime.now()} Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, F1 Score: {val_f1_score} ')
         # adding epoch loss, accuracy to lists 
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
@@ -261,7 +297,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
             break
         my_lr_scheduler.step()
     # return lists with loss, accuracy every epoch
-    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
+    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch, val_f1_score
                                 
 
 def validation_loop(model, loss_fn, valid_loader, best_val_loss):
@@ -287,8 +323,8 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             # Assessing outputs
             outputs = model(tprofiles)
             #probs = torch.nn.Softmax(outputs)
-            #loss = loss_fn(outputs,labels)
-            loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            loss = loss_fn(outputs,labels)
+            #loss = loss_fn(outputs, torch.max(labels, 1)[1])
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
             labels = torch.argmax(labels,1)
@@ -298,6 +334,8 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             predict_proba.append(outputs)
             predictions.append(predicted)
         avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
+        pred_cpu = torch.cat(predictions).cpu()
+        labels_cpu =  torch.cat(all_labels).cpu()
         if best_val_loss > avg_val_loss:
             best_val_loss = avg_val_loss
             m = torch.nn.Softmax(dim=1)
@@ -314,7 +352,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
             },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name
             )
     model.train()
-    return correct, total, avg_val_loss, best_val_loss
+    return correct, total, avg_val_loss, best_val_loss,  f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro')
 
 
 def test_loop(model, loss_fn, test_loader):
@@ -344,8 +382,8 @@ def test_loop(model, loss_fn, test_loader):
             outputs = model(compounds)
             # print(f' Outputs : {outputs}') # tensor with 10 elements
             # print(f' Labels : {labels}') # tensor that is a number
-            #loss = loss_fn(outputs,labels)
-            loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            loss = loss_fn(outputs,labels)
+            #loss = loss_fn(outputs, torch.max(labels, 1)[1])
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
             #labels = torch.argmax(labels,1)
@@ -392,23 +430,25 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
     optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
     scheduler_name = trial.suggest_categorical("scheduler", ["StepLR", "ExponentialLR", "CosineAnnealingLR"])
     if scheduler_name == "StepLR":
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_uniform("gamma", 0.1, 0.9))
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_float("gamma", 0.1, 0.9))
     elif scheduler_name == "ExponentialLR":
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=trial.suggest_float("gamma", 0.1, 0.9))
     elif scheduler_name == "CosineAnnealingLR":
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=trial.suggest_int("T_max", 5, 30))
 
     class_weights = apply_class_weights(training_set, device)
-    loss_fn = torch.nn.CrossEntropyLoss(class_weights)
-
+    #loss_fn = torch.nn.CrossEntropyLoss(class_weights)
+    loss_fn =FocalLoss(gamma=trial.suggest_float('gamma', 0.1, 0.9)).to(device=device)
+    loss_fn_train = 'false'
+    '''
     from ols import OnlineLabelSmoothing
     loss_fn_train = OnlineLabelSmoothing(alpha = trial.suggest_float('alpha', 0.1, 0.9),
                                           n_classes=num_classes, 
                                           smoothing = trial.suggest_float('smoothing', 0.001, 0.3)).to(device=device)
+    '''
+    max_epochs = 250
 
-    max_epochs = 1000
-
-    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = training_loop(n_epochs = max_epochs,
+    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs, val_f1_score = training_loop(n_epochs = max_epochs,
                 optimizer = optimizer,
                 model = model,
                 loss_fn = loss_fn,
@@ -421,13 +461,14 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
 
     lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
     return (lowest1 + lowest2)/2
+    #return val_f1_score
 
 study = optuna.create_study(direction='minimize')
 study.optimize(lambda trial: objectiv(trial, num_feat = 978, 
                                       num_classes = num_classes, 
                                       training_generator= training_generator, 
                                       validation_generator = validation_generator), 
-                                      n_trials=100)
+                                      n_trials=150)
 
 #-------------------------------- Writing interesting info into terminal ------------------------# 
 

@@ -9,6 +9,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 seed(1)
 import time 
+import shutil
 
 from tqdm import tqdm
 
@@ -26,16 +27,17 @@ class ImageGenerate(object):
   def __init__(self,file_path):
     self.df = pd.read_csv(file_path)
     self.dff = pd.DataFrame(self.df)
-    self.unique_column = self.df.Class.unique()
-    os.mkdir("/content/ImageDataset")
+    #self.unique_column = self.df.Class.unique()
+    shutil.rmtree("/scratch2-shared/erikep/DWTM/ImageDataset")
+    os.mkdir("/scratch2-shared/erikep/DWTM/ImageDataset")
     #!gdown --id 1dMJS5IB08NGiwfhNopczKlQ5tmsB8AaO
-    for i in range(0,len(self.unique_column)):
-      os.mkdir("/content/ImageDataset/"+str(self.unique_column[i]))
+    #for i in range(0,len(self.unique_column)):
+      #os.mkdir("/scratch2-shared/erikep/DWTM/ImageDataset/"+str(self.unique_column[i]))
 
 
 
 
-  def image_generator(self,data=None,class_name=None, s_list=None, h_list=None, saving_path=None, img_width=None, img_height=None,image_file_name=None):
+  def image_generator(self,data=None, s_list=None, h_list=None, saving_path=None, img_width=None, img_height=None,image_file_name=None):
     image_font = h_list.copy()
     for i in range(0, len(h_list)): 
       image_font[i] = image_font[i]/22#In case of font1, multiplier is 10
@@ -75,17 +77,17 @@ class ImageGenerate(object):
       image = cv2.putText(image, str(data[i]), org, font, image_font[i], color, thickness, cv2.LINE_4)
     plt.imshow(image)
     image = Image.fromarray(image)
-    label_folder = os.path.join("/content/ImageDataset", str(class_name))
+    label_folder = "/scratch2-shared/erikep/DWTM/ImageDataset"
     if os.path.exists(label_folder):
       saving_path =label_folder+"/"+image_file_name+".png"
       image.save(saving_path)
-      print("<succes> Image saving succes")
+      print("<success> Image saving success")
       return  saving_path
     else:
       os.mkdir(label_folder)
       saving_path =label_folder+"/"+image_file_name+".png"
       image.save(saving_path)
-      print("<succes> Image saving succes")
+      print("<success> Image saving success")
       return  saving_path
     ## In future it will return a image that will be store in dataset folder as an images
 

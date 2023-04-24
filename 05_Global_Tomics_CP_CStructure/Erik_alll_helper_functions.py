@@ -54,6 +54,8 @@ import cv2
 import re
 import heapq
 
+from albumentations import RandomCrop
+
 # ---------------------------------------------- data loading ----------------------------------------------#
 # ----------------------------------------------------------------------------------------------------------#
 def load_train_valid_data(path, train_data, valid_data, test_data = None):
@@ -79,7 +81,7 @@ def load_train_valid_data(path, train_data, valid_data, test_data = None):
         L1000_validation = pd.read_csv(path + valid_data, delimiter = ",")
     return L1000_training, L1000_validation
 
-
+ 
 # ---------------------------------------------- data preprocessing ----------------------------------------------#
 
 def normalize_data(trn, val, test = pd.DataFrame()):
@@ -274,7 +276,11 @@ def program_elapsed_time(start, end):
 
 def apply_class_weights(training_set, device):
     """
-    Applies class weights to the training set
+    Applies class weights to the training set at the compound level. That is, the more compounds in a 
+    class, the less weight it will have.
+      --> This works well for Cell Painting, where for each compound, the same number of images are 
+      taken. However, for the transcriptomic profiles, we have to balance according to the number of 
+      transcriptomic profiles instead.
     Input:
         training_set: training set (pandas dataframe)
         device: device to run the model on (string)
@@ -288,6 +294,37 @@ def apply_class_weights(training_set, device):
     class_weights = [i / sum(class_weights) for  i in class_weights]
     class_weights= torch.tensor(class_weights,dtype=torch.float).to(device)
     return class_weights
+
+def apply_class_weights_GE(train_np, training_set_split, device):
+    '''
+    Applies class weights to the training set at the transcriptomic profile level
+    1. Merge transcriptomic profiles with chemical compound information 
+    2. Create dictionary which stores moa as key and the 1/number of transcriptomics profiles as counts
+    3. Associate a weight to each transcriptomic profile based on the moa
+    
+    Input:
+        train_np: training set (pandas dataframe)
+        training_set_split: training set split (pandas dataframe)
+        device: device to run the model on (string)
+    Output:
+        samples_weight: class weights, weight for each sample in  (torch tensor)
+    '''
+    train_np =  train_np.rename(columns ={train_np.columns[-1]: "sig_id"})
+    train_np_moa = pd.merge(train_np, training_set_split, on = 'sig_id', how = 'inner')
+    assert train_np_moa.shape[0] == train_np.shape[0], ""
+    counts = train_np_moa.moa.value_counts()
+    class_weights = {}   # create list that will hold class weights
+    for moa in train_np_moa.moa.unique():       # for each moa
+        class_weights[moa] = 1/counts[moa]  # add counts to class weights
+    samples_weight = torch.tensor([class_weights[t] for t in train_np_moa.moa])
+    #class_weights = [i / sum(class_weights) for  i in class_weights]
+    #class_weights= torch.tensor(class_weights,dtype=torch.float).to(device)
+    #class_sample_count = torch.tensor([(torch.tensor(train_np_moa.moa.values) == t).sum() for t in torch.unique(torch.tensor(train_np_moa.moa.values), sorted=True)])
+    #weight = 1. / class_sample_count.float()
+    #samples_weight = torch.tensor([weight[t] for t in train_np_moa.moa])
+
+    return samples_weight.to(device)
+    
 
 def dict_splitting_into_tensor(df):
     '''
@@ -783,7 +820,9 @@ def dubbelchecking_image_normalization(pd_image_norm):
     For every plate in pandas norm, check if the mean and std are the same for all channels in the imnorm that I am using
     '''
     
-    # 
+def apply_albumentations(image_array, transform):
+    augmented = transform(image=image_array)
+    return augmented['image']
     
 def channel_5_numpy_CID(df, CID, pd_image_norm):
     '''
@@ -814,8 +853,13 @@ def channel_5_numpy_CID(df, CID, pd_image_norm):
         #row_channel_path = row["C" + str(c)]
         local_im = cv2.imread(row["C" + str(c)].values[0], -1) # row.path would be same for me, except str(row[path]))
         
-        # directly resize down to 256 by 256
-        local_im = cv2.resize(local_im, (256, 256), interpolation = cv2.INTER_LINEAR)
+       
+        # Define the transformation: RandomCrop
+        #crop_transform = RandomCrop(height=512, width=512)
+
+         # Apply the transformation to the image array
+        #local_im = apply_albumentations(local_im, crop_transform)
+        #local_im = cv2.resize(local_im, (256, 256), interpolation = cv2.INTER_LINEAR)
         local_im = local_im.astype(np.float32)
         local_im_norm = image_normalization(local_im, c, row['plate'], pd_image_norm)
         # adds to array to the image vector 
@@ -847,7 +891,11 @@ def channel_5_numpy(df, idx, pd_image_norm):
         #row_channel_path = row["C" + str(c)]
         local_im = cv2.imread(row["C" + str(c)], -1) # row.path would be same for me, except str(row[path]))
         local_im_norm = image_normalization(local_im, c, row['plate'], pd_image_norm)
-        # directly resize down to 256 by 256
+        
+        # Define the transformation: RandomCrop
+        #crop_transform = RandomCrop(height=512, width=512)
+        #local_im_norm = apply_albumentations(local_im_norm, crop_transform)
+        # Downsizing image to 256 x 256
         local_im_norm = cv2.resize(local_im_norm, (256, 256), interpolation = cv2.INTER_LINEAR)
         local_im_norm = local_im_norm.astype(np.float32)
    
@@ -888,9 +936,9 @@ def accessing_correct_fold_csv_files(file):
         test_filename = 'erik10_clue_test_fold_0.csv'
     elif file == 'erik10_all':
         dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_all_train_fold_0.csv'
-        val_filename = 'erik10_all_val_fold_0.csv'
-        test_filename = 'erik10_all_test_fold_0.csv'
+        train_filename = 'erik10_all_train_fold_1.csv'
+        val_filename = 'erik10_all_val_fold_1.csv'
+        test_filename = 'erik10_all_test_fold_1.csv'
     elif file == 'erik10_hq':
         dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
         train_filename = 'erik10_clue_hq_train_fold_0.csv'
@@ -898,9 +946,9 @@ def accessing_correct_fold_csv_files(file):
         test_filename = 'erik10_clue_hq_test_fold_0.csv'
     elif file == 'erik10_8_12':
         dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_clue_8_12__train_fold_0.csv'
-        val_filename = 'erik10_clue_8_12__val_fold_0.csv'
-        test_filename = 'erik10_clue_8_12__test_fold_0.csv'
+        train_filename = 'erik10_clue_8_12__train_fold_1.csv'
+        val_filename = 'erik10_clue_8_12__val_fold_1.csv'
+        test_filename = 'erik10_clue_8_12__test_fold_1.csv'
     elif file == 'erik10_hq_8_12':
         dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
         train_filename = 'erik10_clue_hq_8_12__train_fold_0.csv'
@@ -1340,3 +1388,201 @@ def find_two_lowest_numbers(lst):
 
 
 
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0, reduction='mean'):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        log_probs = torch.log_softmax(inputs, dim=-1)
+
+        if len(targets.shape) == 1:
+            targets_one_hot = torch.zeros_like(log_probs)
+            targets_one_hot.scatter_(1, targets.view(-1, 1), 1)
+        else:
+            targets_one_hot = targets
+
+        # Compute the cross-entropy loss using log_probs and one-hot targets
+        ce_loss = -torch.sum(targets_one_hot * log_probs, dim=-1)
+
+        pt = torch.exp(-ce_loss)
+        focal_loss = self.alpha * ((1 - pt) ** self.gamma) * ce_loss
+
+        if self.reduction == 'mean':
+            return torch.mean(focal_loss)
+        elif self.reduction == 'sum':
+            return torch.sum(focal_loss)
+        else:
+            return focal_loss
+    
+def one_input_training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader, my_lr_scheduler, device, model_name, loss_fn_train = "false"):
+    '''
+    n_epochs: number of epochs 
+    optimizer: optimizer used to do backpropagation
+    model: deep learning architecture
+    loss_fn: loss function
+    train_loader: generator creating batches of training data
+    valid_loader: generator creating batches of validation data
+    '''
+    # lists keep track of loss and accuracy for training and validation set
+    model = model.to(device)
+    early_stopper = EarlyStopper(patience=8, min_delta=0.0001)
+    train_loss_per_epoch = []
+    train_acc_per_epoch = []
+    val_loss_per_epoch = []
+    val_acc_per_epoch = []
+    best_val_loss = np.inf
+    if loss_fn_train != "false":
+        loss_fn_train.train()
+    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
+        loss_train = 0.0
+        train_total = 0
+        train_correct = 0
+        for data1, labels in train_loader:
+            optimizer.zero_grad()
+            # put model, images, labels on the same device
+            data1 = data1.to(device = device)
+            labels = labels.to(device= device)
+            # Training Model
+            outputs = model(data1)
+            if loss_fn_train != "false":
+                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+            else:
+                loss = loss_fn(outputs,labels)
+            #loss = loss_fn(outputs,labels)
+            # For L2 regularization
+            #l2_lambda = 0.000001
+            #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
+            #loss = loss + l2_lambda * l2_norm
+            # Update weights
+            if torch.isnan(loss):
+                raise ValueError("Loss is NaN. Stopping training.")
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
+            optimizer.step()
+            # Training Metrics
+            loss_train += loss.item()
+            #print(f' loss: {loss.item()}')
+            train_predicted = torch.argmax(outputs, 1)
+            #print(f' train_predicted {train_predicted}')
+            # NEW
+            labels = torch.argmax(labels,1)
+            #print(labels)
+            train_total += labels.shape[0]
+            train_correct += int((train_predicted == labels).sum())
+        if loss_fn_train != "false":
+            loss_fn_train.eval()
+        else:
+            loss = loss_fn(outputs,labels)
+        # validation metrics from batch
+        val_correct, val_total, val_loss, best_val_loss_upd, val_f1_score = one_input_validation_loop(model, loss_fn, valid_loader, best_val_loss, device, model_name)
+        best_val_loss = best_val_loss_upd
+        val_accuracy = val_correct/val_total
+        # printing results for epoch
+        print(f' Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, F1 Score: {val_f1_score} ')
+        # adding epoch loss, accuracy to lists 
+        val_loss_per_epoch.append(val_loss)
+        train_loss_per_epoch.append(loss_train/len(train_loader))
+        val_acc_per_epoch.append(val_accuracy)
+        train_acc_per_epoch.append(train_correct/train_total)
+        if loss_fn_train != "false":
+            loss_fn_train.next_epoch()
+        if early_stopper.early_stop(validation_loss = val_loss):             
+            break
+        my_lr_scheduler.step()
+    # return lists with loss, accuracy every epoch
+    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
+                                
+
+def one_input_validation_loop(model, loss_fn, valid_loader, best_val_loss, device, model_name):
+    '''
+    Assessing trained model on valiidation dataset 
+    model: deep learning architecture getting updated by model
+    loss_fn: loss function
+    valid_loader: generator creating batches of validation data
+    '''
+    model.eval()
+    loss_val = 0.0
+    correct = 0
+    total = 0
+    predict_proba = []
+    predictions = []
+    all_labels = []
+    with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
+        for data1, labels in valid_loader:
+            # Move to device MAY NOT BE NECESSARY
+            data1 = data1.to(device = device)
+            labels = labels.to(device= device)
+            # Assessing outputs
+            outputs = model(data1)
+            #probs = torch.nn.Softmax(outputs)
+            loss = loss_fn(outputs,labels)
+            #loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            loss_val += loss.item()
+            predicted = torch.argmax(outputs, 1)
+            labels = torch.argmax(labels,1)
+            total += labels.shape[0]
+            correct += int((predicted == labels).sum()) # saving best 
+            all_labels.append(labels)
+            predict_proba.append(outputs)
+            predictions.append(predicted)
+        avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
+        pred_cpu = torch.cat(predictions).cpu()
+        labels_cpu =  torch.cat(all_labels).cpu()
+        if best_val_loss > avg_val_loss:
+            best_val_loss = avg_val_loss
+            m = torch.nn.Softmax(dim=1)
+            pred_cpu = torch.cat(predictions).cpu()
+            labels_cpu =  torch.cat(all_labels).cpu()
+            torch.save(
+                {   'predict_proba' : m(torch.cat(predict_proba)),
+                    'predictions' : pred_cpu.numpy(),
+                    'labels_val' : labels_cpu.numpy(),
+                    'model_state_dict' : model.state_dict(),
+                    'valid_loss' : loss_val,
+                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
+                    'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name
+            )
+    model.train()
+    return correct, total, avg_val_loss, best_val_loss,  f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro')
+
+
+def one_input_test_loop(model, loss_fn, test_loader, device):
+    '''
+    Assessing trained model on test dataset 
+    model: deep learning architecture getting updated by model
+    loss_fn: loss function
+    test_loader: generator creating batches of test data
+    '''
+    model = model.to(device)
+    model.eval()
+    loss_test = 0.0
+    correct = 0
+    total = 0
+    all_predictions = []
+    all_labels = []
+    with torch.no_grad():  # does not keep track of gradients so as to not train on test data.
+        for data1, labels in tqdm(test_loader,
+                                            desc = "Test Batches w/in Epoch",
+                                              position = 0,
+                                              leave = False):
+            # Move to device MAY NOT BE NECESSARY
+            data1 = data1.to(device = device)
+            labels = labels.to(device= device)
+
+            # Assessing outputs
+            outputs = model(data1)
+            loss = loss_fn(outputs,labels)
+            #loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            loss_test += loss.item()
+            predicted = torch.argmax(outputs, 1)
+            #labels = torch.argmax(labels,1)
+            total += labels.shape[0]
+            correct += int((predicted == torch.max(labels, 1)[1]).sum())
+            all_predictions = all_predictions + predicted.tolist()
+            all_labels = all_labels + torch.max(labels, 1)[1].tolist()
+        avg_test_loss = loss_test/len(test_loader)  # average loss over batch
+    return correct, total, avg_test_loss, all_predictions, all_labels

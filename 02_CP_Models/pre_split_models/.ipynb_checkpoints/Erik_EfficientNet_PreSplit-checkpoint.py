@@ -43,7 +43,7 @@ sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/
 
 from Erik_alll_helper_functions import channel_5_numpy, accessing_correct_fold_csv_files, dict_splitting_into_tensor
 from Erik_alll_helper_functions import splitting, apply_class_weights,  program_elapsed_time, val_vs_train_loss
-from Erik_alll_helper_functions import EarlyStopper, create_splits, val_vs_train_accuracy, create_terminal_table, upload_to_neptune
+from Erik_alll_helper_functions import EarlyStopper, create_splits, val_vs_train_accuracy, create_terminal_table, upload_to_neptune, FocalLoss
 
 # Image analysis packages
 import albumentations as A 
@@ -88,10 +88,7 @@ class Dataset(torch.utils.data.Dataset):
         '''Retreiving the image '''
         # ID = self.list_ID[idx]
         image = channel_5_numpy(self.paths_df, idx, self.im_norm) # extract image from csv using index
-        #print(image)
-        #print(f' return from function: {image}')
         label = self.img_labels[idx]          # extract calssification using index
-        #print(label)
         #label = torch.tensor(label, dtype=torch.short)
         label_tensor = torch.from_numpy(self.dict_moa[label]) # convert label to tensor
         if self.transform:                         # uses Albumentations image pipeline to return an augmented image
@@ -115,17 +112,7 @@ train_transforms = transforms.Compose([
     transforms.RandomHorizontalFlip(0.3), 
     rotation_transform,
     transforms.RandomVerticalFlip(0.3)])
-'''
-train_transforms = A.Compose(
-    [A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),
-    A.OneOf([A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),],p = 0.2),
-    A.OneOf([A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),],p = 0.4),
-    A.OneOf([A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),],p = 0.5),
-    A.OneOf([A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),],p = 0.6),
-    A.OneOf([A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),],p = 0.8),
-    A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),])
-valid_transforms = A.Compose([])
-'''
+
 paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/paths_channels_treated_v1v2.csv')
 
 file_name = "erik10_all"
@@ -187,7 +174,7 @@ world_size = torch.cuda.device_count()
 pd_image_norm = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/dmso_stats_v1v2.csv')
 
 
-batch_size = 15
+batch_size = 18
 # parameters
 params = {'batch_size' : batch_size,
          'num_workers' : 3,
@@ -230,14 +217,14 @@ test_generator = torch.utils.data.DataLoader(test_dataset, **params)
 class image_network(nn.Module):
     def __init__(self):
         super().__init__()
-        self.base_model = EfficientNet.from_name('efficientnet-b1', include_top=False, in_channels = 5)
+        self.base_model = EfficientNet.from_name('efficientnet-b6', include_top=False, in_channels = 5)
         self.dropout_1 = nn.Dropout(p = 0.3)
-        self.Linear_last = nn.Linear(1280, num_classes)
+        self.Linear_last = nn.Linear(41472, num_classes) #1280
         # self.softmax = nn.Softmax(dim = 1)
     
     def forward(self, x):
         out = self.dropout_1(self.base_model(x))
-        out = out.view(-1, 1280)
+        out = out.view(-1, 41472)
         out = self.Linear_last(out)
         # out = self.softmax(out) # don't need softmax when using CrossEntropyLoss
         return out
@@ -253,13 +240,14 @@ class_weights = apply_class_weights(training_set, device)
 
 if yn_class_weights:
     #loss_function = torch.nn.CrossEntropyLoss(class_weights)
-    loss_function = torch.nn.BCEWithLogitsLoss(weight=class_weights)
+    loss_function = torch.nn.BCEWithLogitsLoss(weight = class_weights)
+    #loss_function = FocalLoss(alpha=0.25, gamma=2.0).to(device=device)
 else:
     loss_function = torch.nn.CrossEntropyLoss()
 
 #from ols import OnlineLabelSmoothing
 #loss_fn_train = OnlineLabelSmoothing(alpha = 0.5, n_classes=num_classes, smoothing = 0.05).to(device=device)
-loss_fn_train = False
+loss_fn_train = 'false'
 #------------------------ Class weights, optimizer, and loss function ---------------------------------#
 
 
@@ -272,7 +260,7 @@ scheduler = torch.optim.lr_scheduler.MultiStepLR(cnn_optimizer,
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
 
 
-def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_loader, valid_loader):
+def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loader, loss_fn_train = "false"):
     '''
     n_epochs: number of epochs 
     optimizer: optimizer used to do backpropagation
@@ -284,7 +272,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
     # lists keep track of loss and accuracy for training and validation set
     early_stopper = EarlyStopper(patience=10, min_delta=0.0001)
     model = model.to(device)
-    optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
+    #optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
     train_loss_per_epoch = []
     train_acc_per_epoch = []
     val_loss_per_epoch = []
@@ -294,7 +282,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
         loss_train = 0.0
         train_total = 0
         train_correct = 0
-        #loss_fn_train.train()
+        if loss_fn_train != "false":
+            loss_fn_train.train()
         for imgs, labels in tqdm(train_loader,
                                  desc = "Train Batches w/in Epoch",
                                 position = 0,
@@ -305,10 +294,11 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
             labels = labels.to(device= device)
             # Training Model
             outputs = model(imgs)
-            #print(f' Outputs : {outputs}') # tensor with 10 elements
-            #print(f' Labels : {labels}') # tensor that is a number
             #loss = loss_fn_train(outputs,torch.max(labels, 1)[1])
             #loss = loss_fn(outputs,torch.max(labels, 1)[1])
+            if loss_fn_train != "false":
+                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+       
             loss = loss_fn(outputs, labels)
             # For L2 regularization
             #l2_lambda = 0.000001
@@ -320,15 +310,13 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
 
             # Training Metrics
             loss_train += loss.item()
-            #print(f' loss: {loss.item()}')
             train_predicted = torch.argmax(outputs, 1)
-            #print(f' train_predicted {train_predicted}')
             # NEW
             #labels = torch.argmax(labels,1)
-            #print(labels)
             train_total += labels.shape[0]
             train_correct += int((train_predicted == torch.max(labels, 1)[1]).sum())
-        #loss_fn_train.eval()
+        if loss_fn_train != "false":
+            loss_fn_train.eval()
         # validation metrics from batch
         val_correct, val_total, val_loss, best_val_loss_upd = validation_loop(model, loss_fn, valid_loader, best_val_loss)
         best_val_loss = best_val_loss_upd
@@ -345,6 +333,8 @@ def training_loop(n_epochs, optimizer, model, loss_fn_train, loss_fn, train_load
     # return lists with loss, accuracy every epoch
         if early_stopper.early_stop(validation_loss = val_loss):             
                 break
+        if loss_fn_train != "false":
+            loss_fn_train.next_epoch()
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
 
 def validation_loop(model, loss_fn, valid_loader, best_val_loss):
@@ -394,7 +384,7 @@ def validation_loop(model, loss_fn, valid_loader, best_val_loss):
                     'valid_loss' : loss_val,
                     'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
                     'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
             )
     model.train()
     return correct, total, avg_val_loss, best_val_loss                      
@@ -424,19 +414,13 @@ def test_loop(model, loss_fn, test_loader):
             labels = labels.to(device= device)
             # Assessing outputs
             outputs = model(cp_imgs)
-            # print(f' Outputs : {outputs}') # tensor with 10 elements
-            # print(f' Labels : {labels}') # tensor that is a number
             #loss = loss_fn(outputs,torch.max(labels, 1)[1])
             loss = loss_fn(outputs, labels)
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
             #labels = torch.argmax(labels,1)
-            #print(predicted)
-            #print(labels)
             total += labels.shape[0]
             correct += int((predicted == torch.max(labels, 1)[1]).sum())
-            #print(f' Predicted: {predicted.tolist()}')
-            #print(f' Labels: {predicted.tolist()}')
             all_predictions = all_predictions + predicted.tolist()
             all_labels = all_labels + torch.max(labels, 1)[1].tolist()
         
@@ -455,7 +439,7 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
 
 #--------------------------------- Assessing model on test data ------------------------------#
 updated_model_test = image_network()
-updated_model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name)['model_state_dict'])
+updated_model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + ".pt")['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = updated_model_test,
                                           loss_fn = loss_function, 
                                           test_loader = test_generator)
@@ -473,24 +457,22 @@ end = time.time()
 
 elapsed_time = program_elapsed_time(start, end)
 
-end = time.time()
-
-elapsed_time = program_elapsed_time(start, end)
-
 create_terminal_table(elapsed_time, all_labels, all_predictions)
 upload_to_neptune('erik-everett-palm/Tomics-Models',
                     file_name = file_name,
                     model_name = model_name,
-                    normalize = "mean and std",
+                    normalize = "mean and std and random crop",
                     yn_class_weights = yn_class_weights,
                     learning_rate = learning_rate, 
                     elapsed_time = elapsed_time, 
                     num_epochs = num_epochs,
                     loss_fn = loss_function,
                     all_labels = all_labels,
-                    init_learning_rate = learning_rate,
                     all_predictions = all_predictions,
                     dict_moa = dict_moa,
                     val_vs_train_loss_path = val_vs_train_loss_path,
                     val_vs_train_acc_path = val_vs_train_acc_path,
-                    loss_fn_train = loss_fn_train)
+                    loss_fn_train = loss_fn_train,
+                    pixel_size = 512 
+                )
+

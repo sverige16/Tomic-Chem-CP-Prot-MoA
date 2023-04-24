@@ -93,6 +93,7 @@ class Datapreprocessing(object):
     
 
   def get_VIF(self, dataFrame, target):
+    print("getting_VIF")
     X = add_constant(dataFrame.loc[:, dataFrame.columns != target])
     seriesObject = pd.Series([variance_inflation_factor(X.values,i) for i in range(X.shape[1])] , index=X.columns,)
     return seriesObject

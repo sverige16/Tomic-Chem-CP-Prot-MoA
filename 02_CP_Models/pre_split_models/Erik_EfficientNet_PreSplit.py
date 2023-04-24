@@ -43,7 +43,7 @@ sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/
 
 from Erik_alll_helper_functions import channel_5_numpy, accessing_correct_fold_csv_files, dict_splitting_into_tensor
 from Erik_alll_helper_functions import splitting, apply_class_weights,  program_elapsed_time, val_vs_train_loss
-from Erik_alll_helper_functions import EarlyStopper, create_splits, val_vs_train_accuracy, create_terminal_table, upload_to_neptune
+from Erik_alll_helper_functions import EarlyStopper, create_splits, val_vs_train_accuracy, create_terminal_table, upload_to_neptune, FocalLoss
 
 # Image analysis packages
 import albumentations as A 
@@ -112,20 +112,10 @@ train_transforms = transforms.Compose([
     transforms.RandomHorizontalFlip(0.3), 
     rotation_transform,
     transforms.RandomVerticalFlip(0.3)])
-'''
-train_transforms = A.Compose(
-    [A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),
-    A.OneOf([A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),],p = 0.2),
-    A.OneOf([A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),],p = 0.4),
-    A.OneOf([A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),],p = 0.5),
-    A.OneOf([A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),],p = 0.6),
-    A.OneOf([A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),],p = 0.8),
-    A.Flip(),A.ShiftScaleRotate(scale_limit=0.2),A.RandomRotate90(),])
-valid_transforms = A.Compose([])
-'''
+
 paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/paths_channels_treated_v1v2.csv')
 
-file_name = "tian10_all"
+file_name = "erik10_all"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
 training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
 hq, dose = 'False', 'False'
@@ -184,7 +174,7 @@ world_size = torch.cuda.device_count()
 pd_image_norm = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/dmso_stats_v1v2.csv')
 
 
-batch_size = 15
+batch_size = 18
 # parameters
 params = {'batch_size' : batch_size,
          'num_workers' : 3,
@@ -227,14 +217,14 @@ test_generator = torch.utils.data.DataLoader(test_dataset, **params)
 class image_network(nn.Module):
     def __init__(self):
         super().__init__()
-        self.base_model = EfficientNet.from_name('efficientnet-b1', include_top=False, in_channels = 5)
+        self.base_model = EfficientNet.from_name('efficientnet-b6', include_top=False, in_channels = 5)
         self.dropout_1 = nn.Dropout(p = 0.3)
-        self.Linear_last = nn.Linear(1280, num_classes)
+        self.Linear_last = nn.Linear(41472, num_classes) #1280
         # self.softmax = nn.Softmax(dim = 1)
     
     def forward(self, x):
         out = self.dropout_1(self.base_model(x))
-        out = out.view(-1, 1280)
+        out = out.view(-1, 41472)
         out = self.Linear_last(out)
         # out = self.softmax(out) # don't need softmax when using CrossEntropyLoss
         return out
@@ -250,7 +240,8 @@ class_weights = apply_class_weights(training_set, device)
 
 if yn_class_weights:
     #loss_function = torch.nn.CrossEntropyLoss(class_weights)
-    loss_function = torch.nn.BCEWithLogitsLoss(weight=class_weights)
+    loss_function = torch.nn.BCEWithLogitsLoss(weight = class_weights)
+    #loss_function = FocalLoss(alpha=0.25, gamma=2.0).to(device=device)
 else:
     loss_function = torch.nn.CrossEntropyLoss()
 
@@ -281,7 +272,7 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
     # lists keep track of loss and accuracy for training and validation set
     early_stopper = EarlyStopper(patience=10, min_delta=0.0001)
     model = model.to(device)
-    optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
+    #optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
     train_loss_per_epoch = []
     train_acc_per_epoch = []
     val_loss_per_epoch = []
@@ -470,7 +461,7 @@ create_terminal_table(elapsed_time, all_labels, all_predictions)
 upload_to_neptune('erik-everett-palm/Tomics-Models',
                     file_name = file_name,
                     model_name = model_name,
-                    normalize = "mean and std",
+                    normalize = "mean and std and random crop",
                     yn_class_weights = yn_class_weights,
                     learning_rate = learning_rate, 
                     elapsed_time = elapsed_time, 
@@ -481,6 +472,7 @@ upload_to_neptune('erik-everett-palm/Tomics-Models',
                     dict_moa = dict_moa,
                     val_vs_train_loss_path = val_vs_train_loss_path,
                     val_vs_train_acc_path = val_vs_train_acc_path,
-                    loss_fn_train = loss_fn_train 
+                    loss_fn_train = loss_fn_train,
+                    pixel_size = 512 
                 )
 
