@@ -55,17 +55,51 @@ import re
 
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-from Erik_alll_helper_functions import apply_class_weights, accessing_correct_fold_csv_files, create_splits
-from Erik_alll_helper_functions import dict_splitting_into_tensor, extract_tprofile, EarlyStopper, val_vs_train_loss
-from Erik_alll_helper_functions import val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report
-from Erik_alll_helper_functions import tprofiles_gc_too_func, create_terminal_table, upload_to_neptune
-from Erik_alll_helper_functions import set_bool_hqdose, set_bool_npy, FocalLoss, np_array_transform,apply_class_weights_GE, one_input_training_loop, one_input_validation_loop, one_input_test_loop
-
-
+from Erik_alll_helper_functions import (
+    apply_class_weights_CL, 
+    accessing_correct_fold_csv_files, 
+    create_splits, 
+    choose_device,
+    dict_splitting_into_tensor, 
+    extract_tprofile, 
+    EarlyStopper, 
+    val_vs_train_loss,
+    val_vs_train_accuracy, 
+    program_elapsed_time, 
+    conf_matrix_and_class_report,
+    tprofiles_gc_too_func, 
+    create_terminal_table, 
+    upload_to_neptune, 
+    different_loss_functions, 
+    Transcriptomic_Profiles_gc_too, 
+    Transcriptomic_Profiles_numpy,
+    set_bool_hqdose, 
+    set_bool_npy, 
+    FocalLoss, 
+    np_array_transform,
+    apply_class_weights_GE, 
+    one_input_training_loop, 
+    one_input_validation_loop, 
+    one_input_test_loop
+)
 
 using_cuda = True
 hidden_size = 4096
 model_name = '1DCNN'
+
+# ----------------------------------------- hyperparameters ---------------------------------------#
+# Hyperparameters
+testing = False # decides if we take a subset of the data
+max_epochs = 1 # number of epochs we are going to run 
+# apply_class_weights = True # weight the classes based on number of compounds
+using_cuda = True # to use available GPUs
+world_size = torch.cuda.device_count()
+
+#----------------------------------------- pre-processing -----------------------------------------#
+start = time.time()
+now = datetime.datetime.now()
+now = now.strftime("%d_%m_%Y-%H:%M:%S")
+print("Begin Training")
 
 
 # In[39]:
@@ -79,69 +113,6 @@ clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Model
 # clue row metadata with rows representing transcription levels of specific genes
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
 
-class Transcriptomic_Profiles_gc_too(torch.utils.data.Dataset):
-    '''
-    Works with profiles_gc_too_func to create a dataset of transcriptomic profiles and labels
-    '''
-    def __init__(self, gc_too, split, dict_moa):
-        #self.tprofile_labels = labels
-        self.profiles_gc_too = gc_too
-        self.split_sets = split
-        self.dict_moa = dict_moa
-        
-    def __len__(self):
-        ''' The number of data points '''
-        return len(self.split_sets)
-
-    def __getitem__(self, idx):
-        '''Retreiving the transcriptomic profile and label
-        Pseudocode:
-        1. Extract the transcriptomic profile using the index along with sig_id
-        2. Extract the label from t_profile
-        3. Use sig_id to extract the label from split_sets
-        4. Convert label to one hot encoding using function
-        5. Convert to torch tensors and return'''
-
-        t_profile = extract_tprofile(self.profiles_gc_too, idx)          # extract image from csv using index
-        t_sig_id = t_profile[0][0]
-        moa_key = self.split_sets["moa"][self.split_sets["sig_id"] == t_sig_id]
-        moa_key = moa_key.iloc[0]
-        t_moa = torch.tensor(self.dict_moa[moa_key])
-        t_profile_features = torch.tensor(t_profile[1])       # turn t profile into a floating torch tensor
-        
-        return torch.squeeze(t_profile_features), t_moa 
-
-class Transcriptomic_Profiles_numpy(torch.utils.data.Dataset):
-    '''
-    Works with profiles_gc_too_func to create a dataset of transcriptomic profiles and labels
-    '''
-    def __init__(self, np_array, split, dict_moa):
-        #self.tprofile_labels = labels
-        self.profiles_np_array = np_array
-        self.split_sets = split
-        self.dict_moa = dict_moa
-        
-    def __len__(self):
-        ''' The number of data points '''
-        return len(self.split_sets)
-
-    def __getitem__(self, idx):
-        '''Retreiving the transcriptomic profile and label
-        Pseudocode:
-        1. Extract the transcriptomic profile using the index along with sig_id
-        2. Extract the label from t_profile
-        3. Use sig_id to extract the label from split_sets
-        4. Convert label to one hot encoding using function
-        5. Convert to torch tensors and return'''
-
-        t_profile = self.profiles_np_array.iloc[idx, :-1]          # extract image from csv using index
-        t_sig_id = self.profiles_np_array.iloc[idx, -1]
-        moa_key = self.split_sets["moa"][self.split_sets["sig_id"] == t_sig_id]
-        moa_key = moa_key.iloc[0]
-        t_moa = torch.tensor(self.dict_moa[moa_key])
-        t_profile_features = torch.tensor(t_profile)       # turn t profile into a floating torch tensor
-        
-        return t_profile_features, t_moa 
 
 
 batch_size = 50
@@ -151,12 +122,7 @@ WEIGHT_DECAY = 1e-5
 params = {'batch_size' : batch_size,
          'num_workers' : 3,
          'prefetch_factor' : 2} 
-          
-if using_cuda:
-    device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
-else:
-    device = torch.device('cpu')
-print(f'Training on device {device}. ' )
+device = choose_device(using_cuda)         
 
 
 file_name = "erik10_hq_8_12"
@@ -194,9 +160,9 @@ test_np = np_array_transform(profiles_gc_too_test)
 
 num_classes = len(L1000_training["moa"].unique())
 #class_weights = apply_class_weights_GE(pd.concat([train_np, valid_np, test_np]), pd.concat([L1000_training,L1000_validation, L1000_test]), device)
-class_weights = apply_class_weights_GE(train_np,L1000_training, device)
+#class_weights = apply_class_weights_GE(train_np,L1000_training, device)
 
-sampler = WeightedRandomSampler(weights=class_weights, num_samples=len(class_weights), replacement=True)
+#sampler = WeightedRandomSampler(weights=class_weights, num_samples=len(class_weights), replacement=True)
 '''
 # create generator that randomly takes indices from the training set
 training_dataset = Transcriptomic_Profiles(profiles_gc_too_train, L1000_training, dict_moa)
@@ -212,7 +178,7 @@ test_generator = torch.utils.data.DataLoader(test_dataset, **params)
 
 # create generator that randomly takes indices from the training set
 training_dataset = Transcriptomic_Profiles_numpy(train_np, L1000_training, dict_moa)
-training_generator = torch.utils.data.DataLoader(training_dataset, **params, sampler=sampler)
+training_generator = torch.utils.data.DataLoader(training_dataset, **params)
 
 # create generator that randomly takes indices from the validation set
 validation_dataset = Transcriptomic_Profiles_numpy(valid_np, L1000_validation, dict_moa)
@@ -299,38 +265,11 @@ learning_rate = 3.345138368460866e-05
 model = CNN_Model(num_features = 978, num_targets= num_classes, hidden_size= hidden_size)
 optimizer = torch.optim.Adam(model.parameters(),  weight_decay=WEIGHT_DECAY, lr=learning_rate)
 my_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer, step_size= 17)
-yn_class_weights = True
-label_smoothing = True
-class_weights = apply_class_weights(training_set, device)
-# loss_function
 
-if yn_class_weights:
-    #loss_function = torch.nn.CrossEntropyLoss(weight = class_weights)
-    if label_smoothing:
-        from ols import OnlineLabelSmoothing
-        loss_fn_train = OnlineLabelSmoothing(alpha = 0.8992210000603433, n_classes=num_classes, smoothing = 0.15792537487672836).to(device=device)
-        loss_fn = torch.nn.BCEWithLogitsLoss()
-    else:
-        loss_fn_train = 'false'
-        loss_fn = torch.nn.BCEWithLogitsLoss(weight = class_weights)
-else:
-    loss_fn_train = 'false'
-    loss_fn = FocalLoss(gamma=0.8875883437731453, alpha=0.10008908071219116)
-    #loss_fn = torch.nn.CrossEntropyLoss(weight = class_weights)
-
-# ----------------------------------------- hyperparameters ---------------------------------------#
-# Hyperparameters
-testing = False # decides if we take a subset of the data
-max_epochs = 1 # number of epochs we are going to run 
-# apply_class_weights = True # weight the classes based on number of compounds
-using_cuda = True # to use available GPUs
-world_size = torch.cuda.device_count()
-
-#----------------------------------------- pre-processing -----------------------------------------#
-start = time.time()
-now = datetime.datetime.now()
-now = now.strftime("%d_%m_%Y-%H:%M:%S")
-print("Begin Training")
+class_weights = apply_class_weights_GE(train_np, L1000_training, dict_moa, device)
+# choosing loss_function 
+loss_fn_str = 'cross'
+loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str, class_weights=class_weights)
 
 # --------------------------Function to perform training, validation, testing, and assessment ------------------
 
@@ -340,6 +279,7 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               model = model,
               loss_fn = loss_fn,
               loss_fn_train = loss_fn_train,
+              loss_fn_str = loss_fn_str,
               train_loader=training_generator, 
               valid_loader=validation_generator,
               my_lr_scheduler = my_lr_scheduler,
@@ -351,9 +291,9 @@ model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_mod
 #----------------------------------------- Assessing model on test data -----------------------------------------#
 correct, total, avg_test_loss, all_predictions, all_labels = one_input_test_loop(model = model_test,
                                           loss_fn = loss_fn, 
+                                          loss_fn_str= loss_fn_str,
                                           test_loader = test_generator,
                                           device = device)
-
 
 
 #-------------------------------- Writing interesting info into terminal ------------------------# 

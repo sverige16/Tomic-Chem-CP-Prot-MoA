@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[36]:
-
-
 # Import Statements
 import pandas as pd
 import numpy as np
@@ -255,22 +252,15 @@ def training_loop(n_epochs, optimizer, model, loss_fn, train_loader, valid_loade
                 loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
             else:
                 loss = loss_fn(outputs,labels)
-            #loss = loss_fn(outputs,labels)
-            # For L2 regularization
-            #l2_lambda = 0.000001
-            #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
-            #loss = loss + l2_lambda * l2_norm
             # Update weights
             if torch.isnan(loss):
                 raise ValueError("Loss is NaN. Stopping training.")
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
+            #torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
             optimizer.step()
             # Training Metrics
             loss_train += loss.item()
-            #print(f' loss: {loss.item()}')
             train_predicted = torch.argmax(outputs, 1)
-            #print(f' train_predicted {train_predicted}')
             # NEW
             labels = torch.argmax(labels,1)
             #print(labels)
@@ -377,22 +367,15 @@ def test_loop(model, loss_fn, test_loader):
             # Move to device MAY NOT BE NECESSARY
             compounds = compounds.to(device = device)
             labels = labels.to(device= device)
-
             # Assessing outputs
             outputs = model(compounds)
-            # print(f' Outputs : {outputs}') # tensor with 10 elements
-            # print(f' Labels : {labels}') # tensor that is a number
             loss = loss_fn(outputs,labels)
             #loss = loss_fn(outputs, torch.max(labels, 1)[1])
             loss_test += loss.item()
             predicted = torch.argmax(outputs, 1)
             #labels = torch.argmax(labels,1)
-            #print(predicted)
-            #print(labels)
             total += labels.shape[0]
             correct += int((predicted == torch.max(labels, 1)[1]).sum())
-            #print(f' Predicted: {predicted.tolist()}')
-            #print(f' Labels: {predicted.tolist()}')
             all_predictions = all_predictions + predicted.tolist()
             all_labels = all_labels + torch.max(labels, 1)[1].tolist()
         avg_test_loss = loss_test/len(test_loader)  # average loss over batch
