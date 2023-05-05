@@ -56,97 +56,9 @@ import heapq
 
 from albumentations import RandomCrop
 
-# ---------------------------------------------- data loading ----------------------------------------------#
-# ----------------------------------------------------------------------------------------------------------#
-def load_train_valid_data(path, train_data, valid_data, test_data = None):
-    '''
-    Functions loads the data frames that will be used to train classifier and assess its accuracy in predicting.
-    input:
-        train_data: filename of training csv file
-        valid_data: filename of validation csv file
-        (optional) test_data: filename of test csv file (if test_data is not None
-        path: path to the folder where the data is stored
-    ouput:
-       L1000 training: pandas dataframe with training data
-       L1000 validation: pandas dataframe with validation data
-       (optional) L1000 test: pandas dataframe with test data (if test_data is not None)
-    '''
-    if test_data:
-        L1000_training = pd.read_csv(path + train_data, delimiter = ",")
-        L1000_validation = pd.read_csv(path + valid_data, delimiter = ",")
-        L1000_test = pd.read_csv(path + test_data, delimiter = ",")
-        return L1000_training, L1000_validation, L1000_test
-    else:
-        L1000_training = pd.read_csv(path + train_data, delimiter = ",")
-        L1000_validation = pd.read_csv(path + valid_data, delimiter = ",")
-    return L1000_training, L1000_validation
-
- 
-# ---------------------------------------------- data preprocessing ----------------------------------------------#
-
-def normalize_data(trn, val, test = pd.DataFrame()):
-    """
-    Performs quantile normalization on the train, test and validation data. The QuantileTransformer
-    is fitted on the train data, and transformed on test and validation data.
-    
-    Args:
-            trn: train data - pandas dataframe.
-            val: validation data - pandas dataframe.
-            test: test data - pandas dataframe.
-    
-    Returns:
-            trn_norm: normalized train data - pandas dataframe.
-            val_norm: normalized validation - pandas dataframe.
-            test_norm: normalized test data - pandas dataframe.
-    inspired by  https://github.com/broadinstitute/lincs-profiling-complementarity/tree/master/2.MOA-prediction
-    """
-    norm_model = QuantileTransformer(n_quantiles=100,random_state=0, output_distribution="normal")
-    #norm_model = StandardScaler()
-    if test.shape[0] == 0:
-        trn_norm = pd.DataFrame(norm_model.fit_transform(trn),index = trn.index,columns = trn.columns)
-        tst_norm = pd.DataFrame(norm_model.transform(test),index = test.index,columns = test.columns)
-        return trn_norm, tst_norm, str(norm_model) 
-    else:
-        trn_norm = pd.DataFrame(norm_model.fit_transform(trn),index = trn.index,columns = trn.columns)
-        val_norm = pd.DataFrame(norm_model.transform(val),index = val.index,columns = val.columns)
-        test_norm = pd.DataFrame(norm_model.transform(test),index = test.index,columns = test.columns)
-        return trn_norm, val_norm, test_norm, str(norm_model)
-
-def variance_threshold(x_train, x_val, var_threshold, x_test = pd.DataFrame() ):
-    """
-    This function perform feature selection on the data, i.e. removes all low-variance features below the
-    given 'threshold' parameter.
-    
-    Input:
-        x_train: training data - pandas dataframe.
-        x_val: validation data - pandas dataframe.
-        var_threshold: variance threshold - float. (e.g. 0.8). All features with variance below this threshold will be removed.
-        (optional) x_test: test data - pandas dataframe.
-    
-    Output:
-        x_train: training data - pandas dataframe.
-        x_val: validation data - pandas dataframe.
-        (optional) x_test: test data - pandas dataframe.
-
-    inspired by https://github.com/broadinstitute/lincs-profiling-complementarity/tree/master/2.MOA-prediction
-    
-    """
-    var_thresh = VarianceThreshold(threshold = var_threshold) # sets a variance threshold
-    var_thresh.fit(x_train) # learn empirical variances from X
-    if x_test.shape[0] == 0:
-        x_train = x_train.loc[:,var_thresh.variances_ > var_threshold] # locate all variance thresholds above 0.8, keep those columns
-        x_val = x_val.loc[:,var_thresh.variances_ > var_threshold]
-        return x_train, x_val
-    else:
-        x_test = x_test.loc[:,var_thresh.variances_ > var_threshold]
-        x_train = x_train.loc[:,var_thresh.variances_ > var_threshold] # locate all variance thresholds above 0.8, keep those columns
-        x_val = x_val.loc[:,var_thresh.variances_ > var_threshold]
-        return x_train, x_val, x_test
-    
-
 # ----------------------------------------- Visualization of Model Results ----------------------------------------------# 
 # -----------------------------------------------------------------------------------------------------------------------#
-def val_vs_train_loss(epochs, train_loss, val_loss, now, model_name, file_name, loss_path_to_save):
+def val_vs_train_loss(num_epochs, train_loss, val_loss, now, model_name, file_name, loss_path_to_save):
     ''' 
     Plotting validation versus training loss over time
     Input:
@@ -160,7 +72,7 @@ def val_vs_train_loss(epochs, train_loss, val_loss, now, model_name, file_name, 
         Plot of validation versus training loss over time (matplotlib plot, png)
     ''' 
     plt.figure()
-    x_axis = list(range(1, epochs +1)) # create x axis with number of
+    x_axis = list(range(1, num_epochs +1)) # create x axis with number of
     plt.plot(x_axis, train_loss, label = "train_loss")
     plt.plot(x_axis, val_loss, label = "val_loss")
     # Figure description
@@ -172,7 +84,7 @@ def val_vs_train_loss(epochs, train_loss, val_loss, now, model_name, file_name, 
     plt.savefig(loss_path_to_save + '/' + 'loss_train_val_' + model_name + '_' + file_name + '_' + now  + '.png')
     return loss_path_to_save + '/' + 'loss_train_val_' + model_name + '_' + file_name + '_' + now   + '.png'
 
-def val_vs_train_accuracy(epochs, train_acc, val_acc, now, model_name, file_name, acc_path_to_save):
+def val_vs_train_accuracy(num_epochs, train_acc, val_acc, now, model_name, file_name, acc_path_to_save):
     '''
     Plotting validation versus training accuracy over time
     Input:
@@ -186,7 +98,7 @@ def val_vs_train_accuracy(epochs, train_acc, val_acc, now, model_name, file_name
         Plot of validation versus training accuracy over time (matplotlib plot, png)
     '''
     plt.figure()
-    x_axis = list(range(1, epochs +1)) # create x axis with number of
+    x_axis = list(range(1, num_epochs +1)) # create x axis with number of
     plt.plot(x_axis, train_acc, label = "train_acc")
     plt.plot(x_axis, val_acc, label = "val_acc")
     # Figure description
@@ -657,6 +569,71 @@ def pre_processing(L1000_training, L1000_validation, L1000_test,
         dict_moa: dictionary with moa as key (string) and one-hot encoded labels as values (numpy array)
         
     '''
+
+    def normalize_data(trn, val, test = pd.DataFrame()):
+        """
+        Performs quantile normalization on the train, test and validation data. The QuantileTransformer
+        is fitted on the train data, and transformed on test and validation data.
+        
+        Args:
+                trn: train data - pandas dataframe.
+                val: validation data - pandas dataframe.
+                test: test data - pandas dataframe.
+        
+        Returns:
+                trn_norm: normalized train data - pandas dataframe.
+                val_norm: normalized validation - pandas dataframe.
+                test_norm: normalized test data - pandas dataframe.
+        inspired by  https://github.com/broadinstitute/lincs-profiling-complementarity/tree/master/2.MOA-prediction
+        """
+        norm_model = QuantileTransformer(n_quantiles=100,random_state=0, output_distribution="normal")
+        #norm_model = StandardScaler()
+        if test.shape[0] == 0:
+            trn_norm = pd.DataFrame(norm_model.fit_transform(trn),index = trn.index,columns = trn.columns)
+            tst_norm = pd.DataFrame(norm_model.transform(test),index = test.index,columns = test.columns)
+            return trn_norm, tst_norm, str(norm_model) 
+        else:
+            trn_norm = pd.DataFrame(norm_model.fit_transform(trn),index = trn.index,columns = trn.columns)
+            val_norm = pd.DataFrame(norm_model.transform(val),index = val.index,columns = val.columns)
+            test_norm = pd.DataFrame(norm_model.transform(test),index = test.index,columns = test.columns)
+            return trn_norm, val_norm, test_norm, str(norm_model)
+
+    def variance_threshold(x_train, x_val, var_threshold, x_test = pd.DataFrame() ):
+        """
+        This function perform feature selection on the data, i.e. removes all low-variance features below the
+        given 'threshold' parameter.
+        
+        Input:
+            x_train: training data - pandas dataframe.
+            x_val: validation data - pandas dataframe.
+            var_threshold: variance threshold - float. (e.g. 0.8). All features with variance below this threshold will be removed.
+            (optional) x_test: test data - pandas dataframe.
+        
+        Output:
+            x_train: training data - pandas dataframe.
+            x_val: validation data - pandas dataframe.
+            (optional) x_test: test data - pandas dataframe.
+
+        inspired by https://github.com/broadinstitute/lincs-profiling-complementarity/tree/master/2.MOA-prediction
+        
+        """
+        var_thresh = VarianceThreshold(threshold = var_threshold) # sets a variance threshold
+        var_thresh.fit(x_train) # learn empirical variances from X
+        if x_test.shape[0] == 0:
+            x_train_var = x_train.loc[:,var_thresh.variances_ > var_threshold] # locate all variance thresholds above 0.8, keep those columns
+            x_val_var = x_val.loc[:,var_thresh.variances_ > var_threshold]
+            if x_train_var.shape[1] < x_train.shape[1]:
+                print("Number of features removed due to Variance Threshold: ", x_train.shape[1] - x_train_var.shape[1])
+            return x_train_var, x_val_var
+        else:
+            x_test_var = x_test.loc[:,var_thresh.variances_ > var_threshold]
+            x_train_var = x_train.loc[:,var_thresh.variances_ > var_threshold] # locate all variance thresholds above 0.8, keep those columns
+            x_val_var = x_val.loc[:,var_thresh.variances_ > var_threshold]
+            if x_train_var.shape[1] < x_train.shape[1]:
+                print("Number of features removed due to Variance Threshold: ", x_train.shape[1] - x_train_var.shape[1])
+
+            return x_train_var, x_val_var, x_test_var
+    
     print("pre-processing data!")
     # shuffling training and validation data
     L1000_training = L1000_training.sample(frac = 1, random_state = 4)
@@ -693,10 +670,10 @@ def pre_processing(L1000_training, L1000_validation, L1000_test,
     
     
     # merging the transcriptomic profiles with the corresponding MoA class using the sig_id as a key
-    df_train = pd.merge(df_train, L1000_training[["sig_id", "Compound ID", "moa"]], how = "outer", on ="sig_id")
-    df_val = pd.merge(df_val, L1000_validation[["sig_id", "Compound ID", "moa"]], how = "outer", on ="sig_id")
-    df_test = pd.merge(df_test, L1000_test[["sig_id", "Compound ID", "moa"]], how = "outer", on ="sig_id")
-   
+    df_train = pd.merge(df_train, L1000_training[["sig_id", "Compound ID", "moa"]], how = "inner", on ="sig_id")
+    df_val = pd.merge(df_val, L1000_validation[["sig_id", "Compound ID", "moa"]], how = "inner", on ="sig_id")
+    df_test = pd.merge(df_test, L1000_test[["sig_id", "Compound ID", "moa"]], how = "inner", on ="sig_id")
+    
    # dropping the sig_id column
     df_train.drop(columns = ["sig_id"], inplace = True)
     df_val.drop(columns = ["sig_id"], inplace = True)
@@ -711,24 +688,14 @@ def pre_processing(L1000_training, L1000_validation, L1000_test,
     df_test_labels = df_test[df_test.columns[-2:]]
 
     #pre-processing the data
-    df_train_features, df_val_features, df_test_features = variance_threshold(df_train_features, df_val_features, use_variance_threshold, df_test_features)
+    if use_variance_threshold > 0:
+        df_train_features, df_val_features, df_test_features = variance_threshold(df_train_features, df_val_features, use_variance_threshold, df_test_features)
+        print("Variancethreshold used: ", use_variance_threshold)
     if normalize:
         df_train_features, df_val_features, df_test_features, norm_method = normalize_data(df_train_features, df_val_features, df_test_features)
-
+        print("normalization method used: ", norm_method)
     return df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa
 
-def choose_cell_lines_to_include(df_set, clue_sig_in_SPECS, cell_lines):
-    '''
-    Returns training/validation/test set with only the cell lines specified by the user
-    Input:
-        df_set: a dataframe with the training/validation/test data
-        cell_lines: a dictionary, where the key is the name of the moa and value is a list with the names of cell lines to be included.
-            Default is empty. Ex. "{"cyclooxygenase inhibitor": ["A375", "HA1E"], "adrenergic receptor antagonist" : ["A375", "HA1E"] }"
-    Output:
-        df_set: a dataframe with the training/validation/test data with only the cell lines specified by the user
-    '''
-    profile_ids = clue_sig_in_SPECS[["Compound ID", "sig_id", "moa", 'cell_iname']][clue_sig_in_SPECS["Compound ID"].isin(df_set["Compound_ID"].unique())]
-    return profile_ids[profile_ids["cell_iname"].isin(cell_lines)]
 
 def extract_all_cell_lines(df):
     '''
@@ -765,6 +732,18 @@ def create_splits(train, val, test, hq = "False", dose = "False", cell_lines = [
             - cell line
             - batch ID
     '''
+    def choose_cell_lines_to_include(df_set, clue_sig_in_SPECS, cell_lines):
+        '''
+        Returns training/validation/test set with only the cell lines specified by the user
+        Input:
+            df_set: a dataframe with the training/validation/test data
+            cell_lines: a dictionary, where the key is the name of the moa and value is a list with the names of cell lines to be included.
+                Default is empty. Ex. "{"cyclooxygenase inhibitor": ["A375", "HA1E"], "adrenergic receptor antagonist" : ["A375", "HA1E"] }"
+        Output:
+            df_set: a dataframe with the training/validation/test data with only the cell lines specified by the user
+        '''
+        profile_ids = clue_sig_in_SPECS[["Compound ID", "sig_id", "moa", 'cell_iname']][clue_sig_in_SPECS["Compound ID"].isin(df_set["Compound_ID"].unique())]
+        return profile_ids[profile_ids["cell_iname"].isin(cell_lines)]
 
     # read in documents
     clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_sig_in_SPECS1&2.csv', delimiter = ",")
@@ -937,67 +916,6 @@ def channel_5_numpy(df, idx, pd_image_norm):
     five_chan_img = torch.from_numpy(arr_stack)
     return five_chan_img
 
-def accessing_correct_fold_csv_files(file):
-    '''
-    This function returns the correct, fold-0 train, valid and test split data csvs given a file name
-    Input:
-        file: the name of the file (type = string)
-    Output:
-        training_set: the training set (type = pandas dataframe)
-        validation_set: the validation set (type = pandas dataframe)
-        test_set: the test set (type = pandas dataframe)
-    '''
- # download csvs with all the data pre split''
-    if file == 'tian10':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
-        train_filename = 'tian10_clue_train_fold_0.csv'
-        val_filename = 'tian10_clue_val_fold_0.csv'
-        test_filename = 'tian10_clue_test_fold_0.csv'
-    elif file == 'tian10_all':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
-        train_filename = 'tian10_all_train_fold_1.csv'
-        val_filename = 'tian10_all_val_fold_1.csv'
-        test_filename = 'tian10_all_test_fold_1.csv'
-    elif file == 'erik10':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_clue_train_fold_0.csv'
-        val_filename = 'erik10_clue_val_fold_0.csv'
-        test_filename = 'erik10_clue_test_fold_0.csv'
-    elif file == 'erik10_all':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_all_train_fold_1.csv'
-        val_filename = 'erik10_all_val_fold_1.csv'
-        test_filename = 'erik10_all_test_fold_1.csv'
-    elif file == 'erik10_hq':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_clue_hq_train_fold_0.csv'
-        val_filename = 'erik10_clue_hq_val_fold_0.csv'
-        test_filename = 'erik10_clue_hq_test_fold_0.csv'
-    elif file == 'erik10_8_12':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_clue_8_12__train_fold_1.csv'
-        val_filename = 'erik10_clue_8_12__val_fold_1.csv'
-        test_filename = 'erik10_clue_8_12__test_fold_1.csv'
-    elif file == 'erik10_hq_8_12':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_clue_hq_8_12__train_fold_0.csv'
-        val_filename = 'erik10_clue_hq_8_12__val_fold_0.csv'
-        test_filename = 'erik10_clue_hq_8_12__test_fold_0.csv'
-    elif file == 'cyc_adr':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
-        train_filename = 'cyc_adr_clue_train_fold_0.csv'
-        val_filename = 'cyc_adr_clue_val_fold_0.csv'
-        test_filename = 'cyc_adr_clue_test_fold_0.csv'
-    elif file == 'cyc_dop':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_dop/'
-        train_filename = 'cyc_dop_clue_train_fold_0.csv'
-        val_filename = 'cyc_dop_clue_val_fold_0.csv'
-        test_filename = 'cyc_dop_clue_test_fold_0.csv'
-    else:
-        raise ValueError('Please enter a valid file name')
-
-    training_set, validation_set, test_set =  load_train_valid_data(dir_path, train_filename, val_filename, test_filename)
-    return training_set, validation_set, test_set
 
 def accessing_all_folds_csv(file, fold_int):
     ''' 
@@ -1008,7 +926,32 @@ def accessing_all_folds_csv(file, fold_int):
     Output:
         training_set: the training set (type = pandas dataframe)
         validation_set: the validation set (type = pandas dataframe)
-        test_set: the test set (type = pandas dataframe)'''
+        test_set: the test set (type = pandas dataframe)
+    '''
+    
+    def load_train_valid_data(path, train_data, valid_data, test_data = None):
+        '''
+        Functions loads the data frames that will be used to train classifier and assess its accuracy in predicting.
+        input:
+            train_data: filename of training csv file
+            valid_data: filename of validation csv file
+            (optional) test_data: filename of test csv file (if test_data is not None
+            path: path to the folder where the data is stored
+        ouput:
+        L1000 training: pandas dataframe with training data
+        L1000 validation: pandas dataframe with validation data
+        (optional) L1000 test: pandas dataframe with test data (if test_data is not None)
+        '''
+        if test_data:
+            L1000_training = pd.read_csv(path + train_data, delimiter = ",")
+            L1000_validation = pd.read_csv(path + valid_data, delimiter = ",")
+            L1000_test = pd.read_csv(path + test_data, delimiter = ",")
+            return L1000_training, L1000_validation, L1000_test
+        else:
+            L1000_training = pd.read_csv(path + train_data, delimiter = ",")
+            L1000_validation = pd.read_csv(path + valid_data, delimiter = ",")
+        return L1000_training, L1000_validation
+
     if file == 'tian10':
         dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
         if fold_int == 0:
@@ -1213,49 +1156,6 @@ def accessing_all_folds_csv(file, fold_int):
     training_set, validation_set, test_set =  load_train_valid_data(dir_path, train_filename, val_filename, test_filename)
     return training_set, validation_set, test_set
 
-def checking_veracity_of_data(file, L1000_training, L1000_validation, L1000_test):
-    """
-    This function checks the number of profiles and unique compounds in the data set. 
-    Is a sanity check to make sure the data is being loaded correctly.
-    Asserts error if there is a discrepancy between unique compound number or transcriptomic profile number
-    and the combined datasets-
-
-    Inputs:
-        file: string, name of the data set being investigated
-        L1000_training: pandas dataframe, training set
-        L1000_validation: pandas dataframe, validation set
-        L1000_test: pandas dataframe, test set
-    
-    Returns:
-        None
-
-    Notice that the minus two is to take into account for enantiomers that Compound ID alone cannot distinguish between.
-    """
-    all_profiles = pd.concat([L1000_training, L1000_validation, L1000_test])
-    if file == 'tian10':
-        assert all_profiles.shape[0] == 13660, 'Incorrect number of profiles'
-        assert all_profiles["Compound ID"].nunique() == 121, 'Incorrect number of unique compounds'
-    elif file == 'erik10':
-        assert all_profiles.shape[0] == 18042, 'Incorrect number of profiles'
-        assert all_profiles["Compound ID"].nunique() == int(243 -2), 'Incorrect number of unique compounds'
-    elif file == 'erik10_hq':
-        assert all_profiles.shape[0] == 4564, 'Incorrect number of profiles'
-        assert all_profiles["Compound ID"].nunique() == 185, 'Incorrect number of unique compounds'
-    elif file == 'erik10_8_12':
-        assert all_profiles.shape[0] == 8644, 'Incorrect number of profiles'
-        assert all_profiles["Compound ID"].nunique() == int(238 - 2), 'Incorrect number of unique compounds'
-    elif file == 'erik10_hq_8_12':
-        assert all_profiles.shape[0] == 2387, 'Incorrect number of profiles'
-        assert all_profiles["Compound ID"].nunique() == 177, 'Incorrect number of unique compounds'
-    elif file == 'cyc_adr':
-        assert all_profiles.shape[0] == 1619, 'Incorrect number of profiles'
-        assert all_profiles["Compound ID"].nunique() == int(76 - 1), 'Incorrect number of unique compounds'
-    elif file == 'cyc_dop':
-        assert all_profiles.shape[0] == 3385, 'Incorrect number of profiles'
-        assert all_profiles["Compound ID"].nunique() == int(76 -1), 'Incorrect number of unique compounds'
-    else:
-        raise ValueError('Please enter a valid file name')
-    print("passed veracity test!")
 
 def label_smoothing(labels, smooth_factor, num_classes):
     '''
@@ -1335,20 +1235,32 @@ def upload_to_neptune(neptune_project_name,
     run['parameters/class_weight'] = yn_class_weights
     if learning_rate:
         run['parameters/learning_rate'] = learning_rate
+    else:
+        run['parameters/learning_rate'] = 'False'
     if loss_fn_train:
         run['parameters/loss_fn_train'] = str(loss_fn_train)
+    else:
+        run['parameters/loss_fn_train'] = 'False'
     if loss_fn:
         run['parameters/loss_function'] = str(loss_fn)
+    else:
+        run['parameters/loss_function'] = 'False'
     if learning_rate_scheduler:
         run['parameters/learning_rate_scheduler'] = learning_rate_scheduler
+    else:
+        run['parameters/learning_rate_scheduler'] = 'False'
     if pixel_size:
         run['parameters/pixel_size'] = pixel_size
+    else:
+        run['parameters/pixel_size'] = 'False'
     
 
     # length of time to train model
     run['metrics/time'] = elapsed_time
     if num_epochs:
         run['metrics/epochs'] = num_epochs
+    else:
+        run['metrics/epochs'] = 'False'
 
     # Uploading test Metrics
     run['metrics/test_f1'] = f1_score(all_labels, all_predictions, average='macro')
@@ -1367,14 +1279,14 @@ def upload_to_neptune(neptune_project_name,
         state = torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt')
         run['metrics/f1_score'] = state["f1_score"]
         run['metrics/accuracy'] = state["accuracy"]
-        run['metrics/loss'] = state["valid_loss"]
 
     conf_matrix_and_class_report(all_labels, all_predictions, model_data_subset, dict_moa)
 
         # Upload classification info
     run["files/classif_info"].upload('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/class_info.txt')
     run["images/conf_matrix"].upload('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/conf_matrix.png')
-
+    run.stop()
+    
 def set_bool_hqdose(file_name):
     '''Sets boolean values for hq and dose
     Inputs:
@@ -1389,7 +1301,7 @@ def set_bool_hqdose(file_name):
         dose = 'True'
     return hq, dose
     
-def set_bool_npy(variance_thresh, normalize_c):
+def set_bool_npy(variance_thresh, normalize_c, five_fold = 'False'):
     '''Sets boolean values for npy_exists and save_npy
     Inputs:
         variance_thresh: float, variance threshold used for feature selection
@@ -1397,12 +1309,13 @@ def set_bool_npy(variance_thresh, normalize_c):
     Returns:
         npy_exists: boolean, whether or not the npy file exists
         save_npy: boolean, whether or not to save the npy file'''
-    if variance_thresh > 0 or normalize_c == 'True':
+    if variance_thresh > 0 or normalize_c == 'True' or five_fold == 'True':
         npy_exists = False
         save_npy = False    
     else:
         npy_exists = True
         save_npy = False
+
     return npy_exists, save_npy
 
 def find_two_lowest_numbers(lst):
@@ -1445,658 +1358,99 @@ class FocalLoss(nn.Module):
             return torch.sum(focal_loss)
         else:
             return focal_loss
+    
+def differentiable_f1_loss(y_true, y_pred, class_weights=None):
+    smooth = 1e-7
+
+    # Convert predictions to binary by rounding
+    y_pred = torch.round(torch.clamp(y_pred, 0, 1))
+
+    # Calculate true positives, false positives, and false negatives
+    tp = torch.sum(y_true * y_pred, dim=0)
+    fp = torch.sum((1 - y_true) * y_pred, dim=0)
+    fn = torch.sum(y_true * (1 - y_pred), dim=0)
+
+    # Calculate continuous precision and recall
+    p = tp / (tp + fp + smooth)
+    r = tp / (tp + fn + smooth)
+
+    # Calculate the differentiable F1 score
+    f1 = 2 * p * r / (p + r + smooth)
+    f1[torch.isnan(f1)] = 0
+
+    # Apply class weights if provided
+    if class_weights is not None:
+        f1 = f1 * class_weights
+        f1 /= torch.sum(class_weights)
+
+    # Calculate the loss as 1 - F1 score
+    return 1 - torch.mean(f1)
+
 # ---------------------------------------- Training, Validation, Test Loops ------------------------#       
 # ----------------------------------------- Training Loops ----------------------------------------- #    
-def one_input_training_loop(n_epochs, optimizer, model, loss_fn, loss_fn_str, train_loader, valid_loader, my_lr_scheduler, device, model_name, loss_fn_train = "false"):
+def adapt_training_loop(n_epochs,
+                        optimizer, 
+                        model, 
+                        loss_fn, 
+                        loss_fn_str, 
+                        train_loader, 
+                        valid_loader,  
+                        device, 
+                        model_name, 
+                        val_str, 
+                        early_patience = 0, 
+                        loss_fn_train = "false",
+                        my_lr_scheduler = "false"):
     '''
-    n_epochs: number of epochs 
-    optimizer: optimizer used to do backpropagation
-    model: deep learning architecture
-    loss_fn: loss function
-    train_loader: generator creating batches of training data
-    valid_loader: generator creating batches of validation data
-    '''
-    # lists keep track of loss and accuracy for training and validation set
-    model = model.to(device)
-    early_stopper = EarlyStopper(patience=8, min_delta=0.0001)
-    train_loss_per_epoch = []
-    train_acc_per_epoch = []
-    val_loss_per_epoch = []
-    val_acc_per_epoch = []
-    best_val_loss = np.inf
-    if loss_fn_train != "false":
-        loss_fn_train.train()
-    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
-        loss_train = 0.0
-        train_total = 0
-        train_correct = 0
-        for data1, labels in tqdm(train_loader, desc = "batch", position=0, leave= False):
-            optimizer.zero_grad()
-            # put model, images, labels on the same device
-            data1 = data1.to(device = device)
-            labels = labels.to(device= device)
-            # Training Model
-            outputs = model(data1)
-            if loss_fn_train != "false":
-                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
-            elif loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
-            #loss = loss_fn(outputs,labels)
-            # For L2 regularization
-            #l2_lambda = 0.000001
-            #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
-            #loss = loss + l2_lambda * l2_norm
-            # Update weights
-            if torch.isnan(loss):
-                raise ValueError("Loss is NaN. Stopping training.")
-            loss.backward()
-            #torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
-            optimizer.step()
-            # Training Metrics
-            loss_train += loss.item()
-            #print(f' loss: {loss.item()}')
-            train_predicted = torch.argmax(outputs, 1)
-            #print(f' train_predicted {train_predicted}')
-            # NEW
-            labels = torch.argmax(labels,1)
-            #print(labels)
-            train_total += labels.shape[0]
-            train_correct += int((train_predicted == labels).sum())
-        if loss_fn_train != "false":
-            loss_fn_train.eval()
-        # validation metrics from batch
-        val_correct, val_total, val_loss, best_val_loss_upd, val_f1_score = one_input_validation_loop(model, loss_fn, loss_fn_str, valid_loader, best_val_loss, device, model_name)
-        best_val_loss = best_val_loss_upd
-        val_accuracy = val_correct/val_total
-        # printing results for epoch
-        print(f' Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, F1 Score: {val_f1_score} ')
-        # adding epoch loss, accuracy to lists 
-        val_loss_per_epoch.append(val_loss)
-        train_loss_per_epoch.append(loss_train/len(train_loader))
-        val_acc_per_epoch.append(val_accuracy)
-        train_acc_per_epoch.append(train_correct/train_total)
-        if loss_fn_train != "false":
-            loss_fn_train.next_epoch()
-        if early_stopper.early_stop(validation_loss = val_loss):             
-            break
-        my_lr_scheduler.step()
-    # return lists with loss, accuracy every epoch
-    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
-                                
-def two_input_training_loop(n_epochs, optimizer, model, loss_fn, loss_fn_str, train_loader, valid_loader, my_lr_scheduler, device, model_name, loss_fn_train = "false"):
-    '''
-    n_epochs: number of epochs 
-    optimizer: optimizer used to do backpropagation
-    model: deep learning architecture
-    loss_fn: loss function
-    train_loader: generator creating batches of training data
-    valid_loader: generator creating batches of validation data
-    '''
-    # lists keep track of loss and accuracy for training and validation set
-    model = model.to(device)
-    early_stopper = EarlyStopper(patience=8, min_delta=0.0001)
-    train_loss_per_epoch = []
-    train_acc_per_epoch = []
-    val_loss_per_epoch = []
-    val_acc_per_epoch = []
-    best_val_loss = np.inf
-    if loss_fn_train != "false":
-        loss_fn_train.train()
-    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
-        loss_train = 0.0
-        train_total = 0
-        train_correct = 0
-        for data1, data2, labels in tqdm(train_loader, desc = "batch", position=0, leave= False):
-            optimizer.zero_grad()
-            # put model, images, labels on the same device
-            data1 = data1.to(device = device)
-            data2 = data2.to(device = device)
-            labels = labels.to(device= device)
-            # Training Model
-            outputs = model(data1, data2)
-            if loss_fn_train != "false":
-                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
-            elif loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
-            #loss = loss_fn(outputs,labels)
-            # For L2 regularization
-            #l2_lambda = 0.000001
-            #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
-            #loss = loss + l2_lambda * l2_norm
-            # Update weights
-            if torch.isnan(loss):
-                raise ValueError("Loss is NaN. Stopping training.")
-            loss.backward()
-            #torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
-            optimizer.step()
-            # Training Metrics
-            loss_train += loss.item()
-            #print(f' loss: {loss.item()}')
-            train_predicted = torch.argmax(outputs, 1)
-            #print(f' train_predicted {train_predicted}')
-            # NEW
-            labels = torch.argmax(labels,1)
-            #print(labels)
-            train_total += labels.shape[0]
-            train_correct += int((train_predicted == labels).sum())
-        if loss_fn_train != "false":
-            loss_fn_train.eval()
-        # validation metrics from batch
-        val_correct, val_total, val_loss, best_val_loss_upd, val_f1_score = two_input_validation_loop(model, loss_fn, loss_fn_str, valid_loader, best_val_loss, device, model_name)
-        best_val_loss = best_val_loss_upd
-        val_accuracy = val_correct/val_total
-        # printing results for epoch
-        print(f' Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, F1 Score: {val_f1_score} ')
-        # adding epoch loss, accuracy to lists 
-        val_loss_per_epoch.append(val_loss)
-        train_loss_per_epoch.append(loss_train/len(train_loader))
-        val_acc_per_epoch.append(val_accuracy)
-        train_acc_per_epoch.append(train_correct/train_total)
-        if loss_fn_train != "false":
-            loss_fn_train.next_epoch()
-        if early_stopper.early_stop(validation_loss = val_loss):             
-            break
-        my_lr_scheduler.step()
-    # return lists with loss, accuracy every epoch
-    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
-                               
-def three_input_training_loop(n_epochs, optimizer, model, loss_fn, loss_fn_str, train_loader, valid_loader, my_lr_scheduler, device, model_name, loss_fn_train = "false"):
-    '''
-    n_epochs: number of epochs 
-    optimizer: optimizer used to do backpropagation
-    model: deep learning architecture
-    loss_fn: loss function
-    train_loader: generator creating batches of training data
-    valid_loader: generator creating batches of validation data
-    '''
-    # lists keep track of loss and accuracy for training and validation set
-    model = model.to(device)
-    early_stopper = EarlyStopper(patience=8, min_delta=0.0001)
-    train_loss_per_epoch = []
-    train_acc_per_epoch = []
-    val_loss_per_epoch = []
-    val_acc_per_epoch = []
-    best_val_loss = np.inf
-    if loss_fn_train != "false":
-        loss_fn_train.train()
-    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
-        loss_train = 0.0
-        train_total = 0
-        train_correct = 0
-        for data1, data2, data3, labels in train_loader:
-            optimizer.zero_grad()
-            # put model, images, labels on the same device
-            data1 = data1.to(device = device)
-            data2 = data2.to(device = device)
-            data3 = data3.to(device = device)
-            labels = labels.to(device= device)
-            # Training Model
-            outputs = model(data1, data2)
-            if loss_fn_train != "false":
-                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
-            elif loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
-            #loss = loss_fn(outputs,labels)
-            # For L2 regularization
-            #l2_lambda = 0.000001
-            #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
-            #loss = loss + l2_lambda * l2_norm
-            # Update weights
-            if torch.isnan(loss):
-                raise ValueError("Loss is NaN. Stopping training.")
-            loss.backward()
-            #torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
-            optimizer.step()
-            # Training Metrics
-            loss_train += loss.item()
-            #print(f' loss: {loss.item()}')
-            train_predicted = torch.argmax(outputs, 1)
-            #print(f' train_predicted {train_predicted}')
-            # NEW
-            labels = torch.argmax(labels,1)
-            #print(labels)
-            train_total += labels.shape[0]
-            train_correct += int((train_predicted == labels).sum())
-        if loss_fn_train != "false":
-            loss_fn_train.eval()
-        # validation metrics from batch
-        val_correct, val_total, val_loss, best_val_loss_upd, val_f1_score = three_input_validation_loop(model, loss_fn, loss_fn_str, valid_loader, best_val_loss, device, model_name)
-        best_val_loss = best_val_loss_upd
-        val_accuracy = val_correct/val_total
-        # printing results for epoch
-        print(f' Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, F1 Score: {val_f1_score} ')
-        # adding epoch loss, accuracy to lists 
-        val_loss_per_epoch.append(val_loss)
-        train_loss_per_epoch.append(loss_train/len(train_loader))
-        val_acc_per_epoch.append(val_accuracy)
-        train_acc_per_epoch.append(train_correct/train_total)
-        if loss_fn_train != "false":
-            loss_fn_train.next_epoch()
-        if early_stopper.early_stop(validation_loss = val_loss):             
-            break
-        my_lr_scheduler.step()
-    # return lists with loss, accuracy every epoch
-    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
-# ----------------------------------------- Validation Loops ----------------------------------------- #
-def one_input_validation_loop(model, loss_fn, loss_fn_str, valid_loader, best_val_loss, device, model_name):
-    '''
-    Assessing trained model on valiidation dataset 
-    model: deep learning architecture getting updated by model
-    loss_fn: loss function
-    valid_loader: generator creating batches of validation data
-    '''
-    model.eval()
-    loss_val = 0.0
-    correct = 0
-    total = 0
-    predict_proba = []
-    predictions = []
-    all_labels = []
-    with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
-        for data1, labels in valid_loader:
-            # Move to device MAY NOT BE NECESSARY
-            data1 = data1.to(device = device)
-            labels = labels.to(device= device)
-            # Assessing outputs
-            outputs = model(data1)
-            #probs = torch.nn.Softmax(outputs)
-            if loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
-            loss_val += loss.item()
-            predicted = torch.argmax(outputs, 1)
-            labels = torch.argmax(labels,1)
-            total += labels.shape[0]
-            correct += int((predicted == labels).sum()) # saving best 
-            all_labels.append(labels)
-            predict_proba.append(outputs)
-            predictions.append(predicted)
-        avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
-        pred_cpu = torch.cat(predictions).cpu()
-        labels_cpu =  torch.cat(all_labels).cpu()
-        if best_val_loss > avg_val_loss:
-            best_val_loss = avg_val_loss
-            m = torch.nn.Softmax(dim=1)
-            pred_cpu = torch.cat(predictions).cpu()
-            labels_cpu =  torch.cat(all_labels).cpu()
-            torch.save(
-                {   'predict_proba' : m(torch.cat(predict_proba)),
-                    'predictions' : pred_cpu.numpy(),
-                    'labels_val' : labels_cpu.numpy(),
-                    'model_state_dict' : model.state_dict(),
-                    'valid_loss' : loss_val,
-                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
-                    'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
-            )
-    model.train()
-    return correct, total, avg_val_loss, best_val_loss,  f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro')
-
-def two_input_validation_loop(model, loss_fn, loss_fn_str, valid_loader, best_val_loss, device, model_name):
-    '''
-    Assessing trained model on valiidation dataset 
-    model: deep learning architecture getting updated by model
-    loss_fn: loss function
-    valid_loader: generator creating batches of validation data
-    '''
-    model.eval()
-    loss_val = 0.0
-    correct = 0
-    total = 0
-    predict_proba = []
-    predictions = []
-    all_labels = []
-    with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
-        for data1, data2, labels in valid_loader:
-            # Move to device MAY NOT BE NECESSARY
-            data1 = data1.to(device = device)
-            data2 = data2.to(device = device)
-            labels = labels.to(device= device)
-            # Assessing outputs
-            outputs = model(data1, data2)
-            #probs = torch.nn.Softmax(outputs)
-            if loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
-            loss_val += loss.item()
-            predicted = torch.argmax(outputs, 1)
-            labels = torch.argmax(labels,1)
-            total += labels.shape[0]
-            correct += int((predicted == labels).sum()) # saving best 
-            all_labels.append(labels)
-            predict_proba.append(outputs)
-            predictions.append(predicted)
-        avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
-        pred_cpu = torch.cat(predictions).cpu()
-        labels_cpu =  torch.cat(all_labels).cpu()
-        if best_val_loss > avg_val_loss:
-            best_val_loss = avg_val_loss
-            m = torch.nn.Softmax(dim=1)
-            pred_cpu = torch.cat(predictions).cpu()
-            labels_cpu =  torch.cat(all_labels).cpu()
-            torch.save(
-                {   'predict_proba' : m(torch.cat(predict_proba)),
-                    'predictions' : pred_cpu.numpy(),
-                    'labels_val' : labels_cpu.numpy(),
-                    'model_state_dict' : model.state_dict(),
-                    'valid_loss' : loss_val,
-                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
-                    'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
-            )
-    model.train()
-    return correct, total, avg_val_loss, best_val_loss,  f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro')
-
-def three_input_validation_loop(model, loss_fn, loss_fn_str, valid_loader, best_val_loss, device, model_name):
-    '''
-    Assessing trained model on valiidation dataset 
-    model: deep learning architecture getting updated by model
-    loss_fn: loss function
-    valid_loader: generator creating batches of validation data
-    '''
-    model.eval()
-    loss_val = 0.0
-    correct = 0
-    total = 0
-    predict_proba = []
-    predictions = []
-    all_labels = []
-    with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
-        for data1, data2, data3, labels in valid_loader:
-            # Move to device MAY NOT BE NECESSARY
-            data1 = data1.to(device = device)
-            data2 = data2.to(device = device)
-            data3 = data3.to(device = device)
-            labels = labels.to(device= device)
-            # Assessing outputs
-            outputs = model(data1, data2, data3)
-            #probs = torch.nn.Softmax(outputs)
-            if loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
-            loss_val += loss.item()
-            predicted = torch.argmax(outputs, 1)
-            labels = torch.argmax(labels,1)
-            total += labels.shape[0]
-            correct += int((predicted == labels).sum()) # saving best 
-            all_labels.append(labels)
-            predict_proba.append(outputs)
-            predictions.append(predicted)
-        avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
-        pred_cpu = torch.cat(predictions).cpu()
-        labels_cpu =  torch.cat(all_labels).cpu()
-        if best_val_loss > avg_val_loss:
-            best_val_loss = avg_val_loss
-            m = torch.nn.Softmax(dim=1)
-            pred_cpu = torch.cat(predictions).cpu()
-            labels_cpu =  torch.cat(all_labels).cpu()
-            torch.save(
-                {   'predict_proba' : m(torch.cat(predict_proba)),
-                    'predictions' : pred_cpu.numpy(),
-                    'labels_val' : labels_cpu.numpy(),
-                    'model_state_dict' : model.state_dict(),
-                    'valid_loss' : loss_val,
-                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
-                    'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
-            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
-            )
-    model.train()
-    return correct, total, avg_val_loss, best_val_loss,  f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro')
-
-
-# ----------------------------------------- Test Loops ----------------------------------------- #
-def one_input_test_loop(model, loss_fn, loss_fn_str, test_loader, device):
-    '''
-    Assessing trained model on test dataset 
-    model: deep learning architecture getting updated by model
-    loss_fn: loss function
-    test_loader: generator creating batches of test data
-    '''
-    model = model.to(device)
-    model.eval()
-    loss_test = 0.0
-    correct = 0
-    total = 0
-    all_predictions = []
-    all_labels = []
-    with torch.no_grad():  # does not keep track of gradients so as to not train on test data.
-        for data1, labels in tqdm(test_loader,
-                                            desc = "Test Batches w/in Epoch",
-                                              position = 0,
-                                              leave = False):
-            # Move to device MAY NOT BE NECESSARY
-            data1 = data1.to(device = device)
-            labels = labels.to(device= device)
-
-            # Assessing outputs
-            outputs = model(data1)
-            if loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
-            loss_test += loss.item()
-            predicted = torch.argmax(outputs, 1)
-            #labels = torch.argmax(labels,1)
-            total += labels.shape[0]
-            correct += int((predicted == torch.max(labels, 1)[1]).sum())
-            all_predictions = all_predictions + predicted.tolist()
-            all_labels = all_labels + torch.max(labels, 1)[1].tolist()
-        avg_test_loss = loss_test/len(test_loader)  # average loss over batch
-    return correct, total, avg_test_loss, all_predictions, all_labels
-def two_input_test_loop(model, loss_fn, loss_fn_str, test_loader, device):
-    '''
-    Assessing trained model on test dataset 
-    model: deep learning architecture getting updated by model
-    loss_fn: loss function
-    test_loader: generator creating batches of test data
-    '''
-    model = model.to(device)
-    model.eval()
-    loss_test = 0.0
-    correct = 0
-    total = 0
-    all_predictions = []
-    all_labels = []
-    with torch.no_grad():  # does not keep track of gradients so as to not train on test data.
-        for data1, data2, labels in tqdm(test_loader,
-                                            desc = "Test Batches w/in Epoch",
-                                              position = 0,
-                                              leave = False):
-            # Move to device MAY NOT BE NECESSARY
-            data1 = data1.to(device = device)
-            data2 = data2.to(device = device)
-            labels = labels.to(device= device)
-
-            # Assessing outputs
-            outputs = model(data1, data2)
-            if loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
-            loss_test += loss.item()
-            predicted = torch.argmax(outputs, 1)
-            #labels = torch.argmax(labels,1)
-            total += labels.shape[0]
-            correct += int((predicted == torch.max(labels, 1)[1]).sum())
-            all_predictions = all_predictions + predicted.tolist()
-            all_labels = all_labels + torch.max(labels, 1)[1].tolist()
-        avg_test_loss = loss_test/len(test_loader)  # average loss over batch
-    return correct, total, avg_test_loss, all_predictions, all_labels
-
-def three_input_test_loop(model, loss_fn, loss_fn_str, test_loader, device):
-    '''
-    Assessing trained model on test dataset 
-    model: deep learning architecture getting updated by model
-    loss_fn: loss function
-    test_loader: generator creating batches of test data
-    '''
-    model = model.to(device)
-    model.eval()
-    loss_test = 0.0
-    correct = 0
-    total = 0
-    all_predictions = []
-    all_labels = []
-    with torch.no_grad():  # does not keep track of gradients so as to not train on test data.
-        for data1, data2, data3, labels in tqdm(test_loader,
-                                            desc = "Test Batches w/in Epoch",
-                                              position = 0,
-                                              leave = False):
-            # Move to device MAY NOT BE NECESSARY
-            data1 = data1.to(device = device)
-            data2 = data2.to(device = device)
-            data3 = data3.to(device = device)
-            labels = labels.to(device= device)
-
-            # Assessing outputs
-            outputs = model(data1, data2, data3)
-            if loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
-            loss_test += loss.item()
-            predicted = torch.argmax(outputs, 1)
-            #labels = torch.argmax(labels,1)
-            total += labels.shape[0]
-            correct += int((predicted == torch.max(labels, 1)[1]).sum())
-            all_predictions = all_predictions + predicted.tolist()
-            all_labels = all_labels + torch.max(labels, 1)[1].tolist()
-        avg_test_loss = loss_test/len(test_loader)  # average loss over batch
-    return correct, total, avg_test_loss, all_predictions, all_labels
-
-
-#---------------------------------------------------------------------------------------------------------#
-#---------------------------------------------------------------------------------------------------------#
-#                                Feature Extraction Loops
-#---------------------------------------------------------------------------------------------------------#
-#---------------------------------------------------------------------------------------------------------#
-
-
-def two_input_training_loop_fe(n_epochs, optimizer, model, loss_fn, loss_fn_str, train_loader, valid_loader, my_lr_scheduler, device, model_name, loss_fn_train = "false"):
-    '''
-    n_epochs: number of epochs 
-    optimizer: optimizer used to do backpropagation
-    model: deep learning architecture
-    loss_fn: loss function
-    train_loader: generator creating batches of training data
-    valid_loader: generator creating batches of validation data
-    '''
-    # lists keep track of loss and accuracy for training and validation set
-    model = model.to(device)
-    train_loss_per_epoch = []
-    train_acc_per_epoch = []
-    val_loss_per_epoch = []
-    val_acc_per_epoch = []
-    best_val_loss = np.inf
-    if loss_fn_train != "false":
-        loss_fn_train.train()
-    for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
-        loss_train = 0.0
-        train_total = 0
-        train_correct = 0
-        for data1, data2, labels in tqdm(train_loader, desc = "batch", position=0, leave= False):
-            optimizer.zero_grad()
-            # put model, images, labels on the same device
-            data1 = data1.to(device = device)
-            data2 = data2.to(device = device)
-            labels = labels.to(device= device)
-            # Training Model
-            outputs = model(data1, data2)
-            if loss_fn_train != "false":
-                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
-            elif loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
-            #loss = loss_fn(outputs,labels)
-            # For L2 regularization
-            #l2_lambda = 0.000001
-            #l2_norm = sum(p.pow(2.0).sum() for p in model.parameters())
-            #loss = loss + l2_lambda * l2_norm
-            # Update weights
-            if torch.isnan(loss):
-                raise ValueError("Loss is NaN. Stopping training.")
-            loss.backward()
-            #torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
-            optimizer.step()
-            # Training Metrics
-            loss_train += loss.item()
-            #print(f' loss: {loss.item()}')
-            train_predicted = torch.argmax(outputs, 1)
-            #print(f' train_predicted {train_predicted}')
-            # NEW
-            labels = torch.argmax(labels,1)
-            #print(labels)
-            train_total += labels.shape[0]
-            train_correct += int((train_predicted == labels).sum())
-        if loss_fn_train != "false":
-            loss_fn_train.eval()
-        # validation metrics from batch
-        val_correct, val_total, val_loss, best_val_loss_upd, val_f1_score = two_input_validation_loop(model, loss_fn, loss_fn_str, valid_loader, best_val_loss, device, model_name)
-        best_val_loss = best_val_loss_upd
-        val_accuracy = val_correct/val_total
-        # printing results for epoch
-        print(f' Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, F1 Score: {val_f1_score} ')
-        # adding epoch loss, accuracy to lists 
-        val_loss_per_epoch.append(val_loss)
-        train_loss_per_epoch.append(loss_train/len(train_loader))
-        val_acc_per_epoch.append(val_accuracy)
-        train_acc_per_epoch.append(train_correct/train_total)
-        if loss_fn_train != "false":
-            loss_fn_train.next_epoch()
-        if early_stopper.early_stop(validation_loss = val_loss):             
-            break
-        my_lr_scheduler.step()
-    # return lists with loss, accuracy every epoch
-    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
   
-
-def three_input_training_loop_fe(n_epochs, optimizer, model, loss_fn, loss_fn_str, train_loader, valid_loader, my_lr_scheduler, device, model_name, loss_fn_train = "false"):
     '''
-    n_epochs: number of epochs 
-    optimizer: optimizer used to do backpropagation
-    model: deep learning architecture
-    loss_fn: loss function
-    train_loader: generator creating batches of training data
-    valid_loader: generator creating batches of validation data
-    '''
+    def best_val_metric(val_str):
+        '''
+        The initial validation metric number to compare and see if performance has improved
+        Input:
+            val_str: string, fe, f1, or loss
+        Output:
+            val_metric: float, 0 or np.inf depending on the validation metric'''
+        if val_str == "fe":
+            return 0
+        elif val_str == "f1":
+            return 0
+        elif val_str == "loss":
+            return np.inf
+        else:
+            ValueError("No validation metric identified")
     # lists keep track of loss and accuracy for training and validation set
     model = model.to(device)
+    if early_patience > 0:
+        early_stopper = EarlyStopper(patience=early_patience, min_delta=0.001)
     train_loss_per_epoch = []
     train_acc_per_epoch = []
     val_loss_per_epoch = []
     val_acc_per_epoch = []
-    best_val_loss = np.inf
+    val_f1_score_per_epoch = []
+    val_metric = best_val_metric(val_str)
     if loss_fn_train != "false":
-        loss_fn_train.train()
+        loss_fn_train.train().to(device)
+    outer_loop_done = False
     for epoch in tqdm(range(1, n_epochs +1), desc = "Epoch", position=0, leave= False):
         loss_train = 0.0
         train_total = 0
         train_correct = 0
-        for data1, data2, data3, labels in train_loader:
+        if outer_loop_done:
+            break
+        for data_labels in tqdm(train_loader, desc = "train batch", position=0, leave= False):
             optimizer.zero_grad()
             # put model, images, labels on the same device
-            data1 = data1.to(device = device)
-            data2 = data2.to(device = device)
-            data3 = data3.to(device = device)
-            labels = labels.to(device= device)
-            # Training Model
-            outputs = model(data1, data2)
-            if loss_fn_train != "false":
-                loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
-            elif loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            data = [d.to(device=device) for d in data_labels[:-1]]  # Excluding the labels from data
+            labels = data_labels[-1].to(device=device)
+            # Assessing outputs
+            outputs = model(*data)
+            outputs = outputs.to(device=device)
+            loss = loss_fn_loop(loss_fn_train = loss_fn_train, 
+                                loss_fn = loss_fn, 
+                                loss_fn_str = loss_fn_str, 
+                                outputs = outputs, 
+                                labels = labels)
             #loss = loss_fn(outputs,labels)
             # For L2 regularization
             #l2_lambda = 0.000001
@@ -2104,25 +1458,31 @@ def three_input_training_loop_fe(n_epochs, optimizer, model, loss_fn, loss_fn_st
             #loss = loss + l2_lambda * l2_norm
             # Update weights
             if torch.isnan(loss):
-                raise ValueError("Loss is NaN. Stopping training.")
+                print("Loss is NaN. Stopping training.")
+                outer_loop_done = True
+                break
             loss.backward()
             #torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
             optimizer.step()
             # Training Metrics
             loss_train += loss.item()
-            #print(f' loss: {loss.item()}')
             train_predicted = torch.argmax(outputs, 1)
-            #print(f' train_predicted {train_predicted}')
-            # NEW
             labels = torch.argmax(labels,1)
-            #print(labels)
             train_total += labels.shape[0]
             train_correct += int((train_predicted == labels).sum())
         if loss_fn_train != "false":
             loss_fn_train.eval()
         # validation metrics from batch
-        val_correct, val_total, val_loss, best_val_loss_upd, val_f1_score = three_input_validation_loop(model, loss_fn, loss_fn_str, valid_loader, best_val_loss, device, model_name)
-        best_val_loss = best_val_loss_upd
+        val_correct, val_total, val_loss, val_metric_upd, val_f1_score = adapt_validation_loop(model = model,
+                                                                                                loss_fn = loss_fn,
+                                                                                                loss_fn_train = loss_fn_train,
+                                                                                                loss_fn_str = loss_fn_str, 
+                                                                                                val_str = val_str, 
+                                                                                                valid_loader = valid_loader, 
+                                                                                                val_metric = val_metric, 
+                                                                                                device = device, 
+                                                                                                model_name = model_name)
+        val_metric = val_metric_upd
         val_accuracy = val_correct/val_total
         # printing results for epoch
         print(f' Epoch: {epoch}, Training loss: {loss_train/len(train_loader)}, Validation Loss: {val_loss}, F1 Score: {val_f1_score} ')
@@ -2131,63 +1491,107 @@ def three_input_training_loop_fe(n_epochs, optimizer, model, loss_fn, loss_fn_st
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
         train_acc_per_epoch.append(train_correct/train_total)
+        val_f1_score_per_epoch.append(val_f1_score)
         if loss_fn_train != "false":
             loss_fn_train.next_epoch()
-        if early_stopper.early_stop(validation_loss = val_loss):             
-            break
-        my_lr_scheduler.step()
+        if early_patience > 0:
+            if early_stopper.early_stop(validation_loss = val_loss):             
+                break
+        if my_lr_scheduler != "false":
+            my_lr_scheduler.step()
     # return lists with loss, accuracy every epoch
-    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, epoch
-                                
- # ----------------------------- Feature Extraction Validation Loop -----------------------------# 
-                              
+    return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, val_f1_score_per_epoch, epoch
 
-def two_input_validation_loop_fe(model, loss_fn, loss_fn_str, valid_loader, best_val_loss, device):
+# ----------------------------------------- Validation Loops ----------------------------------------- #
+def adapt_validation_loop(model, 
+                        loss_fn,
+                        loss_fn_str, 
+                        loss_fn_train,
+                        valid_loader, 
+                        val_metric, 
+                        device, 
+                        model_name, 
+                        val_str):
     '''
-    Assessing trained model on valiidation dataset 
-    model: deep learning architecture getting updated by model
-    loss_fn: loss function
-    valid_loader: generator creating batches of validation data
+    Validation loop for the various different models. Can take various number of inputs.
+    Input:
+        model: model to be trained
+        loss_fn: string, loss function to be used
+        loss_fn_str: string, loss function to be used
+        valid_loader: validation data loader
+        val_metric: string, metric to be used for validation
+        device: device to be used for training
+        model_name: string, name of the model
+        val_str: string, fe, f1, or loss
+    Output:
+        val_correct: int, number of correct predictions
+        val_total: int, total number of predictions
+        val_loss: float, loss of the model
+        val_metric: float, metric of the model (f1 or loss)
+        val_f1_score: float, f1 score of the model
     '''
-    model = model.to(device)
-    model.eval()
-    loss_val = 0.0
-    correct = 0
-    total = 0
-    predict_proba = []
-    predictions = []
-    all_labels = []
-    with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
-        for data1, data2, labels in valid_loader:
-            # Move to device MAY NOT BE NECESSARY
-            data1 = data1.to(device = device)
-            data2 = data2.to(device = device)
-            labels = labels.to(device= device)
-            # Assessing outputs
-            outputs = model(data1, data2)
-            #probs = torch.nn.Softmax(outputs)
-            if loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
-            loss_val += loss.item()
-            predicted = torch.argmax(outputs, 1)
-            labels = torch.argmax(labels,1)
-            total += labels.shape[0]
-            correct += int((predicted == labels).sum()) # saving best 
-            all_labels.append(labels)
-            predict_proba.append(outputs)
-            predictions.append(predicted)
-        avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
-    model.train()
-    return correct, total, avg_val_loss, best_val_loss
+
+    def validation_saving(val_str, 
+                        val_metric, 
+                        avg_val_loss, 
+                        avg_f1, 
+                        model_name, 
+                        model, 
+                        predictions, 
+                        all_labels, 
+                        predict_proba):
+        '''
+        Saving the model based on the validation metric
+        Input:
+            val_str: string, fe, f1, or loss
+            val_metric: float, the validation metric
+            avg_val_loss: float, the average validation loss across the epoch
+            avg_f1: float, the average f1 score across the epoch
+            model_name: string, the name of the model
+            model: the model
+            predictions: list, the predictions from the model
+            all_labels: list, the labels from the model
+            predict_proba: list, the predicted probabilities from the model
+        Output:
+            val_metric: float, the updated best score for the validation metric of choice
+        '''
+        if val_str == "fe":
+            pass
+        elif val_str == "f1":
+            if val_metric < avg_f1:
+                val_metric = avg_f1
+                m = torch.nn.Softmax(dim=1)
+                pred_cpu = torch.cat(predictions).cpu()
+                labels_cpu =  torch.cat(all_labels).cpu()
+                torch.save(
+                    {   'predict_proba' : m(torch.cat(predict_proba)),
+                        'predictions' : pred_cpu.numpy(),
+                        'labels_val' : labels_cpu.numpy(),
+                        'model_state_dict' : model.state_dict(),
+                        'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
+                        'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
+                },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
+                )
+        elif val_str == "val_loss":
+            if val_metric > avg_val_loss:
+                val_metric = avg_val_loss
+                m = torch.nn.Softmax(dim=1)
+                pred_cpu = torch.cat(predictions).cpu()
+                labels_cpu =  torch.cat(all_labels).cpu()
+                torch.save(
+                    {   'predict_proba' : m(torch.cat(predict_proba)),
+                        'predictions' : pred_cpu.numpy(),
+                        'labels_val' : labels_cpu.numpy(),
+                        'model_state_dict' : model.state_dict(),
+                        'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
+                        'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
+                },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
+                )
+        else:
+            ValueError("No validation metric identified")
+        return val_metric
     
-
-def three_input_validation_loop_fe(model, loss_fn, loss_fn_str, valid_loader, best_val_loss, device):
-    '''
-   
-    '''
-    model = model.to(device)
+    model.to(device)
     model.eval()
     loss_val = 0.0
     correct = 0
@@ -2196,19 +1600,14 @@ def three_input_validation_loop_fe(model, loss_fn, loss_fn_str, valid_loader, be
     predictions = []
     all_labels = []
     with torch.no_grad():  # does not keep track of gradients so as to not train on validation data.
-        for data1, data2, data3, labels in valid_loader:
-            # Move to device MAY NOT BE NECESSARY
-            data1 = data1.to(device = device)
-            data2 = data2.to(device = device)
-            data3 = data3.to(device = device)
-            labels = labels.to(device= device)
+        for data_labels in tqdm(valid_loader, desc = "valid", position=0, leave= False):
+            # put model, images, labels on the same device
+            data = [d.to(device=device) for d in data_labels[:-1]]  # Excluding the labels from data
+            labels = data_labels[-1].to(device=device)
             # Assessing outputs
-            outputs = model(data1, data2, data3)
-            #probs = torch.nn.Softmax(outputs)
-            if loss_fn_str == 'BCE' or loss_fn_str == 'focal':
-                loss = loss_fn(outputs,labels)
-            else:
-                loss = loss_fn(outputs, torch.max(labels, 1)[1])
+            outputs = model(*data)
+            outputs = outputs.to(device=device)
+            loss = loss_fn_loop(loss_fn_train = loss_fn_train, loss_fn = loss_fn, loss_fn_str = loss_fn_str, outputs = outputs, labels = labels)
             loss_val += loss.item()
             predicted = torch.argmax(outputs, 1)
             labels = torch.argmax(labels,1)
@@ -2218,8 +1617,53 @@ def three_input_validation_loop_fe(model, loss_fn, loss_fn_str, valid_loader, be
             predict_proba.append(outputs)
             predictions.append(predicted)
         avg_val_loss = loss_val/len(valid_loader)  # average loss over batch
+        pred_cpu = torch.cat(predictions).cpu()
+        labels_cpu =  torch.cat(all_labels).cpu()
+        val_metric = validation_saving(val_str = val_str, 
+                                       val_metric = val_metric, 
+                                       predictions = predictions, 
+                                       all_labels = all_labels, 
+                                       predict_proba=predict_proba,
+                                       avg_f1 = f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
+                                       avg_val_loss=avg_val_loss,
+                                       model=model,
+                                       model_name=model_name)
     model.train()
-    return correct, total, avg_val_loss, best_val_loss
+    return correct, total, avg_val_loss, val_metric,  f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro')
+
+def adapt_test_loop(model, 
+                    test_loader, 
+                    device):
+    '''
+    Test loop for the various models. Can take several different inputs
+    Input:
+        model: model to be tested
+        test_loader: test data loader
+        device: device to run the model on
+    '''
+    model = model.to(device)
+    model.eval()
+    loss_test = 0.0
+    correct = 0
+    total = 0
+    all_predictions = []
+    all_labels = []
+    with torch.no_grad():  # does not keep track of gradients so as to not train on test data.
+        for data_labels in tqdm(test_loader, desc = "test", position=0, leave= False):
+            # put model, images, labels on the same device
+            data = [d.to(device=device) for d in data_labels[:-1]]  # Excluding the labels from data
+            labels = data_labels[-1].to(device=device)
+            # Assessing outputs
+            outputs = model(*data)
+            predicted = torch.argmax(outputs, 1)
+            #labels = torch.argmax(labels,1)
+            total += labels.shape[0]
+            correct += int((predicted == torch.max(labels, 1)[1]).sum())
+            all_predictions = all_predictions + predicted.tolist()
+            all_labels = all_labels + torch.max(labels, 1)[1].tolist()
+        avg_test_loss = loss_test/len(test_loader)  # average loss over batch
+    return correct, total, avg_test_loss, all_predictions, all_labels
+
 
 ############################################################################################################
 def choose_device(using_cuda):
@@ -2238,7 +1682,10 @@ def choose_device(using_cuda):
     print(f'Training on device {device}. ' )
     return device
 
-def different_loss_functions(loss_fn_str, loss_fn_train_str = 'false', n_classes = 10, class_weights = None,   alpha = None, gamma = None, smoothing = None):
+def different_loss_functions( loss_fn_str, 
+                             loss_fn_train_str = 'false', 
+                             n_classes = 10, class_weights = None,  
+                            alpha = 0.5, gamma = 0.25 , smoothing = 0.1):
     '''
     Choosing loss function to train on, allows for the flexibility of using the same training/validation/test loops
         across different loss functions and different algorithms
@@ -2256,7 +1703,7 @@ def different_loss_functions(loss_fn_str, loss_fn_train_str = 'false', n_classes
     '''
     if loss_fn_train_str ==  'ols':
         from ols import OnlineLabelSmoothing
-        loss_fn_train = OnlineLabelSmoothing(alpha = alpha, n_classes=n_classes, smoothing = smoothing).to(device=device)
+        loss_fn_train = OnlineLabelSmoothing(alpha = alpha, n_classes=n_classes, smoothing = smoothing)
         if loss_fn_str == 'BCE':
             loss_fn = torch.nn.BCEWithLogitsLoss()
         elif loss_fn_str == 'cross':
@@ -2265,8 +1712,9 @@ def different_loss_functions(loss_fn_str, loss_fn_train_str = 'false', n_classes
             loss_fn = FocalLoss(gamma=gamma, alpha=alpha)
         else:
             ValueError('No loss function identified') 
+        return loss_fn_train, loss_fn
     elif loss_fn_str == 'BCE':
-        return 'false', torch.nn.BCEWithLogitsLoss(weight = class_weights)
+        return 'false', torch.nn.BCEWithLogitsLoss()
     elif loss_fn_str == 'cross':
         return 'false', torch.nn.CrossEntropyLoss(weight = class_weights)
     elif loss_fn_str == 'focal':
@@ -2338,3 +1786,433 @@ class Transcriptomic_Profiles_numpy(torch.utils.data.Dataset):
         
         return t_profile_features, t_moa 
 
+
+def loss_fn_loop(loss_fn_train, loss_fn, loss_fn_str, outputs, labels):
+    '''
+    Choosing loss function to train on, allows for the flexibility of using the same training/validation/test loops
+        across different loss functions and different algorithms
+    
+    Input:
+        loss_fn_str: string, if "false", not ols, otherwise ols
+        loss_fn: loss function to validate and test alternatively train, validate and test on
+    Output:
+        loss: loss from output of model and labels
+        '''
+    if loss_fn_train != "false":
+        loss = loss_fn_train(outputs, torch.max(labels, 1)[1])
+    elif loss_fn_str == 'BCE' or loss_fn_str == 'focal':
+        loss = loss_fn(outputs,labels)
+    else:
+        loss = loss_fn(outputs, torch.max(labels, 1)[1])
+    return loss
+
+def validation_saving(val_str, 
+                      val_metric, 
+                      avg_val_loss, 
+                      avg_f1, 
+                      model_name, 
+                      model, 
+                      predictions, 
+                      all_labels, 
+                      predict_proba):
+    '''
+    Saving the model based on the validation metric
+    Input:
+        val_str: string, fe, f1, or loss
+        val_metric: float, the validation metric
+        avg_val_loss: float, the average validation loss across the epoch
+        avg_f1: float, the average f1 score across the epoch
+        model_name: string, the name of the model
+        model: the model
+        predictions: list, the predictions from the model
+        all_labels: list, the labels from the model
+        predict_proba: list, the predicted probabilities from the model
+    Output:
+        val_metric: float, the updated best score for the validation metric of choice
+    '''
+    if val_str == "fe":
+        pass
+    elif val_str == "f1":
+        if val_metric < avg_f1:
+            val_metric = avg_f1
+            m = torch.nn.Softmax(dim=1)
+            pred_cpu = torch.cat(predictions).cpu()
+            labels_cpu =  torch.cat(all_labels).cpu()
+            torch.save(
+                {   'predict_proba' : m(torch.cat(predict_proba)),
+                    'predictions' : pred_cpu.numpy(),
+                    'labels_val' : labels_cpu.numpy(),
+                    'model_state_dict' : model.state_dict(),
+                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
+                    'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
+            )
+    elif val_str == "val_loss":
+        if val_metric > avg_val_loss:
+            val_metric = avg_val_loss
+            m = torch.nn.Softmax(dim=1)
+            pred_cpu = torch.cat(predictions).cpu()
+            labels_cpu =  torch.cat(all_labels).cpu()
+            torch.save(
+                {   'predict_proba' : m(torch.cat(predict_proba)),
+                    'predictions' : pred_cpu.numpy(),
+                    'labels_val' : labels_cpu.numpy(),
+                    'model_state_dict' : model.state_dict(),
+                    'f1_score' : f1_score(pred_cpu.numpy(),labels_cpu.numpy(), average = 'macro'),
+                    'accuracy' : accuracy_score(pred_cpu.numpy(),labels_cpu.numpy())
+            },  '/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + '.pt'
+            )
+    else:
+        ValueError("No validation metric identified")
+    return val_metric
+
+''''
+def best_val_metric(val_str):
+    
+    The initial validation metric number to compare and see if performance has improved
+    Input:
+        val_str: string, fe, f1, or loss
+    Output:
+        val_metric: float, 0 or np.inf depending on the validation metric
+    if val_str == "fe":
+        return 0
+    elif val_str == "f1":
+        return 0
+    elif val_str == "loss":
+        return np.inf
+    else:
+        ValueError("No validation metric identified")
+'''
+# ---------------------------------- Checking that the data is correct ---------------------------------- #
+
+def cmpd_id_overlap_check(train_data_lst, valid_data_lst, test_data_lst):
+    # check to make sure the compound IDs do not overlapp
+    inter1 = set(test_data_lst) & set(train_data_lst)
+    inter2 = set(test_data_lst) & set(valid_data_lst)
+    inter3 = set(train_data_lst) & set(valid_data_lst)
+    assert len(inter1) + len(inter2) + len(inter3) == 0, ("There are overlapping compounds between the training, validation and test sets")
+
+def inputs_equalto_labels_check(training_df, train_labels, validation_df, validation_labels, test_df, test_labels):
+    # make sure that the number of labels is equal to the number of inputs
+    assert len(training_df) == len(train_labels)
+    assert len(validation_df) == len(validation_labels)
+    assert len(test_df) == len(test_labels)
+
+def checking_veracity_of_data(file, L1000_training, L1000_validation, L1000_test):
+    """
+    This function checks the number of profiles and unique compounds in the data set. 
+    Is a sanity check to make sure the data is being loaded correctly.
+    Asserts error if there is a discrepancy between unique compound number or transcriptomic profile number
+    and the combined datasets-
+
+    Inputs:
+        file: string, name of the data set being investigated
+        L1000_training: pandas dataframe, training set
+        L1000_validation: pandas dataframe, validation set
+        L1000_test: pandas dataframe, test set
+    
+    Returns:
+        None
+
+    Notice that the minus two is to take into account for enantiomers that Compound ID alone cannot distinguish between.
+    """
+    all_profiles = pd.concat([L1000_training, L1000_validation, L1000_test])
+    if file == 'tian10':
+        assert all_profiles.shape[0] == 13660, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == 121, 'Incorrect number of unique compounds'
+    elif file == 'erik10':
+        assert all_profiles.shape[0] == 18042, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == int(243 -2), 'Incorrect number of unique compounds'
+    elif file == 'erik10_hq':
+        assert all_profiles.shape[0] == 4564, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == 185, 'Incorrect number of unique compounds'
+    elif file == 'erik10_8_12':
+        assert all_profiles.shape[0] == 8644, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == int(238 - 2), 'Incorrect number of unique compounds'
+    elif file == 'erik10_hq_8_12':
+        assert all_profiles.shape[0] == 2387, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == 177, 'Incorrect number of unique compounds'
+    elif file == 'cyc_adr':
+        assert all_profiles.shape[0] == 1619, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == int(76 - 1), 'Incorrect number of unique compounds'
+    elif file == 'cyc_dop':
+        assert all_profiles.shape[0] == 3385, 'Incorrect number of profiles'
+        assert all_profiles["Compound ID"].nunique() == int(76 -1), 'Incorrect number of unique compounds'
+    else:
+        raise ValueError('Please enter a valid file name')
+    print("passed veracity test!")
+
+def check_overlap_sigid(L1000_training, L1000_validation, L1000_test):
+    # check to make sure the sig_ids do not overlap
+    inter1 = set(list(L1000_training["sig_id"])) & set(list(L1000_validation["sig_id"]))
+    inter2 = set(list(L1000_training["sig_id"])) & set(list(L1000_test["sig_id"]))
+    inter3 = set(list(L1000_validation["sig_id"])) & set(list(L1000_test["sig_id"]))
+    assert len(inter1) + len(inter2) + len(inter3) == 0, ("There is an intersection between the training, validation and test sets")
+
+
+def getting_correct_image_indices(method, file_name, df_total):
+    '''
+    For IGTD and DWTM, I need to get the correct indices for the images based on the index of fold 0. This function:
+    1. Gets the correct indices for the images for folds 1 - 4 by comparing the values in the dataframe to the values in the dataframe of fold 0
+    2. Checks that there is no overlap of within folds or across the test set folds
+    3. Places the indices in a dictionary and saves it as a pickle
+    Input:
+        method: string, either "IGTD" or "DWTM"
+        file_name: string, name of the data set
+        df_total: pandas dataframe, dataframe of the entire concateated data set representing fold 0.
+    Output:
+        Saves a dictionary with indices for each fold, each index corresponding to the correct image
+    '''
+    def checking_index_overlap_within_fold(fold_dict_index):
+        # checks that there is no overlap of indices within a fold
+        inter1 = set(fold_dict_index["train"]) & set(fold_dict_index["valid"])
+        inter2 = set(fold_dict_index["train"]) & set(fold_dict_index["test"])
+        inter3 = set(fold_dict_index["valid"]) & set(fold_dict_index["test"])
+        assert len(inter1) + len(inter2) + len(inter3) == 0, ("There is an intersection between the training, validation and test sets")
+    
+    def checking_index_overlap_between_test(fold_index_dictionaries):
+        # checks that there is no overlap of indices between the test folds
+        inter1 = set(fold_index_dictionaries[0]["test"]) & set(fold_index_dictionaries[1]["test"])
+        inter2 = set(fold_index_dictionaries[0]["test"]) & set(fold_index_dictionaries[2]["test"])
+        inter3 = set(fold_index_dictionaries[0]["test"]) & set(fold_index_dictionaries[3]["test"])
+        inter4 = set(fold_index_dictionaries[1]["test"]) & set(fold_index_dictionaries[2]["test"])
+        inter5 = set(fold_index_dictionaries[1]["test"]) & set(fold_index_dictionaries[3]["test"]) 
+        inter6 = set(fold_index_dictionaries[2]["test"]) & set(fold_index_dictionaries[3]["test"])
+        inter7 = set(fold_index_dictionaries[4]["test"]) & set(fold_index_dictionaries[3]["test"])
+        inter8 = set(fold_index_dictionaries[1]["test"]) & set(fold_index_dictionaries[4]["test"]) 
+        inter9 = set(fold_index_dictionaries[2]["test"]) & set(fold_index_dictionaries[4]["test"])
+        inter10 = set(fold_index_dictionaries[0]["test"]) & set(fold_index_dictionaries[4]["test"])
+        return len(inter1) + len(inter2) + len(inter3) + len(inter4) + len(inter5) + len(inter6) + len(inter7) + len(inter8) + len(inter9) + len(inter10) == 0, ("There is an intersection between the test sets")
+    
+    # clue row metadata with rows representing transcription levels of specific genes
+    clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
+    fold_index_dictionaries = []
+    for fold_int in range(0,5):
+        print(f'Fold Iteration: {fold_int}')
+        training_set, validation_set, test_set = accessing_all_folds_csv(file_name, fold_int)
+        #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
+        hq, dose = set_bool_hqdose(file_name)
+        L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
+
+        checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
+        variance_thresh = 0
+        normalize_c = False
+        npy_exists, save_npy = set_bool_npy(variance_thresh, normalize_c, five_fold = 'True')
+        df_train_features, df_val_features, df_train_labels_str, df_val_labels_str, df_test_features, df_test_labels_str, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
+                clue_gene, 
+                npy_exists = npy_exists,
+                use_variance_threshold = variance_thresh, 
+                normalize = normalize_c, 
+                save_npy = save_npy,
+                data_subset = file_name)
+        checking_veracity_of_data(file_name, df_train_labels_str, df_val_labels_str, df_test_labels_str)
+        
+        fold_dict_index = {}
+        for df_split, df_split_str in [(df_train_features, "train"), (df_val_features, "valid"), (df_test_features, "test")]:
+            print(f'Fold Iteration: {fold_int}, Split: {df_split_str}')
+            if method == 'DWTM':
+                df_original = df_total
+                df_original = df_original.drop("Class", axis = 1)
+            elif method == 'IGTD':
+                df_original = df_total
+            else:
+                ValueError('Method must be either DWTM or IGTD')
+                    # reseting index of both dataframes
+
+            df_original = df_original.reset_index().rename(columns={'index': 'original_index'})
+            # Create a dictionary to map the current column names to their string representations
+            column_mapping = {col: str(col) for col in df_split.columns}
+            # Update the column names in the dataframe using the rename() function
+            df_split = df_split.rename(columns=column_mapping)
+            df_original = df_original.rename(columns=column_mapping)
+            df_split.reset_index().rename(columns={'index': 'split_index'})
+            # Get the common columns to merge on, excluding the 'index' column
+            common_columns1 = [col for col in df_original.columns if col != 'original_index']
+            common_columns2 = [col for col in df_split.columns if col != 'index']
+            assert common_columns1 == common_columns2, "The columns in the original and split dataframes should match"
+            # Merge the dataframes on all common columns
+            merged_df = df_original.merge(df_split, on= ['0', '1'] )
+            assert merged_df.shape[0] == df_split.shape[0], "The number of rows in the merged dataframe should match the number of rows in the split dataframe"
+            # Extract the index from the merged dataframe
+            matching_indices = merged_df['original_index'].values
+
+            fold_dict_index[df_split_str] = matching_indices
+        checking_index_overlap_within_fold(fold_dict_index)
+        fold_index_dictionaries.append(fold_dict_index)
+    checking_index_overlap_between_test(fold_index_dictionaries)
+    with open("/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/" + method + '_' + file_name + "_splits.pkl", 'wb') as f:
+        pickle.dump(fold_index_dictionaries, f)
+
+
+'''
+def choose_cell_lines_to_include(df_set, clue_sig_in_SPECS, cell_lines):
+    Returns training/validation/test set with only the cell lines specified by the user
+    Input:
+        df_set: a dataframe with the training/validation/test data
+        cell_lines: a dictionary, where the key is the name of the moa and value is a list with the names of cell lines to be included.
+            Default is empty. Ex. "{"cyclooxygenase inhibitor": ["A375", "HA1E"], "adrenergic receptor antagonist" : ["A375", "HA1E"] }"
+    Output:
+        df_set: a dataframe with the training/validation/test data with only the cell lines specified by the user
+    profile_ids = clue_sig_in_SPECS[["Compound ID", "sig_id", "moa", 'cell_iname']][clue_sig_in_SPECS["Compound ID"].isin(df_set["Compound_ID"].unique())]
+    return profile_ids[profile_ids["cell_iname"].isin(cell_lines)]
+'''
+
+'''
+def accessing_correct_fold_csv_files(file):
+    
+  #  This function returns the correct, fold-0 train, valid and test split data csvs given a file name
+   # Input:
+  #      file: the name of the file (type = string)
+   # Output:
+  #      training_set: the training set (type = pandas dataframe)
+ #       validation_set: the validation set (type = pandas dataframe)
+  #      test_set: the test set (type = pandas dataframe)
+
+ # download csvs with all the data pre split''
+    if file == 'tian10':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
+        train_filename = 'tian10_clue_train_fold_0.csv'
+        val_filename = 'tian10_clue_val_fold_0.csv'
+        test_filename = 'tian10_clue_test_fold_0.csv'
+    elif file == 'tian10_all':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
+        train_filename = 'tian10_all_train_fold_1.csv'
+        val_filename = 'tian10_all_val_fold_1.csv'
+        test_filename = 'tian10_all_test_fold_1.csv'
+    elif file == 'erik10':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        train_filename = 'erik10_clue_train_fold_0.csv'
+        val_filename = 'erik10_clue_val_fold_0.csv'
+        test_filename = 'erik10_clue_test_fold_0.csv'
+    elif file == 'erik10_all':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        train_filename = 'erik10_all_train_fold_1.csv'
+        val_filename = 'erik10_all_val_fold_1.csv'
+        test_filename = 'erik10_all_test_fold_1.csv'
+    elif file == 'erik10_hq':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        train_filename = 'erik10_clue_hq_train_fold_0.csv'
+        val_filename = 'erik10_clue_hq_val_fold_0.csv'
+        test_filename = 'erik10_clue_hq_test_fold_0.csv'
+    elif file == 'erik10_8_12':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        train_filename = 'erik10_clue_8_12__train_fold_1.csv'
+        val_filename = 'erik10_clue_8_12__val_fold_1.csv'
+        test_filename = 'erik10_clue_8_12__test_fold_1.csv'
+    elif file == 'erik10_hq_8_12':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
+        train_filename = 'erik10_clue_hq_8_12__train_fold_0.csv'
+        val_filename = 'erik10_clue_hq_8_12__val_fold_0.csv'
+        test_filename = 'erik10_clue_hq_8_12__test_fold_0.csv'
+    elif file == 'cyc_adr':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
+        train_filename = 'cyc_adr_clue_train_fold_0.csv'
+        val_filename = 'cyc_adr_clue_val_fold_0.csv'
+        test_filename = 'cyc_adr_clue_test_fold_0.csv'
+    elif file == 'cyc_dop':
+        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_dop/'
+        train_filename = 'cyc_dop_clue_train_fold_0.csv'
+        val_filename = 'cyc_dop_clue_val_fold_0.csv'
+        test_filename = 'cyc_dop_clue_test_fold_0.csv'
+    else:
+        raise ValueError('Please enter a valid file name')
+
+    training_set, validation_set, test_set =  load_train_valid_data(dir_path, train_filename, val_filename, test_filename)
+    return training_set, validation_set, test_set
+'''
+
+
+# ---------------------------------------------- data loading ----------------------------------------------#
+# ----------------------------------------------------------------------------------------------------------#
+'''
+def load_train_valid_data(path, train_data, valid_data, test_data = None):
+    
+    Functions loads the data frames that will be used to train classifier and assess its accuracy in predicting.
+    input:
+        train_data: filename of training csv file
+        valid_data: filename of validation csv file
+        (optional) test_data: filename of test csv file (if test_data is not None
+        path: path to the folder where the data is stored
+    ouput:
+       L1000 training: pandas dataframe with training data
+       L1000 validation: pandas dataframe with validation data
+       (optional) L1000 test: pandas dataframe with test data (if test_data is not None)
+    
+    if test_data:
+        L1000_training = pd.read_csv(path + train_data, delimiter = ",")
+        L1000_validation = pd.read_csv(path + valid_data, delimiter = ",")
+        L1000_test = pd.read_csv(path + test_data, delimiter = ",")
+        return L1000_training, L1000_validation, L1000_test
+    else:
+        L1000_training = pd.read_csv(path + train_data, delimiter = ",")
+        L1000_validation = pd.read_csv(path + valid_data, delimiter = ",")
+    return L1000_training, L1000_validation
+'''
+ 
+# ---------------------------------------------- data preprocessing ----------------------------------------------#
+'''
+def normalize_data(trn, val, test = pd.DataFrame()):
+    """
+    Performs quantile normalization on the train, test and validation data. The QuantileTransformer
+    is fitted on the train data, and transformed on test and validation data.
+    
+    Args:
+            trn: train data - pandas dataframe.
+            val: validation data - pandas dataframe.
+            test: test data - pandas dataframe.
+    
+    Returns:
+            trn_norm: normalized train data - pandas dataframe.
+            val_norm: normalized validation - pandas dataframe.
+            test_norm: normalized test data - pandas dataframe.
+    inspired by  https://github.com/broadinstitute/lincs-profiling-complementarity/tree/master/2.MOA-prediction
+    """
+    norm_model = QuantileTransformer(n_quantiles=100,random_state=0, output_distribution="normal")
+    #norm_model = StandardScaler()
+    if test.shape[0] == 0:
+        trn_norm = pd.DataFrame(norm_model.fit_transform(trn),index = trn.index,columns = trn.columns)
+        tst_norm = pd.DataFrame(norm_model.transform(test),index = test.index,columns = test.columns)
+        return trn_norm, tst_norm, str(norm_model) 
+    else:
+        trn_norm = pd.DataFrame(norm_model.fit_transform(trn),index = trn.index,columns = trn.columns)
+        val_norm = pd.DataFrame(norm_model.transform(val),index = val.index,columns = val.columns)
+        test_norm = pd.DataFrame(norm_model.transform(test),index = test.index,columns = test.columns)
+        return trn_norm, val_norm, test_norm, str(norm_model)
+
+def variance_threshold(x_train, x_val, var_threshold, x_test = pd.DataFrame() ):
+    """
+    This function perform feature selection on the data, i.e. removes all low-variance features below the
+    given 'threshold' parameter.
+    
+    Input:
+        x_train: training data - pandas dataframe.
+        x_val: validation data - pandas dataframe.
+        var_threshold: variance threshold - float. (e.g. 0.8). All features with variance below this threshold will be removed.
+        (optional) x_test: test data - pandas dataframe.
+    
+    Output:
+        x_train: training data - pandas dataframe.
+        x_val: validation data - pandas dataframe.
+        (optional) x_test: test data - pandas dataframe.
+
+    inspired by https://github.com/broadinstitute/lincs-profiling-complementarity/tree/master/2.MOA-prediction
+    
+    """
+    var_thresh = VarianceThreshold(threshold = var_threshold) # sets a variance threshold
+    var_thresh.fit(x_train) # learn empirical variances from X
+    if x_test.shape[0] == 0:
+        x_train_var = x_train.loc[:,var_thresh.variances_ > var_threshold] # locate all variance thresholds above 0.8, keep those columns
+        x_val_var = x_val.loc[:,var_thresh.variances_ > var_threshold]
+        if x_train_var.shape[1] < x_train.shape[1]:
+            print("Number of features removed due to Variance Threshold: ", x_train.shape[1] - x_train_var.shape[1])
+        return x_train_var, x_val_var
+    else:
+        x_test_var = x_test.loc[:,var_thresh.variances_ > var_threshold]
+        x_train_var = x_train.loc[:,var_thresh.variances_ > var_threshold] # locate all variance thresholds above 0.8, keep those columns
+        x_val_var = x_val.loc[:,var_thresh.variances_ > var_threshold]
+        if x_train_var.shape[1] < x_train.shape[1]:
+            print("Number of features removed due to Variance Threshold: ", x_train.shape[1] - x_train_var.shape[1])
+
+        return x_train_var, x_val_var, x_test_var
+    
+'''

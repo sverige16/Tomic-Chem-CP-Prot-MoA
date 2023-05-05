@@ -136,7 +136,7 @@ def main(subset, file_tosplit, compounds_v1v2, str_help, hq = "False", dosage = 
     assert len(test_indices) == len(y) 
 
     #compounds_v1v2.iloc[test_index].reset_index(drop = True)
-
+    
     for i, (train_val_index, test_index) in enumerate(skf.split(X,y)):
         file_loc = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/' + subset + '/'
         fold_num = 'fold_' + str(i) + '.csv'
@@ -162,12 +162,12 @@ def main(subset, file_tosplit, compounds_v1v2, str_help, hq = "False", dosage = 
         inter2 = set(list(train["Compound_ID"])) & set(list(test["Compound_ID"]))
         inter3 = set(list(val["Compound_ID"])) & set(list(test["Compound_ID"]))
         assert len(inter1) + len(inter2) + len(inter3) == 0, ("There is an intersection between the training, validation and test sets")
-
+        
         # checking that the moa's are the same in each set
         assert set(train.moa.unique()) == set(val.moa.unique()) == set(test.moa.unique()) == set(moas), ("The moa's are not the same in each set")
-        train.to_csv(file_loc + subset + str_help + '_train_' + fold_num)
-        test.to_csv(file_loc + subset + str_help + '_test_' + fold_num)
-        val.to_csv(file_loc + subset + str_help + '_val_' + fold_num)
+        #train.to_csv(file_loc + subset + str_help + '_train_' + fold_num)
+        #test.to_csv(file_loc + subset + str_help + '_test_' + fold_num)
+        #val.to_csv(file_loc + subset + str_help + '_val_' + fold_num)
     
     print("Done!")
 

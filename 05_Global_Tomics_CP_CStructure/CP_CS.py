@@ -31,17 +31,15 @@ from torchvision import transforms
 import torchvision.models as models
 import torch.nn as nn
 import neptune.new as neptune
+import sys
+sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 
-from Erik_alll_helper_functions import checking_veracity_of_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_alll_helper_functions import conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
-from Erik_alll_helper_functions import apply_class_weights, set_parameter_requires_grad, LogScaler, create_terminal_table, upload_to_neptune
-from Erik_alll_helper_functions import pre_processing, save_tprofile_npy, acquire_npy, np_array_transform, splitting
-from Erik_alll_helper_functions import accessing_correct_fold_csv_files, create_splits, smiles_to_array
 from Erik_alll_helper_functions import (
     apply_class_weights_CL, 
     accessing_correct_fold_csv_files, 
     create_splits, 
     choose_device,
+    checking_veracity_of_data, 
     dict_splitting_into_tensor, 
     extract_tprofile, 
     EarlyStopper, 
@@ -60,16 +58,18 @@ from Erik_alll_helper_functions import (
     FocalLoss, 
     np_array_transform,
     apply_class_weights_GE, 
-    one_input_training_loop, 
-    one_input_validation_loop, 
-    one_input_test_loop,
+    adapt_training_loop, 
+    adapt_validation_loop, 
+    adapt_test_loop,
     channel_5_numpy,
     splitting,
-    two_input_test_loop,
-    two_input_training_loop,
-    two_input_validation_loop
+    cmpd_id_overlap_check, 
+    inputs_equalto_labels_check,
+    pre_processing,
+    set_parameter_requires_grad,
+    smiles_to_array
 )
-from Helper_Models import DeepInsight_Model, Chem_Dataset, Reducer_profiles, MyRotationTransform
+from Helper_Models import (image_network, MyRotationTransform, modelCS)
 from efficientnet_pytorch import EfficientNet 
 
 
@@ -107,12 +107,6 @@ import neptune.new as neptune
 import re
 
 
-from Erik_alll_helper_functions import checking_veracity_of_data, dict_splitting_into_tensor, val_vs_train_loss, val_vs_train_accuracy, EarlyStopper
-from Erik_alll_helper_functions import conf_matrix_and_class_report, program_elapsed_time, dict_splitting_into_tensor
-from Erik_alll_helper_functions import apply_class_weights, set_parameter_requires_grad, LogScaler
-from Erik_alll_helper_functions import pre_processing, channel_5_numpy_CID, channel_5_numpy, splitting
-from Erik_alll_helper_functions import accessing_correct_fold_csv_files, create_splits, smiles_to_array
-from Helper_Models import image_network, Chem_Dataset, Reducer_profiles
 
 import torch
 import torchvision.transforms as transforms
@@ -146,28 +140,17 @@ clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Model
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
 
 
-file_name = 'erik10_hq_8_12'
+file_name = 'erik10_all'
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
 training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
-hq, dose = 'False', 'False'
-if re.search('hq', file_name):
-    hq = 'True'
-if re.search('8', file_name):
-    dose = 'True'
+hq, dose = set_bool_hqdose(file_name)
 L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
 checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
 variance_thresh = 0
 normalize_c = 'False'
 
-#variance_thresh = int(input("Variance threshold? (Options: 0 - 1.2): "))
-#normalize_c = input("Normalize? (Options: True, False): ")
-if variance_thresh > 0 or normalize_c == 'True':
-    npy_exists = False
-    save_npy = False
-
-npy_exists = True
-save_npy = False
+npy_exists, save_npy = set_bool_npy(variance_thresh, normalize_c)
 
 df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
         clue_gene, 
@@ -198,10 +181,7 @@ test_df, test_labels = splitting(test_set)
 
 
 # make sure that the number of labels is equal to the number of inputs
-assert len(training_df) == len(train_labels)
-assert len(validation_df) == len(validation_labels)
-assert len(test_df) == len(test_labels)
-
+inputs_equalto_labels_check(training_df, train_labels, validation_df, validation_labels, test_df, test_labels)
 
 
 
@@ -224,16 +204,10 @@ print(f'Training on device {device}. ' )
 
 # load individual models
 print("Loading Pretrained Models...")
-modelCS = nn.Sequential(
-    nn.Linear(2048, 128),
-    nn.ReLU(),
-    nn.Dropout(p = 0.7),
-    nn.Linear(128,64),
-    nn.ReLU(),
-    nn.Linear(64, num_classes))
-modelCS.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CS_model')['model_state_dict'])
+modelCS = modelCS
+modelCS.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'Chemical_Structure')['model_state_dict'])
 modelCP = image_network()
-modelCP.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'CP_model')['model_state_dict'])
+modelCP.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + 'Cell_Painting' + '.pt')['model_state_dict'])
 
 # -----------------------------------------Prepping Ensemble Model ---------------------#
 class CS_CP_Dataset(torch.utils.data.Dataset):
@@ -284,11 +258,7 @@ test_data_lst= list(test_set["Compound_ID"].unique())
 train_data_lst= list(training_set["Compound_ID"].unique())
 valid_data_lst= list(validation_set["Compound_ID"].unique())
 
-# check to make sure the compound IDs do not overlapp
-inter1 = set(test_data_lst) & set(train_data_lst)
-inter2 = set(test_data_lst) & set(valid_data_lst)
-inter3 = set(train_data_lst) & set(valid_data_lst)
-assert len(inter1) + len(inter2) + len(inter3) == 0, ("There are overlapping compounds between the training, validation and test sets")
+cmpd_id_overlap_check(train_data_lst, valid_data_lst, test_data_lst)
 
 # downloading paths to all of the images
 paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/paths_channels_treated_v1v2.csv')
@@ -318,80 +288,97 @@ test_generator = torch.utils.data.DataLoader(test_dataset_CSCP, **params)
 class CS_CP(nn.Module):
     def __init__(self, modelCP, modelCS):
         super(CS_CP, self).__init__()
-        self.modelCP = modelCP
-        self.modelCS = modelCS
-        self.linear_layer1 = nn.Linear(int(10 + 10), 25)
+        self.modelCP = torch.nn.Sequential(*list(modelCP.children())[:-1])
+        self.modelCS = torch.nn.Sequential(*list(modelCS.children())[:-1])
+        self.linear_layer1 = nn.Linear(int(1280 + 64), 128)
         self.selu = nn.SELU()
-        self.Dropout = nn.Dropout(p = 0.5)
-        self.linear_layer2 = nn.Linear(25,10)
+        self.Dropout = nn.Dropout(p = 0.3)
+        self.linear_layer2 = nn.Linear(128,10)
        
     def forward(self, x1, x2):
-        #print(f' compound: {x1.size()}')
-        #print(f' image: {x2.size()}')
         x1 = self.modelCP(x1)
         x2 = self.modelCS(x2)
-        x  = torch.cat((x1, x2), dim = 1)
+        x  = torch.cat((torch.squeeze(x1), x2), dim = 1)
         x = self.Dropout(self.selu(self.linear_layer1(x)))
         output = self.linear_layer2(x)
         return output
 
-CS_CP = CS_CP(modelCP, modelCS)
+model = CS_CP(modelCP, modelCS)
 
 # optimizer_algorithm
 #cnn_optimizer = torch.optim.Adam(updated_model.parameters(),weight_decay = 1e-6, lr = 0.001, betas = (0.9, 0.999), eps = 1e-07)
 learning_rate = 1e-6
-optimizer = torch.optim.Adam(CS_CP.parameters(), lr = learning_rate)
-# loss_function
-if incl_class_weights == True:
-    class_weights = apply_class_weights(training_set, device)
-    loss_function = torch.nn.CrossEntropyLoss(class_weights)
-else:
-    loss_function = torch.nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
+yn_class_weights = True
+class_weights = apply_class_weights_CL(training_set, dict_moa, device)
+loss_fn_str = 'cross'
+loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str, class_weights=class_weights)
 
 # --------------------------------- Training, Test, Validation, Loops --------------------------------#
 
 
 
-set_parameter_requires_grad(CS_CP, feature_extracting = True)
+set_parameter_requires_grad(model, feature_extracting = True)
 
 learning_rate = 1e-6
-optimizer = torch.optim.Adam(CS_CP.parameters(), lr = learning_rate)
+optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
 # loss_function
 yn_class_weights = True
 class_weights = apply_class_weights_CL(training_set, dict_moa, device)
 # choosing loss_function 
 loss_fn_str = 'cross'
-loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str, class_weights=class_weights)
-num_epochs_fs = 20
+loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str, 
+                                                  class_weights=class_weights)
+my_lr_scheduler = 'false'
+num_epochs_fs = 10
 #n_epochs, optimizer, model, loss_fn, loss_fn_str, train_loader, valid_loader, my_lr_scheduler, device, model_name, loss_fn_train = "false")
-train_loss_per_epoch_fe, train_acc_per_epoch_fe, val_loss_per_epoch_fe, val_acc_per_epoch_fe, num_epochs = two_input_training_loop_fe(n_epochs = num_epochs_fs,
+rain_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = adapt_training_loop(n_epochs = max_epochs,
               optimizer = optimizer,
-              model = CS_CP,
-              loss_fn = loss_function,
+              model = model,
+              loss_fn = loss_fn,
+              loss_fn_train = loss_fn_train,
+              loss_fn_str = loss_fn_str,
               train_loader=training_generator, 
               valid_loader=validation_generator,
-              device = device,
-              loss_fn_str = loss_fn_str,
               my_lr_scheduler = my_lr_scheduler,
-              model_name = model_name)
+              model_name=model_name,
+              device = device,
+              val_str = 'fe',
+              early_patience = 50)
 
-set_parameter_requires_grad(CS_CP, feature_extracting = False)
+print('Fine Tuning in Progress')
+set_parameter_requires_grad(model, feature_extracting = False)
 learning_rate = 0.5e-6
-optimizer = torch.optim.Adam(CS_CP.parameters(), lr = learning_rate)
+my_lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer = optimizer, 
+                        milestones=[8, 16, 22, 28, 32, 36], # List of epoch indices
+                        gamma = 0.5)
+optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
 # loss_function
-if incl_class_weights == True:
-    class_weights = apply_class_weights(training_set, device)
-    loss_function = torch.nn.CrossEntropyLoss(class_weights)
-else:
-    loss_function = torch.nn.CrossEntropyLoss()
+loss_fn_str = 'cross'
+loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str, 
+                                                 class_weights=class_weights)
 
 #----------------------------------------------------- Training and validation ----------------------------------#
-train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = two_input_training_loop(n_epochs, optimizer, model, loss_fn, loss_fn_str, train_loader, valid_loader, my_lr_scheduler, device, model_name, loss_fn_train = "false")
+
+train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = adapt_training_loop(n_epochs = max_epochs,
+              optimizer = optimizer,
+              model = model,
+              loss_fn = loss_fn,
+              loss_fn_train = loss_fn_train,
+              loss_fn_str = loss_fn_str,
+              train_loader=training_generator, 
+              valid_loader=validation_generator,
+              my_lr_scheduler = my_lr_scheduler,
+              model_name=model_name,
+              device = device,
+              val_str = 'f1',
+              early_patience = 10)
 #----------------------------------------- Assessing model on test data -----------------------------------------#
 model_test = CS_CP
 model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + ".pt")['model_state_dict'])
-correct, total, avg_test_loss, all_predictions, all_labels = two_input_test_loop(model = model, loss_fn = loss_function, loss_fn_str = loss_fn_str, test_loader = test_loader, device = device)
-
+correct, total, avg_test_loss, all_predictions, all_labels = adapt_test_loop(model = model, 
+                    test_loader = test_generator, 
+                    device = device)
 # ----------------------------------------- Plotting loss, accuracy, visualization of results ---------------------#
 
 val_vs_train_loss_path = val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, model_name, file_name,'/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_images') 
@@ -412,7 +399,7 @@ upload_to_neptune('erik-everett-palm/Tomics-Models',
                     learning_rate = learning_rate, 
                     elapsed_time = elapsed_time, 
                     num_epochs = num_epochs,
-                    loss_fn = loss_function,
+                    loss_fn = loss_fn,
                     all_labels = all_labels,
                     all_predictions = all_predictions,
                     dict_moa = dict_moa,
@@ -420,4 +407,4 @@ upload_to_neptune('erik-everett-palm/Tomics-Models',
                     val_vs_train_acc_path = val_vs_train_acc_path,
                     variance_thresh = variance_thresh,
                     pixel_size = 256,
-                    loss_fn_train = "false")
+                    loss_fn_train = loss_fn_train)

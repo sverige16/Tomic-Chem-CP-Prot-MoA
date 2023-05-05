@@ -75,12 +75,38 @@ nn._estimator_type = "classifier"
 import sys
 import optuna
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-from Erik_alll_helper_functions import (apply_class_weights, accessing_correct_fold_csv_files, create_splits, extract_tprofile,
-                                        checking_veracity_of_data, LogScaler, EarlyStopper, val_vs_train_loss,
-                                        val_vs_train_accuracy, program_elapsed_time, conf_matrix_and_class_report,
-                                        pre_processing, create_terminal_table, upload_to_neptune, dict_splitting_into_tensor,
-                                        tprofiles_gc_too_func, set_bool_npy, set_bool_hqdose)
-
+from Erik_alll_helper_functions import (
+    apply_class_weights_CL, 
+    accessing_correct_fold_csv_files, 
+    create_splits, 
+    choose_device,
+    dict_splitting_into_tensor, 
+    extract_tprofile, 
+    EarlyStopper, 
+    val_vs_train_loss,
+    val_vs_train_accuracy, 
+    program_elapsed_time, 
+    conf_matrix_and_class_report,
+    tprofiles_gc_too_func, 
+    create_terminal_table, 
+    upload_to_neptune, 
+    different_loss_functions, 
+    Transcriptomic_Profiles_gc_too, 
+    Transcriptomic_Profiles_numpy,
+    set_bool_hqdose, 
+    set_bool_npy, 
+    FocalLoss, 
+    np_array_transform,
+    apply_class_weights_GE, 
+    adapt_training_loop, 
+    adapt_validation_loop, 
+    adapt_test_loop,
+    checking_veracity_of_data,
+    LogScaler,
+    pre_processing,
+    accessing_all_folds_csv,
+    getting_correct_image_indices
+)
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Erik_Models/DWTM')
 from DWTM import*
 from Data_Processing_Categorical import Datapreprocessing as DataPreprocessingCategorical
@@ -91,17 +117,17 @@ from Image_Generate import ImageGenerate
 # clue row metadata with rows representing transcription levels of specific genes
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
 
-  
+model_name = "DWTM"
 file_name = "erik10_hq_8_12"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
-training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
+training_set, validation_set, test_set = accessing_correct_fold_csv_files(file_name)
 hq, dose = set_bool_hqdose(file_name)
 L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
 checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
 variance_thresh = 0
-normalize_c = 'False'
-npy_exists, save_npy = set_bool_npy(variance_thresh, normalize_c)
+normalize_c = False
+npy_exists, save_npy = set_bool_npy(variance_thresh, normalize_c, five_fold = 'True')
 df_train_features, df_val_features, df_train_labels_str, df_val_labels_str, df_test_features, df_test_labels_str, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
         clue_gene, 
         npy_exists = npy_exists,
@@ -123,10 +149,11 @@ df_val_features["Class"] = df_val_labels
 df_test_features["Class"] = df_test_labels
 
 # Concatenating all features and labels
-df_total = pd.concat([df_train_features, df_val_features, df_test_features], axis=0)
+df_total = pd.concat([df_train_features, df_val_features, df_test_features], axis=0).reset_index(drop=True)
+getting_correct_image_indices(model_name, file_name, df_total)
 
-df_total.to_csv("/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/DWTM/" + file_name + '_' + 'fold0', index = False)
-
+df_total.to_csv("/home/jovyan/Tomics-CP-Chem-MoA/data_fdor_models/DWTM/" + file_name + '_' + 'fold0', index = False,  float_format='%.3f')
+'''
 print(f' The range of the indices for L1000_training is: {df_train_features.index[0]} to {df_train_features.index[-1]}')
 df_val_initial_index = df_train_features.index[-1] + 1
 df_val_final_index = df_val_initial_index + df_val_features.shape[0] - 1
@@ -142,7 +169,7 @@ labels_moadict = [df_train_labels_str, df_val_labels_str, df_test_labels_str, di
 
 with open("/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/DWTM/" + file_name + "labels_moa_dict" +'_' + 'fold0'+ ".pkl", 'wb') as f:
     pickle.dump(labels_moadict, f)
-
+'''
 data_path = "/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/DWTM/" + file_name + '_' + 'fold0'
 print("Data Pre-Processing Numerical Data")
 PD = DataPreprocessingNumerical(data_path)

@@ -64,16 +64,20 @@ from Erik_alll_helper_functions import (
     FocalLoss, 
     np_array_transform,
     apply_class_weights_GE, 
-    one_input_training_loop, 
-    one_input_validation_loop, 
-    one_input_test_loop,
+    adapt_training_loop, 
+    adapt_validation_loop, 
+    adapt_test_loop,
     channel_5_numpy,
-    splitting
+    splitting,
+    cmpd_id_overlap_check, 
+    inputs_equalto_labels_check,
+    adapt_training_loop,
+    accessing_all_folds_csv
 )
-
+from Helper_Models import (image_network, MyRotationTransform)
 # ----------------------------------------- hyperparameters ---------------------------------------#
-# Hyperparameters
-max_epochs = 1000 # number of epochs we are going to run 
+# Hyperparametersd
+max_epochs = 50 # number of epochs we are going to run 
 using_cuda = True # to use available GPUs
 model_name = "Cell_Painting"
 
@@ -107,30 +111,8 @@ class Dataset(torch.utils.data.Dataset):
             image = self.transform(image)
         #return image.float(), label.long()
         return image.float(), label_tensor.float()  
-class image_network(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.base_model = EfficientNet.from_name('efficientnet-b0', include_top=False, in_channels = 5)
-        self.dropout_1 = nn.Dropout(p = 0.3)
-        self.Linear_last = nn.Linear(1280, num_classes) #41720
-        # self.softmax = nn.Softmax(dim = 1)
-    
-    def forward(self, x):
-        out = self.dropout_1(self.base_model(x))
-        out = out.view(-1, 1280)
-        out = self.Linear_last(out)
-        # out = self.softmax(out) # don't need softmax when using CrossEntropyLoss
-        return out
-class MyRotationTransform:
-    " Rotate by one of the given angles"
-    def __init__(self, angle):
-        self.angle = angle
 
-    def __call__(self, image):
-        angle = random.choice(self.angle)
-        return TF.rotate(image, angle)
 rotation_transform = MyRotationTransform([0,90,180,270])
-
 # on the fly data augmentation 
 train_transforms = transforms.Compose([
     transforms.RandomHorizontalFlip(0.3), 
@@ -139,154 +121,162 @@ train_transforms = transforms.Compose([
 
 paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/paths_channels_treated_v1v2.csv')
 
-file_name = "erik10_all"
+file_name = "erik10_hq_8_12"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
-training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
-hq, dose = set_bool_hqdose(file_name)
-L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
+for fold_int in range(0,3):
+    print(f'Fold Iteration: {fold_int}')
+    training_set, validation_set, test_set = accessing_all_folds_csv(file_name, fold_int)
+    hq, dose = set_bool_hqdose(file_name)
+    L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
-# download dictionary which associates moa with a number
-dict_moa = dict_splitting_into_tensor(training_set)
-assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique())
+    # download dictionary which associates moa with a number
+    dict_moa = dict_splitting_into_tensor(training_set)
+    assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique())
 
-# extract compound IDs
-test_data_lst= list(test_set["Compound_ID"].unique())
-train_data_lst= list(training_set["Compound_ID"].unique())
-valid_data_lst= list(validation_set["Compound_ID"].unique())
+    # extract compound IDs
+    test_data_lst= list(test_set["Compound_ID"].unique())
+    train_data_lst= list(training_set["Compound_ID"].unique())
+    valid_data_lst= list(validation_set["Compound_ID"].unique())
 
-# check to make sure the compound IDs do not overlapp between the training, validation and test sets
-inter1 = set(test_data_lst) & set(train_data_lst)
-inter2 = set(test_data_lst) & set(valid_data_lst)
-inter3 = set(train_data_lst) & set(valid_data_lst)
-assert len(inter1) + len(inter2) + len(inter3) == 0, ("There are overlapping compounds between the training, validation and test sets")
+    # check to make sure the compound IDs do not overlapp between the training, validation and test sets
+    cmpd_id_overlap_check(train_data_lst, valid_data_lst, test_data_lst)
 
-# extracting all the paths to the images where we have a Compound in the respective lists
-training_df = paths_v1v2[paths_v1v2["compound"].isin(train_data_lst)].reset_index(drop=True)
-validation_df = paths_v1v2[paths_v1v2["compound"].isin(valid_data_lst)].reset_index(drop=True)
-test_df = paths_v1v2[paths_v1v2["compound"].isin(test_data_lst)].reset_index(drop=True)
+    # extracting all the paths to the images where we have a Compound in the respective lists
+    training_df = paths_v1v2[paths_v1v2["compound"].isin(train_data_lst)].reset_index(drop=True)
+    validation_df = paths_v1v2[paths_v1v2["compound"].isin(valid_data_lst)].reset_index(drop=True)
+    test_df = paths_v1v2[paths_v1v2["compound"].isin(test_data_lst)].reset_index(drop=True)
 
-# removing the compounds that have a moa class that contains a "|" as this is not supported by the model
-training_df = training_df[training_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
-validation_df = validation_df[validation_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
-test_df = test_df[test_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
+    # removing the compounds that have a moa class that contains a "|" as this is not supported by the model
+    training_df = training_df[training_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
+    validation_df = validation_df[validation_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
+    test_df = test_df[test_df.moa.str.contains("|", regex = False, na = True) == False].reset_index(drop=True)
 
-# Checking to see if the compounds after removing from paths_v1v2 are the same as the ones in the training, validation and test sets
-# no loss should occur, but it does occur
-#assert len(list(training_df.compound.unique())) == len(train_data_lst)
-#assert len(list(validation_df.compound.unique())) == len(valid_data_lst)
-#assert len(list(test_df.compound.unique())) == len(test_data_lst)
+    # Checking to see if the compounds after removing from paths_v1v2 are the same as the ones in the training, validation and test sets
+    # no loss should occur, but it does occur
+    #assert len(list(training_df.compound.unique())) == len(train_data_lst)
+    #assert len(list(validation_df.compound.unique())) == len(valid_data_lst)
+    #assert len(list(test_df.compound.unique())) == len(test_data_lst)
 
-# checking to see that the unique moa classes are identical across training, validation and test set
-assert set(training_df.moa.unique()) == set(validation_df.moa.unique()) == set(test_df.moa.unique())
-num_classes = len(training_set.moa.unique())
-
-
-# split data into labels and inputs
-training_df, train_labels = splitting(training_df)
-validation_df, validation_labels = splitting(validation_df)
-test_df, test_labels = splitting(test_df)
-
-# showing that I have no GPUs
-world_size = torch.cuda.device_count()
-# print(world_size)
-
-# importing data normalization pandas dataframe
-pd_image_norm = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/dmso_stats_v1v2.csv')
+    # checking to see that the unique moa classes are identical across training, validation and test set
+    assert set(training_df.moa.unique()) == set(validation_df.moa.unique()) == set(test_df.moa.unique())
+    num_classes = len(training_set.moa.unique())
 
 
-batch_size = 18
-# parameters
-params = {'batch_size' : batch_size,
-         'num_workers' : 3,
-         'shuffle' : True,
-         'prefetch_factor' : 1} 
-          
+    # split data into labels and inputs
+    training_df, train_labels = splitting(training_df)
+    validation_df, validation_labels = splitting(validation_df)
+    test_df, test_labels = splitting(test_df)
 
-device = choose_device(using_cuda = True)
+    # showing that I have no GPUs
+    world_size = torch.cuda.device_count()
+    # print(world_size)
 
-# Create datasets with relevant data and labels
-training_dataset = Dataset(training_df, train_labels, dict_moa, transform = train_transforms, image_normalization= pd_image_norm)
-valid_dataset = Dataset(validation_df, validation_labels, dict_moa, image_normalization= pd_image_norm)
-test_dataset = Dataset(test_df, test_labels, dict_moa, image_normalization= pd_image_norm)
-
-# make sure that the number of labels is equal to the number of inputs
-assert len(training_df) == len(train_labels)
-assert len(validation_df) == len(validation_labels)
-assert len(test_df) == len(test_labels)
+    # importing data normalization pandas dataframe
+    pd_image_norm = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/dmso_stats_v1v2.csv')
 
 
-# create generator that randomly takes indices from the training set
-training_generator = torch.utils.data.DataLoader(training_dataset, **params)
-validation_generator = torch.utils.data.DataLoader(valid_dataset, **params)
-test_generator = torch.utils.data.DataLoader(test_dataset, **params)
+    batch_size = 18
+    # parameters
+    params = {'batch_size' : batch_size,
+            'num_workers' : 3,
+            'shuffle' : True,
+            'prefetch_factor' : 1} 
+            #'collate_fn' : custom_collate_fn } 
+            
 
-#-------------------------- Creating MLP Architecture ------------------------------------------#
-model = image_network()
+    device = choose_device(using_cuda = True)
 
+    # Create datasets with relevant data and labels
+    training_dataset = Dataset(training_df, train_labels, dict_moa, transform = train_transforms, image_normalization= pd_image_norm)
+    valid_dataset = Dataset(validation_df, validation_labels, dict_moa, image_normalization= pd_image_norm)
+    test_dataset = Dataset(test_df, test_labels, dict_moa, image_normalization= pd_image_norm)
 
-yn_class_weights = True
-class_weights = apply_class_weights_CL(training_set, dict_moa, device)
-# choosing loss_function 
-loss_fn_str = 'cross'
-loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str, class_weights=class_weights)
+    inputs_equalto_labels_check(training_df, train_labels, validation_df, validation_labels, test_df, test_labels)
 
-#------------------------ Class weights, optimizer, and loss function ---------------------------------#
+    # create generator that randomly takes indices from the training set
+    training_generator = torch.utils.data.DataLoader(training_dataset, **params)
+    validation_generator = torch.utils.data.DataLoader(valid_dataset, **params)
+    test_generator = torch.utils.data.DataLoader(test_dataset, **params)
 
-
-# optimizer_algorithm
-learning_rate = 0.1
-optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=1e-4)
-my_lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, 
-                        milestones=[8, 16, 22, 28, 32, 36], # List of epoch indices
-                        gamma = 0.5)
-
-#------------------------------   Calling functions --------------------------- #
-train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, num_epochs = one_input_training_loop(n_epochs = max_epochs,
-              optimizer = optimizer,
-              model = model,
-              loss_fn = loss_fn,
-              loss_fn_train = loss_fn_train,
-              loss_fn_str = loss_fn_str,
-              train_loader=training_generator, 
-              valid_loader=validation_generator,
-              my_lr_scheduler = my_lr_scheduler,
-              model_name=model_name,
-              device = device)
-#--------------------------------- Assessing model on test data ------------------------------#
-model_test = image_network()
-model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + ".pt")['model_state_dict'])
-correct, total, avg_test_loss, all_predictions, all_labels = test_loop(model = model_test,
-                                          loss_fn = loss_function, 
-                                          test_loader = test_generator)
-
-#---------------------------------------- Visual Assessment ---------------------------------# 
-
-val_vs_train_loss_path = val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images') 
-val_vs_train_acc_path = val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images')
+    #-------------------------- Creating MLP Architecture ------------------------------------------#
+    model = image_network()
 
 
-#-------------------------------- Writing interesting info into terminal ------------------------# 
+    # choosing loss_function 
+    loss_fn_str = 'BCE'
+    loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str,
+                                                      )
 
-end = time.time()
+    #------------------------ Class weights, optimizer, and loss function ---------------------------------#
 
-elapsed_time = program_elapsed_time(start, end)
 
-create_terminal_table(elapsed_time, all_labels, all_predictions)
-upload_to_neptune('erik-everett-palm/Tomics-Models',
-                    file_name = file_name,
-                    model_name = model_name,
-                    normalize = "mean and std and random crop",
-                    yn_class_weights = 'CL',
-                    learning_rate = learning_rate, 
-                    elapsed_time = elapsed_time, 
-                    num_epochs = num_epochs,
-                    loss_fn = loss_function,
-                    all_labels = all_labels,
-                    all_predictions = all_predictions,
-                    dict_moa = dict_moa,
-                    val_vs_train_loss_path = val_vs_train_loss_path,
-                    val_vs_train_acc_path = val_vs_train_acc_path,
-                    loss_fn_train = loss_fn_train,
-                    pixel_size = 256 
-                )
+    # optimizer_algorithm
+    learning_rate = 0.001
+    yn_class_weights = True
+    if yn_class_weights:     # if we want to apply class weights
+        class_weights = apply_class_weights_CL(training_set, dict_moa, device)
+    else:
+        class_weights = None
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    my_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer=optimizer)
+
+    # choosing loss_function 
+    loss_fn_str = 'BCE'
+    loss_fn_train_str = 'false'
+    loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str,
+                                                        loss_fn_train_str = loss_fn_train_str,
+                                                        class_weights = class_weights)
+    #------------------------------   Calling functions --------------------------- #
+
+    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, val_f1_score_per_epoch, num_epochs = adapt_training_loop(n_epochs = max_epochs,
+                optimizer = optimizer,
+                model = model,
+                loss_fn = loss_fn,
+                loss_fn_train = loss_fn_train,
+                loss_fn_str = loss_fn_str,
+                train_loader=training_generator, 
+                valid_loader=validation_generator,
+                my_lr_scheduler = my_lr_scheduler,
+                model_name=model_name,
+                device = device,
+                val_str = 'f1',
+                early_patience = 20)
+    #--------------------------------- Assessing model on test data ------------------------------#
+    model_test = image_network()
+    model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + ".pt")['model_state_dict'])
+    correct, total, avg_test_loss, all_predictions, all_labels = adapt_test_loop(model = model_test,
+                                            test_loader = test_generator,
+                                            device = device)
+        
+
+    #---------------------------------------- Visual Assessment ---------------------------------# 
+
+    val_vs_train_loss_path = val_vs_train_loss(num_epochs,train_loss_per_epoch, val_loss_per_epoch, now, model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images') 
+    val_vs_train_acc_path = val_vs_train_accuracy(num_epochs, train_acc_per_epoch, val_acc_per_epoch, now,  model_name, file_name, '/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_images')
+
+
+    #-------------------------------- Writing interesting info into terminal ------------------------# 
+
+    end = time.time()
+
+    elapsed_time = program_elapsed_time(start, end)
+
+    create_terminal_table(elapsed_time, all_labels, all_predictions)
+    upload_to_neptune('erik-everett-palm/Tomics-Models',
+                        file_name = file_name,
+                        model_name = model_name,
+                        normalize = "mean and std",
+                        yn_class_weights = yn_class_weights,
+                        learning_rate = learning_rate, 
+                        elapsed_time = elapsed_time, 
+                        num_epochs = num_epochs,
+                        loss_fn = loss_fn,
+                        all_labels = all_labels,
+                        all_predictions = all_predictions,
+                        dict_moa = dict_moa,
+                        val_vs_train_loss_path = val_vs_train_loss_path,
+                        val_vs_train_acc_path = val_vs_train_acc_path,
+                        loss_fn_train = loss_fn_train,
+                        pixel_size = 256 
+                    )
 

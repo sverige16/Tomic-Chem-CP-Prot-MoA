@@ -74,7 +74,7 @@ import re
 
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 from Erik_alll_helper_functions import checking_veracity_of_data, accessing_correct_fold_csv_files
-from Erik_alll_helper_functions import create_splits
+from Erik_alll_helper_functions import create_splits, pre_processing
 
 def cmpd_clustering(df_train_features, df_train_labels, moa_subset):
     # Subset the data to only include the MoA of interest
