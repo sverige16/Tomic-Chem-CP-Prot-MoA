@@ -1,0 +1,48 @@
+{"obj": {"type": "AssignString", "path": ["sys", "name"], "value": "Untitled"}, "version": 1}
+{"obj": {"type": "AssignString", "path": ["sys", "description"], "value": ""}, "version": 2}
+{"obj": {"type": "AssignString", "path": ["sys", "hostname"], "value": "erikep-notebook-gpu3-766d57c488-pq4kc"}, "version": 3}
+{"obj": {"type": "AssignBool", "path": ["sys", "failed"], "value": false}, "version": 4}
+{"obj": {"type": "ClearStringLog", "path": ["monitoring", "stdout"]}, "version": 5}
+{"obj": {"type": "ClearStringLog", "path": ["monitoring", "stderr"]}, "version": 6}
+{"obj": {"type": "AssignString", "path": ["source_code", "entrypoint"], "value": "Erik_1DCNN_Cell_Line.py"}, "version": 7}
+{"obj": {"type": "UploadFileSet", "path": ["source_code", "files"], "file_globs": ["/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Erik_Models/Erik_1DCNN_Cell_Line.py"], "reset": "False"}, "version": 8}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "cpu"], "min": 0.0, "max": 100.0, "unit": "%"}, "version": 9}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "cpu"]}, "version": 10}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "memory"], "min": 0.0, "max": 503.78836822509766, "unit": "GB"}, "version": 11}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "memory"]}, "version": 12}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "gpu"], "min": 0.0, "max": 100.0, "unit": "%"}, "version": 13}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "gpu"]}, "version": 14}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "gpu_memory"], "min": 0.0, "max": 10.91650390625, "unit": "GB"}, "version": 15}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "gpu_memory"]}, "version": 16}
+{"obj": {"type": "AssignString", "path": ["model"], "value": "1DCNN_Cell_Line"}, "version": 17}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "cpu"], "values": [{"value": 10.1, "step": null, "ts": 1683122590.3128107}]}, "version": 18}
+{"obj": {"type": "AssignString", "path": ["filename"], "value": "erik10_hq_8_12"}, "version": 19}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "memory"], "values": [{"value": 73.75888061523438, "step": null, "ts": 1683122590.3128107}]}, "version": 20}
+{"obj": {"type": "AssignString", "path": ["parameters", "normalize"], "value": "False"}, "version": 21}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "gpu_memory"], "values": [{"value": 1.1495361328125, "step": null, "ts": 1683122590.3128107}]}, "version": 22}
+{"obj": {"type": "AssignBool", "path": ["parameters", "variance_threshold"], "value": false}, "version": 23}
+{"obj": {"type": "AssignString", "path": ["parameters", "class_weight"], "value": "True"}, "version": 24}
+{"obj": {"type": "AssignFloat", "path": ["parameters", "learning_rate"], "value": 0.002660779294588925}, "version": 25}
+{"obj": {"type": "AssignString", "path": ["parameters", "loss_fn_train"], "value": "false"}, "version": 26}
+{"obj": {"type": "AssignString", "path": ["parameters", "loss_function"], "value": "BCEWithLogitsLoss()"}, "version": 27}
+{"obj": {"type": "AssignString", "path": ["parameters", "learning_rate_scheduler"], "value": "<torch.optim.lr_scheduler.CosineAnnealingLR object at 0x7fe59e06da30>"}, "version": 28}
+{"obj": {"type": "AssignString", "path": ["parameters", "pixel_size"], "value": "False"}, "version": 29}
+{"obj": {"type": "AssignString", "path": ["metrics", "time"], "value": "11.07 sec"}, "version": 30}
+{"obj": {"type": "AssignInt", "path": ["metrics", "epochs"], "value": 1}, "version": 31}
+{"obj": {"type": "AssignFloat", "path": ["metrics", "test_f1"], "value": 0.19247557603686638}, "version": 32}
+{"obj": {"type": "AssignFloat", "path": ["metrics", "test_accuracy"], "value": 0.5804020100502513}, "version": 33}
+{"obj": {"type": "UploadFile", "path": ["images", "loss"], "ext": "png", "file_path": "/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images/loss_train_val_1DCNN_Cell_Line_erik10_hq_8_12_03_05_2023-16:02:58.png", "tmp_file_name": null, "clean_after_upload": false}, "version": 34}
+{"obj": {"type": "UploadFile", "path": ["images", "accuracy"], "ext": "png", "file_path": "/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images/acc_train_val_1DCNN_Cell_Line_erik10_hq_8_12_03_05_2023-16:02:58.png", "tmp_file_name": null, "clean_after_upload": false}, "version": 35}
+{"obj": {"type": "UploadFile", "path": ["optimal_model_checkpoint"], "ext": "pt", "file_path": "/home/jovyan/Tomics-CP-Chem-MoA/saved_models/1DCNN_Cell_Line.pt", "tmp_file_name": null, "clean_after_upload": false}, "version": 36}
+{"obj": {"type": "AssignFloat", "path": ["metrics", "f1_score"], "value": 0.2060994201927752}, "version": 37}
+{"obj": {"type": "AssignFloat", "path": ["metrics", "accuracy"], "value": 0.4774066797642436}, "version": 38}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": " Confusion Matrix: [[108   0   1   0   0   0  35   0   0   0]\n [  2 340   1   0   0   0 163   0   0   0]\n [  4   0   0   0   0   0   0   0   0   0]\n [ 29   0   0   0   0   0  16   0   0   0]\n [  6   0   0   0   0   0   5   0   0   0]\n [ 15   0   0   0   0   0   0   0   0   0]\n [ 16   1   0   0   0   0   7   0   0   0]\n [  7   0   0   0   0   0   0   0   0   0]\n [ 14   2   0   0   0   0   0   0   0   0]\n [  5   1  11   0   0   0   0   0   0   7]]", "step": null, "ts": 1683122590.4831557}]}, "version": 39}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": "\n", "step": null, "ts": 1683122590.5217345}]}, "version": 40}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "/home/jovyan/.local/lib/python3.8/site-packages/sklearn/metrics/_classification.py:1248: UndefinedMetricWarning: Precision and F-score are ill-defined and being set to 0.0 in labels with no predicted samples. Use `zero_division` parameter to control this behavior.\n  _warn_prf(average, modifier, msg_start, len(result))\n", "step": null, "ts": 1683122591.5157187}]}, "version": 41}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "/home/jovyan/.local/lib/python3.8/site-packages/sklearn/metrics/_classification.py:1248: UndefinedMetricWarning: Precision and F-score are ill-defined and being set to 0.0 in labels with no predicted samples. Use `zero_division` parameter to control this behavior.\n  _warn_prf(average, modifier, msg_start, len(result))\n", "step": null, "ts": 1683122591.5209057}]}, "version": 42}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "/home/jovyan/.local/lib/python3.8/site-packages/sklearn/metrics/_classification.py:1248: UndefinedMetricWarning: Precision and F-score are ill-defined and being set to 0.0 in labels with no predicted samples. Use `zero_division` parameter to control this behavior.\n  _warn_prf(average, modifier, msg_start, len(result))\n", "step": null, "ts": 1683122591.523978}]}, "version": 43}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": "              precision    recall  f1-score   support\n\n        EGFR       0.52      0.75      0.62       144\n        HDAC       0.99      0.67      0.80       506\n        PARP       0.00      0.00      0.00         4\n        adre       0.00      0.00      0.00        45\n        adre       0.00      0.00      0.00        11\n        cycl       0.00      0.00      0.00        15\n        dopa       0.03      0.29      0.06        24\n        hist       0.00      0.00      0.00         7\n        phos       0.00      0.00      0.00        16\n        topo       1.00      0.29      0.45        24\n\n    accuracy                           0.58       796\n   macro avg       0.25      0.20      0.19       796\nweighted avg       0.75      0.58      0.64       796\n", "step": null, "ts": 1683122591.5254989}]}, "version": 44}
+{"obj": {"type": "UploadFile", "path": ["files", "classif_info"], "ext": "txt", "file_path": "/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/class_info.txt", "tmp_file_name": null, "clean_after_upload": false}, "version": 45}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": "\n", "step": null, "ts": 1683122591.528336}]}, "version": 46}
+{"obj": {"type": "UploadFile", "path": ["images", "conf_matrix"], "ext": "png", "file_path": "/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/conf_matrix.png", "tmp_file_name": null, "clean_after_upload": false}, "version": 47}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": "Shutting down background jobs, please wait a moment...\n", "step": null, "ts": 1683122591.5309796}]}, "version": 48}

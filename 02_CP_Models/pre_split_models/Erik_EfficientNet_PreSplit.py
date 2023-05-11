@@ -42,8 +42,7 @@ import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 
 from Erik_alll_helper_functions import (
-    apply_class_weights_CL, 
-    accessing_correct_fold_csv_files, 
+    apply_class_weights_CL,  
     create_splits, 
     choose_device,
     dict_splitting_into_tensor, 
@@ -174,7 +173,21 @@ for fold_int in range(0,3):
     # importing data normalization pandas dataframe
     pd_image_norm = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/dmso_stats_v1v2.csv')
 
+    import multiprocessing
 
+    num_cpu_cores = multiprocessing.cpu_count()
+    print(f"Number of available CPU cores: {num_cpu_cores}")
+
+    batch_size = 120
+    # parameters
+    params = {'batch_size' : batch_size,
+            'num_workers' : int(num_cpu_cores),
+            'shuffle' : True,
+            'prefetch_factor': 16} 
+            #'collate_fn' : custom_collate_fn } 
+            
+
+    '''
     batch_size = 18
     # parameters
     params = {'batch_size' : batch_size,
@@ -182,7 +195,7 @@ for fold_int in range(0,3):
             'shuffle' : True,
             'prefetch_factor' : 1} 
             #'collate_fn' : custom_collate_fn } 
-            
+    '''           
 
     device = choose_device(using_cuda = True)
 
@@ -211,15 +224,14 @@ for fold_int in range(0,3):
 
 
     # optimizer_algorithm
-    learning_rate = 0.001
+    learning_rate = 0.1
     yn_class_weights = True
     if yn_class_weights:     # if we want to apply class weights
         class_weights = apply_class_weights_CL(training_set, dict_moa, device)
     else:
         class_weights = None
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    my_lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer=optimizer)
-
+    my_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer=optimizer, step_size=10, gamma=0.1)
     # choosing loss_function 
     loss_fn_str = 'BCE'
     loss_fn_train_str = 'false'
@@ -240,7 +252,7 @@ for fold_int in range(0,3):
                 model_name=model_name,
                 device = device,
                 val_str = 'f1',
-                early_patience = 20)
+                early_patience = 15)
     #--------------------------------- Assessing model on test data ------------------------------#
     model_test = image_network()
     model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + ".pt")['model_state_dict'])

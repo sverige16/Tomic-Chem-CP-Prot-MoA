@@ -54,7 +54,6 @@ import cv2
 import re
 import heapq
 
-from albumentations import RandomCrop
 
 # ----------------------------------------- Visualization of Model Results ----------------------------------------------# 
 # -----------------------------------------------------------------------------------------------------------------------#
@@ -124,14 +123,25 @@ def conf_matrix_and_class_report(labels_val, predictions, model_name, dict_moa =
     '''
     list_of_MoA_names = [0] * len(dict_moa)
     for key, value in dict_moa.items():
-        list_of_MoA_names[np.argmax(value)] = key[0:4]
+        if key == 'adrenergic receptor agonist':
+            list_of_MoA_names[np.argmax(value)] = 'adreAg'
+        elif key == 'adrenergic receptor antagonist':
+            list_of_MoA_names[np.argmax(value)] = 'adreAt'
+        else:
+            list_of_MoA_names[np.argmax(value)] = key[0:6]
+        #list_of_MoA_names[np.argmax(value)] = key
     cf_matrix = confusion_matrix(labels_val, predictions)
     print(f' Confusion Matrix: {cf_matrix}')
-    ax = plt.figure().gca()
-    sns.heatmap(cf_matrix, annot = True, fmt='d', ax = ax).set(title = f'Confusion Matrix: {model_name}')
-    ax.set_xlabel('Predicted labels'); ax.set_ylabel('True labels')
-    ax.set_xticklabels(list_of_MoA_names); ax.set_yticklabels(list_of_MoA_names)
+    fig, ax = plt.subplots(figsize=(12, 10))  # Set the figure size
+    sns.heatmap(cf_matrix, annot=True, fmt='d', ax=ax).set(title=f'Confusion Matrix: {model_name}')
+    ax.set_xlabel('Predicted labels', fontsize=14)
+    ax.set_ylabel('True labels', fontsize=14)
+    ax.set_xticklabels(list_of_MoA_names, rotation=45)
+    ax.set_yticklabels(list_of_MoA_names, rotation=0)
+    plt.tight_layout()  # Adjust layout to fit labels properly
     plt.savefig("/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/random/conf_matrix")
+
+
    
     class_report = classification_report(labels_val, predictions, target_names= list_of_MoA_names)
     print(class_report)
@@ -304,7 +314,7 @@ def splitting(df):
 
 # --------------------------------- Fine Tuning -----------------------------------------#
 #----------------------------------------------------------------------------------------#
-def set_parameter_requires_grad(model, feature_extracting):
+def set_parameter_requires_grad(model, feature_extracting, added_layers):
     '''
     Sets the parameters of the model to require gradients or not.
     Input:
@@ -317,7 +327,7 @@ def set_parameter_requires_grad(model, feature_extracting):
     if feature_extracting:
         print("feature extracting in progress")
         for i, param in enumerate(model.parameters()):
-            if i >= len(list(model.parameters())) - 2:
+            if i >= len(list(model.parameters())) - added_layers:
                 param.requires_grad = True
             else:
                 param.requires_grad = False
@@ -2043,6 +2053,312 @@ def getting_correct_image_indices(method, file_name, df_total):
     with open("/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/" + method + '_' + file_name + "_splits.pkl", 'wb') as f:
         pickle.dump(fold_index_dictionaries, f)
 
+def extracting_pretrained_single_models(single_model_str, fold_num):
+    if fold_num == 0:
+        if single_model_str == "GE":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/GE_fold0_model_checkpoint_559.pt'
+        elif single_model_str == "CP":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/CP_fold0_model_checkpoint_606.pt'
+        elif single_model_str == "CS":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/CS_fold0_model_checkpoint_584.pt'
+        else:
+            ValueError("single_model_str must be either GE, CP, or CS")
+    elif fold_num == 1:
+        if single_model_str == "GE":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/GE_fold1_model_checkpoint_560.pt'
+        elif single_model_str == "CP":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/CP_fold1_model_checkpoint_610.pt'
+        elif single_model_str == "CS":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/CS_fold1_model_checkpoint_585.pt'
+        else:
+            ValueError("single_model_str must be either GE, CP, or CS")
+    elif fold_num == 2:
+        if single_model_str == "GE":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/GE_fold2_model_checkpoint_561.pt'
+        elif single_model_str == "CP":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/CP_fold2_model_checkpoint_611.pt'
+        elif single_model_str == "CS":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/CS_fold2_model_checkpoint_586.pt'
+        else:
+            ValueError("single_model_str must be either GE, CP, or CS")
+    elif fold_num == 3:
+        if single_model_str == "GE":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/GE_fold3_model_checkpoint_562.pt'
+        elif single_model_str == "CP":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/CP_fold3_model_checkpoint_612.pt'
+        elif single_model_str == "CS":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/CS_fold3_model_checkpoint_587.pt'
+        else:
+            ValueError("single_model_str must be either GE, CP, or CS")
+    elif fold_num == 4:
+        if single_model_str == "GE":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/GE_fold4_model_checkpoint_563.pt'
+        elif single_model_str == "CP":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/CP_fold4_model_checkpoint_613.pt'
+        elif single_model_str == "CS":
+            return '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/Final_Pretrained_Single_Models/CS_fold4_model_checkpoint_588.pt'
+        else:
+            ValueError("single_model_str must be either GE, CP, or CS")
+    else:
+        ValueError("fold_num must be between 0 and 4")
+
+def optuna_combinations_feature_extraction(trial, num_feat, num_classes, training_generator, validation_generator, pretrained_model, model_name, device):
+    class Extended_Model(nn.Module):
+        def __init__(self, trial, num_features, pretrained_model, num_classes):
+            super(Extended_Model, self).__init__()
+            self.base_model = pretrained_model
+            self.num_features = num_features
+            self.num_classes = num_classes
+            n_layers = trial.suggest_int('n_layers', 1, 4)
+            layers = []
+            for i in range(n_layers):
+                out_features = trial.suggest_int('n_units_l{}'.format(i), 4, 250)
+                layers.append(nn.Linear(in_features, out_features))
+                layers.append(nn.LeakyReLU())
+                layers.append(nn.BatchNorm1d(out_features))
+                p = trial.suggest_float('dropout_l{}'.format(i), 0.2, 0.5)
+                layers.append(nn.Dropout(p))
+                in_features = out_features
+            layers.append(nn.Linear(out_features, num_classes))
+
+            # Additional layers for feature extraction
+            self.additional_layers = nn.Sequential(*layers)
+
+        def forward(self, x):
+            x = self.base_model(x)
+            x = self.additional_layers(x)
+            return x
+    
+
+    model = Extended_Model(trial, num_feat, pretrained_model, num_classes)
+# generate the optimizer
+    optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'RMSprop', 'SGD'])
+    lr = trial.suggest_float('lr', 1e-5, 1e-1, log=True)
+    optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
+    scheduler_name = trial.suggest_categorical("scheduler", ["StepLR", "ExponentialLR", "CosineAnnealingLR"])
+    if scheduler_name == "StepLR":
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_float("gamma", 0.1, 0.9))
+    elif scheduler_name == "ExponentialLR":
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=trial.suggest_float("gamma", 0.1, 0.9))
+    elif scheduler_name == "CosineAnnealingLR":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=trial.suggest_int("T_max", 5, 30))
+
+
+    yn_class_weights = trial.suggest_categorical('yn_class_weights', [True, False])
+    if yn_class_weights:     # if we want to apply class weights
+        if model_name == 'CP': # we want CP first if possible, since that is our driver
+            class_weights = apply_class_weights_GE(train_np, L1000_training, dict_moa, device)
+        elif model_name == 'GE': # otherwise GE
+            class_weights = apply_class_weights_CP(train_np, L1000_training, dict_moa, device)
+        class_weights = apply_class_weights_GE(train_np, L1000_training, dict_moa, device)
+    else:
+        class_weights = None
+    loss_fn_str = trial.suggest_categorical('loss_fn', ['cross', 'focal', 'BCE'])
+    loss_fn_train_str = trial.suggest_categorical('loss_train_fn', ['false','ols'])
+    loss_fn_train, loss_fn = different_loss_functions(
+                                                      loss_fn_str= loss_fn_str,
+                                                      loss_fn_train_str = loss_fn_train_str,
+                                                      class_weights = class_weights)
+
+    
+    if loss_fn_train_str == 'ols':
+        from ols import OnlineLabelSmoothing
+        loss_fn_train = OnlineLabelSmoothing(alpha = trial.suggest_float('alpha', 0.1, 0.9),
+                                          n_classes=num_classes, 
+                                          smoothing = trial.suggest_float('smoothing', 0.001, 0.3))
+        
+
+    max_epochs = 150
+
+    
+#------------------------------   Calling functions --------------------------- #
+    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, val_f1_score_per_epoch, num_epochs = adapt_training_loop(n_epochs = max_epochs,
+                optimizer = optimizer,
+                model = model,
+                loss_fn = loss_fn,
+                loss_fn_train = loss_fn_train,
+                loss_fn_str = loss_fn_str,
+                train_loader=training_generator, 
+                valid_loader=validation_generator,
+                my_lr_scheduler = scheduler,
+                model_name=model_name,
+                device = device,
+                val_str = 'fe',
+                early_patience = 0)
+
+
+    #lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
+    return val_f1_score_per_epoch[-1]
+
+def optuna_combinations_feature_tuning(trial, num_classes, training_generator, validation_generator, model, model_name, device):
+    # generate the model
+# generate the optimizer
+    optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'RMSprop', 'SGD'])
+    lr = trial.suggest_float('lr', 1e-5, 1e-1, log=True)
+    optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
+    scheduler_name = trial.suggest_categorical("scheduler", ["StepLR", "ExponentialLR", "CosineAnnealingLR"])
+    if scheduler_name == "StepLR":
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_float("gamma", 0.1, 0.9))
+    elif scheduler_name == "ExponentialLR":
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=trial.suggest_float("gamma", 0.1, 0.9))
+    elif scheduler_name == "CosineAnnealingLR":
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=trial.suggest_int("T_max", 5, 30))
+
+
+    yn_class_weights = trial.suggest_categorical('yn_class_weights', [True, False])
+    if yn_class_weights:     # if we want to apply class weights
+        class_weights = apply_class_weights_GE(train_np, L1000_training, dict_moa, device)
+    else:
+        class_weights = None
+    loss_fn_str = trial.suggest_categorical('loss_fn', ['cross', 'focal', 'BCE'])
+    loss_fn_train_str = trial.suggest_categorical('loss_train_fn', ['false','ols'])
+    loss_fn_train, loss_fn = different_loss_functions(
+                                                      loss_fn_str= loss_fn_str,
+                                                      loss_fn_train_str = loss_fn_train_str,
+                                                      class_weights = class_weights)
+
+    
+    if loss_fn_train_str == 'ols':
+        from ols import OnlineLabelSmoothing
+        loss_fn_train = OnlineLabelSmoothing(alpha = trial.suggest_float('alpha', 0.1, 0.9),
+                                          n_classes=num_classes, 
+                                          smoothing = trial.suggest_float('smoothing', 0.001, 0.3))
+        
+
+    max_epochs = 150
+
+    
+#------------------------------   Calling functions --------------------------- #
+    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, val_f1_score_per_epoch, num_epochs = adapt_training_loop(n_epochs = max_epochs,
+                optimizer = optimizer,
+                model = model,
+                loss_fn = loss_fn,
+                loss_fn_train = loss_fn_train,
+                loss_fn_str = loss_fn_str,
+                train_loader=training_generator, 
+                valid_loader=validation_generator,
+                my_lr_scheduler = scheduler,
+                model_name=model_name,
+                device = device,
+                val_str = 'f1',
+                early_patience = 15)
+
+
+    #lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
+    return max(val_f1_score_per_epoch)
+
+def CP_driving_code(file_name, fold_int):
+    # clue row metadata with rows representing transcription levels of specific genes
+    clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
+
+
+
+    training_set, validation_set, test_set =  accessing_all_folds_csv(file_name, fold_int)
+    hq, dose = set_bool_hqdose(file_name)
+    L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
+
+    checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
+    variance_thresh = 0
+    normalize_c = 'False'
+
+    npy_exists, save_npy = set_bool_npy(variance_thresh, normalize_c)
+
+    df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_features, df_test_labels, dict_moa = pre_processing(L1000_training, L1000_validation, L1000_test, 
+            clue_gene, 
+            npy_exists = npy_exists,
+            use_variance_threshold = variance_thresh, 
+            normalize = normalize_c, 
+            save_npy = save_npy,
+            data_subset = file_name)
+    checking_veracity_of_data(file_name, df_train_labels, df_val_labels, df_test_labels)
+
+
+    # ----------------------------------------- Prepping Chemical Structure Data ---------------------------------------#
+    # download dictionary which associates moa with a tensor
+
+    dict_moa = dict_splitting_into_tensor(training_set)
+    assert set(training_set.moa.unique()) == set(validation_set.moa.unique()) == set(test_set.moa.unique()), "Training, validation and test sets have different labels"
+    assert df_train_features.shape[0] == df_train_features.dropna().shape[0], "NaNs in training set"
+
+
+    num_classes = len(training_set.moa.unique())
+
+
+    # split data into labels and inputs
+    training_df, train_labels = splitting(training_set)
+    validation_df, validation_labels = splitting(validation_set)
+    test_df, test_labels = splitting(test_set)
+
+
+
+    # make sure that the number of labels is equal to the number of inputs
+    inputs_equalto_labels_check(training_df, train_labels, validation_df, validation_labels, test_df, test_labels)
+
+
+
+    num_classes = len(np.unique(df_train_labels["moa"]))
+    
+    # extract compound IDs
+    test_data_lst= list(test_set["Compound_ID"].unique())
+    train_data_lst= list(training_set["Compound_ID"].unique())
+    valid_data_lst= list(validation_set["Compound_ID"].unique())
+
+    cmpd_id_overlap_check(train_data_lst, valid_data_lst, test_data_lst)
+
+    # downloading paths to all of the images
+    paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/paths_channels_treated_v1v2.csv')
+
+    # 
+    training_df = paths_v1v2[paths_v1v2["compound"].isin(train_data_lst)].reset_index(drop=True)
+    validation_df = paths_v1v2[paths_v1v2["compound"].isin(valid_data_lst)].reset_index(drop=True)
+    test_df = paths_v1v2[paths_v1v2["compound"].isin(test_data_lst)].reset_index(drop=True)
+
+
+
+    # importing data normalization pandas dataframe
+    pd_image_norm = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_to_channels_creation/dmso_stats_v1v2.csv')
+    return training_df, validation_df, test_df, paths_v1v2, df_train_labels, dict_moa, pd_image_norm, df_val_labels, df_test_labels, num_classes, training_set, validation_set, test_set
+
+def GE_driving_code(file_name, fold_int):
+    # clue row metadata with rows representing transcription levels of specific genes
+    clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
+
+
+    training_set, validation_set, test_set = accessing_all_folds_csv(file_name, fold_int)
+    #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
+    hq, dose = set_bool_hqdose(file_name)
+    L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
+
+    checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
+    # Creating a  dictionary of the one hot encoded labels
+    dict_moa = dict_splitting_into_tensor(training_set)
+
+
+    # checking that no overlap in sig_id exists between training, test, validation sets
+    check_overlap_sigid(L1000_training, L1000_validation, L1000_test)
+    # shuffling training and validation data
+    L1000_training = L1000_training.sample(frac = 1, random_state = 1)
+    L1000_validation = L1000_validation.sample(frac = 1, random_state = 1)
+    L1000_test = L1000_test.sample(frac = 1, random_state = 1)
+
+    print("extracting training transcriptomes")
+    profiles_gc_too_train = tprofiles_gc_too_func(L1000_training, clue_gene)
+    train_np = np_array_transform(profiles_gc_too_train)
+    print("extracting validation transcriptomes")
+    profiles_gc_too_valid = tprofiles_gc_too_func(L1000_validation, clue_gene)
+    valid_np = np_array_transform(profiles_gc_too_valid)
+    print("extracting test transcriptomes")
+    profiles_gc_too_test = tprofiles_gc_too_func(L1000_test, clue_gene)
+    test_np = np_array_transform(profiles_gc_too_test)
+
+
+    num_classes = len(L1000_training["moa"].unique())
+
+
+    dict_cell_lines = extract_all_cell_lines(pd.concat([L1000_training, L1000_validation, L1000_test]))
+    num_cell_lines = len(dict_cell_lines)
+    return train_np, valid_np, test_np, num_classes, dict_cell_lines, num_cell_lines, dict_moa, training_set, validation_set, test_set, L1000_training, L1000_validation, L1000_test
+
 
 '''
 def choose_cell_lines_to_include(df_set, clue_sig_in_SPECS, cell_lines):
@@ -2056,8 +2372,8 @@ def choose_cell_lines_to_include(df_set, clue_sig_in_SPECS, cell_lines):
     profile_ids = clue_sig_in_SPECS[["Compound ID", "sig_id", "moa", 'cell_iname']][clue_sig_in_SPECS["Compound ID"].isin(df_set["Compound_ID"].unique())]
     return profile_ids[profile_ids["cell_iname"].isin(cell_lines)]
 '''
-
 '''
+
 def accessing_correct_fold_csv_files(file):
     
   #  This function returns the correct, fold-0 train, valid and test split data csvs given a file name
@@ -2120,7 +2436,6 @@ def accessing_correct_fold_csv_files(file):
     training_set, validation_set, test_set =  load_train_valid_data(dir_path, train_filename, val_filename, test_filename)
     return training_set, validation_set, test_set
 '''
-
 
 # ---------------------------------------------- data loading ----------------------------------------------#
 # ----------------------------------------------------------------------------------------------------------#

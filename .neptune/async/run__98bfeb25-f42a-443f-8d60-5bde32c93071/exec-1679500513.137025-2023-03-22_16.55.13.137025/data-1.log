@@ -1,0 +1,28 @@
+{"obj": {"type": "AssignString", "path": ["sys", "name"], "value": "Untitled"}, "version": 1}
+{"obj": {"type": "AssignString", "path": ["sys", "description"], "value": ""}, "version": 2}
+{"obj": {"type": "AssignString", "path": ["sys", "hostname"], "value": "erikep-notebook-gpu-5c4b88cbcf-6c8xg"}, "version": 3}
+{"obj": {"type": "AssignBool", "path": ["sys", "failed"], "value": false}, "version": 4}
+{"obj": {"type": "ClearStringLog", "path": ["monitoring", "stdout"]}, "version": 5}
+{"obj": {"type": "ClearStringLog", "path": ["monitoring", "stderr"]}, "version": 6}
+{"obj": {"type": "AssignString", "path": ["source_code", "entrypoint"], "value": "Erik_PCA_UMAP.py"}, "version": 7}
+{"obj": {"type": "UploadFileSet", "path": ["source_code", "files"], "file_globs": ["/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/Erik_PCA_UMAP.py"], "reset": "False"}, "version": 8}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "cpu"], "min": 0.0, "max": 100.0, "unit": "%"}, "version": 9}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "cpu"]}, "version": 10}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "memory"], "min": 0.0, "max": 503.7883720397949, "unit": "GB"}, "version": 11}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "memory"]}, "version": 12}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "gpu"], "min": 0.0, "max": 100.0, "unit": "%"}, "version": 13}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "gpu"]}, "version": 14}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "gpu_memory"], "min": 0.0, "max": 10.91650390625, "unit": "GB"}, "version": 15}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "gpu_memory"]}, "version": 16}
+{"obj": {"type": "AssignString", "path": ["parameters", "moa_dictionary"], "value": "{'EGFR inhibitor': array([1., 0., 0., 0., 0., 0., 0., 0., 0., 0.]), 'HDAC inhibitor': array([0., 1., 0., 0., 0., 0., 0., 0., 0., 0.]), 'PARP inhibitor': array([0., 0., 1., 0., 0., 0., 0., 0., 0., 0.]), 'adrenergic receptor agonist': array([0., 0., 0., 1., 0., 0., 0., 0., 0., 0.]), 'adrenergic receptor antagonist': array([0., 0., 0., 0., 1., 0., 0., 0., 0., 0.]), 'cyclooxygenase inhibitor': array([0., 0., 0., 0., 0., 1., 0., 0., 0., 0.]), 'dopamine receptor antagonist': array([0., 0., 0., 0., 0., 0., 1., 0., 0., 0.]), 'histamine receptor antagonist': array([0., 0., 0., 0., 0., 0., 0., 1., 0., 0.]), 'phosphodiesterase inhibitor': array([0., 0., 0., 0., 0., 0., 0., 0., 1., 0.]), 'topoisomerase inhibitor': array([0., 0., 0., 0., 0., 0., 0., 0., 0., 1.])}"}, "version": 17}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "cpu"], "values": [{"value": 8.9, "step": null, "ts": 1679500513.2986019}]}, "version": 18}
+{"obj": {"type": "AssignString", "path": ["parameters", "train_filename"], "value": "erik10"}, "version": 19}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "memory"], "values": [{"value": 100.67329406738281, "step": null, "ts": 1679500513.2986019}]}, "version": 20}
+{"obj": {"type": "AssignInt", "path": ["parameters", "variance_threshold"], "value": 0}, "version": 21}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "gpu_memory"], "values": [{"value": 1.7247314453125, "step": null, "ts": 1679500513.2986019}]}, "version": 22}
+{"obj": {"type": "AssignBool", "path": ["parameters", "normalize"], "value": true}, "version": 23}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": "Investigating using PCA", "step": null, "ts": 1679500513.3918846}]}, "version": 24}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": "\n", "step": null, "ts": 1679500513.4169104}]}, "version": 25}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "cpu"], "values": [{"value": 6.1, "step": null, "ts": 1679500523.3901267}]}, "version": 26}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "memory"], "values": [{"value": 100.6638298034668, "step": null, "ts": 1679500523.3901267}]}, "version": 27}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "gpu_memory"], "values": [{"value": 1.7247314453125, "step": null, "ts": 1679500523.3901267}]}, "version": 28}

@@ -43,11 +43,7 @@ import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 
 from Erik_alll_helper_functions import (
-    apply_class_weights_CL, 
-    accessing_correct_fold_csv_files, 
-    create_splits, 
-    choose_device,
-    dict_splitting_into_tensor, 
+     
     extract_tprofile, 
     EarlyStopper, 
     val_vs_train_loss,
@@ -72,13 +68,14 @@ from Erik_alll_helper_functions import (
     splitting
 )
 #---------------------------------- Chemical Model ----------------------------------#
+'''
 modelCS = nn.Sequential(
     nn.Linear(2048, 128),
     nn.ReLU(),
     nn.Dropout(p = 0.7),
     nn.Linear(128,64),
     nn.ReLU(),
-    nn.Linear(64, 10))
+    nn.Linear(64, 10))'''
 
 # ---------------------------------- Image Model ----------------------------------#
 class image_network(nn.Module):
@@ -112,7 +109,7 @@ class CNN_Model(nn.Module):
     1D-CNN Model
     For more info: https://github.com/baosenguo/Kaggle-MoA-2nd-Place-Solution/blob/main/training/1d-cnn-train.ipynb
     """
-    def __init__(self, num_features = None, num_targets = None, hidden_size = None):
+    def __init__(self, num_features = None, num_targets = None, hidden_size = 4096):
         super(CNN_Model, self).__init__()
         cha_1 = 256
         cha_2 = 512

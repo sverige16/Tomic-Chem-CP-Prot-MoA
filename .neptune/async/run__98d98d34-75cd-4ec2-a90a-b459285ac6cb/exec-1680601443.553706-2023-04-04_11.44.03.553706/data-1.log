@@ -1,0 +1,44 @@
+{"obj": {"type": "AssignString", "path": ["sys", "name"], "value": "Untitled"}, "version": 1}
+{"obj": {"type": "AssignString", "path": ["sys", "description"], "value": ""}, "version": 2}
+{"obj": {"type": "AssignString", "path": ["sys", "hostname"], "value": "erikep-notebook-gpu-5c4b88cbcf-6c8xg"}, "version": 3}
+{"obj": {"type": "AssignBool", "path": ["sys", "failed"], "value": false}, "version": 4}
+{"obj": {"type": "ClearStringLog", "path": ["monitoring", "stdout"]}, "version": 5}
+{"obj": {"type": "ClearStringLog", "path": ["monitoring", "stderr"]}, "version": 6}
+{"obj": {"type": "AssignString", "path": ["source_code", "entrypoint"], "value": "IGTD_prediction.py"}, "version": 7}
+{"obj": {"type": "UploadFileSet", "path": ["source_code", "files"], "file_globs": ["/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Erik_Models/IGTD_prediction.py"], "reset": "False"}, "version": 8}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "cpu"], "min": 0.0, "max": 100.0, "unit": "%"}, "version": 9}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "cpu"]}, "version": 10}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "memory"], "min": 0.0, "max": 503.7883720397949, "unit": "GB"}, "version": 11}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "memory"]}, "version": 12}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "gpu"], "min": 0.0, "max": 100.0, "unit": "%"}, "version": 13}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "gpu"]}, "version": 14}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "gpu_memory"], "min": 0.0, "max": 10.91650390625, "unit": "GB"}, "version": 15}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "gpu_memory"]}, "version": 16}
+{"obj": {"type": "AssignString", "path": ["model"], "value": "IGTD"}, "version": 17}
+{"obj": {"type": "AssignString", "path": ["filename"], "value": "erik_hq_8_12"}, "version": 18}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "cpu"], "values": [{"value": 14.8, "step": null, "ts": 1680601443.7136836}]}, "version": 19}
+{"obj": {"type": "AssignString", "path": ["parameters", "normalize"], "value": "pearson"}, "version": 20}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "memory"], "values": [{"value": 84.66493606567383, "step": null, "ts": 1680601443.7136836}]}, "version": 21}
+{"obj": {"type": "AssignBool", "path": ["parameters", "class_weight"], "value": true}, "version": 22}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "gpu_memory"], "values": [{"value": 2.5889892578125, "step": null, "ts": 1680601443.7136836}]}, "version": 23}
+{"obj": {"type": "AssignInt", "path": ["parameters", "variance_threshold"], "value": 0}, "version": 24}
+{"obj": {"type": "AssignString", "path": ["parameters", "loss_function"], "value": "CrossEntropyLoss()"}, "version": 25}
+{"obj": {"type": "AssignFloat", "path": ["metrics", "f1_score"], "value": 0.3105259795366902}, "version": 26}
+{"obj": {"type": "AssignFloat", "path": ["metrics", "accuracy"], "value": 0.854320987654321}, "version": 27}
+{"obj": {"type": "AssignFloat", "path": ["metrics", "loss"], "value": 5.664926454424858}, "version": 28}
+{"obj": {"type": "AssignString", "path": ["metrics", "time"], "value": "41.8 sec"}, "version": 29}
+{"obj": {"type": "AssignInt", "path": ["metrics", "epochs"], "value": 61}, "version": 30}
+{"obj": {"type": "AssignFloat", "path": ["metrics", "test_f1"], "value": 0.31462672117833895}, "version": 31}
+{"obj": {"type": "AssignFloat", "path": ["metrics", "test_accuracy"], "value": 0.5813953488372093}, "version": 32}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": " Confusion Matrix: [[ 45   0   0   0   0   0   2   0   0   0]\n [  2  55   0   0   0   0   0   0   0   1]\n [ 33   6  23   0   0   0   0   0   0  53]\n [ 10   0   0   0   0   0   0   0   0   0]\n [  5   1   0   0   0   0   0   0   0   1]\n [ 14   0   1   0   0   0   0   0   0   0]\n [  6   0   0   0   0   0  15   0   0   1]\n [  7   0   3   0   0   0   1   0   0   0]\n [ 12   0   0   0   0   0   1   0   0   0]\n [ 16   4   0   0   0   0   0   0   0 112]]", "step": null, "ts": 1680601443.8557909}]}, "version": 33}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": "\n", "step": null, "ts": 1680601443.9085877}]}, "version": 34}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "/usr/local/lib/python3.8/dist-packages/sklearn/metrics/_classification.py:1334: UndefinedMetricWarning: Precision and F-score are ill-defined and being set to 0.0 in labels with no predicted samples. Use `zero_division` parameter to control this behavior.\n  _warn_prf(average, modifier, msg_start, len(result))\n", "step": null, "ts": 1680601444.9053698}]}, "version": 35}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "/usr/local/lib/python3.8/dist-packages/sklearn/metrics/_classification.py:1334: UndefinedMetricWarning: Precision and F-score are ill-defined and being set to 0.0 in labels with no predicted samples. Use `zero_division` parameter to control this behavior.\n  _warn_prf(average, modifier, msg_start, len(result))\n", "step": null, "ts": 1680601444.9112415}]}, "version": 36}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "/usr/local/lib/python3.8/dist-packages/sklearn/metrics/_classification.py:1334: UndefinedMetricWarning: Precision and F-score are ill-defined and being set to 0.0 in labels with no predicted samples. Use `zero_division` parameter to control this behavior.\n  _warn_prf(average, modifier, msg_start, len(result))\n", "step": null, "ts": 1680601444.9142945}]}, "version": 37}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": "              precision    recall  f1-score   support\n\n        EGFR       0.30      0.96      0.46        47\n        HDAC       0.83      0.95      0.89        58\n        PARP       0.85      0.20      0.32       115\n        adre       0.00      0.00      0.00        10\n        adre       0.00      0.00      0.00         7\n        cycl       0.00      0.00      0.00        15\n        dopa       0.79      0.68      0.73        22\n        hist       0.00      0.00      0.00        11\n        phos       0.00      0.00      0.00        13\n        topo       0.67      0.85      0.75       132\n\n    accuracy                           0.58       430\n   macro avg       0.34      0.36      0.31       430\nweighted avg       0.62      0.58      0.52       430\n", "step": null, "ts": 1680601444.9154925}]}, "version": 38}
+{"obj": {"type": "UploadFile", "path": ["images", "loss"], "ext": "png", "file_path": "/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images/loss_train_val_IGTD_erik_hq_8_1204_04_2023-11:43:15.png", "tmp_file_name": null, "clean_after_upload": false}, "version": 39}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": "\n", "step": null, "ts": 1680601444.9184}]}, "version": 40}
+{"obj": {"type": "UploadFile", "path": ["images", "accuracy"], "ext": "png", "file_path": "/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images/acc_train_val_IGTD_erik_hq_8_1204_04_2023-11:43:15.png", "tmp_file_name": null, "clean_after_upload": false}, "version": 41}
+{"obj": {"type": "UploadFile", "path": ["files", "classification_info"], "ext": "txt", "file_path": "/home/jovyan/Tomics-CP-Chem-MoA/class_info.txt", "tmp_file_name": null, "clean_after_upload": false}, "version": 42}
+{"obj": {"type": "UploadFile", "path": ["images", "Conf_matrix.png"], "ext": "png", "file_path": null, "tmp_file_name": "images_Conf_matrix.png-1680601444.974409-2023-04-04_11.44.04.974409.png", "clean_after_upload": false}, "version": 43}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": "Shutting down background jobs, please wait a moment...\n", "step": null, "ts": 1680601445.64093}]}, "version": 44}

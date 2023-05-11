@@ -9,16 +9,29 @@
 # Ignore all pickles files
 *.pickles
 *.pickle
+# Ignore all models
+*.pth
+*.pt
+# Ignore all database files
+*.db
 # Ignore specific directories with models
 /home/jovyan/Tomics-CP-Chem-Prot-Moa-3/01_CStructure_Models/saved_models/
 /home/jovyan/Tomics-CP-Chem-Prot-Moa-3/02_CP_Models/saved_models/
 /home/jovyan/Tomics-CP-Chem-Prot-Moa-3/03_Global_CStructure_CP_Models/saved_models/
 /home/jovyan/Tomics-CP-Chem-Prot-Moa-3/04_Tomics_Models/Best_Tomics_Model/saved_models/
+/home/jovyan/Tomics-CP-Chem-MoA/saved_models
 /home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_models
-/home/jovyan/Tomics-CP-Chem-Moa-3/01_CStructure_Models/saved_models/
-/home/jovyan/Tomics-CP-Chem-Moa-3/02_CP_Models/saved_models/
-/home/jovyan/Tomics-CP-Chem-Moa-3/03_Global_CStructure_CP_Models/saved_models/
-/home/jovyan/Tomics-CP-Chem-Moa-3/04_Tomics_Models/Best_Tomics_Model/saved _models/
+/home/jovyan/Tomics-CP-Chem-MoA/01_CStructure_Models/saved_models/
+/home/jovyan/Tomics-CP-Chem-MoA/02_CP_Models/saved_models/
+/home/jovyan/Tomics-CP-Chem-MoA/03_Global_CStructure_CP_Models/saved_models/
+/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved _models/
+/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_models/
+/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_modelsCS_CP_least_loss_model
+/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/saved_modelsCS_DI_least_loss_model
+/home/jovyan/Tomics-CP-Chem-MoA/Compound_structure_based_models/ChemStruc_least_loss_model
+/home/jovyan/Tomics-CP-Chem-MoA/saved_models/
+
+saved_models/
 # Ignore downloaded lincs-profiling complementarity 
 /home/jovyan/Tomics-CP-Chem-Prot-Moa-3/04_Tomics_Models/lincs-profiling-complementarity/
 04_Tomics_Models/lincs-profiling-complementarity/

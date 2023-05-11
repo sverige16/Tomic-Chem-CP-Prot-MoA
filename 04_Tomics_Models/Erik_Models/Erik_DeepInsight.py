@@ -65,8 +65,7 @@ from DeepInsight_Image_Transformer import ImageTransformer
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 from Erik_alll_helper_functions import (
-    apply_class_weights_CL, 
-    accessing_correct_fold_csv_files, 
+    apply_class_weights_CL,  
     create_splits, 
     choose_device,
     dict_splitting_into_tensor, 
@@ -161,7 +160,7 @@ normalize = input("Would you like to normalize the data? (Options: True, False):
 '''  
 
 file_name = "erik10_hq_8_12"
-for fold_int in range(0,5):
+for fold_int in range(0,1):
     print(f'Fold Iteration: {fold_int}')
     training_set, validation_set, test_set = accessing_all_folds_csv(file_name, fold_int)
     hq, dose = set_bool_hqdose(file_name)
@@ -211,21 +210,9 @@ for fold_int in range(0,5):
         perplexity=5,
         n_jobs=-1
     )
-    '''
-    import umap
-    reducer = umap.UMAP(
-        n_components=2,
-        random_state=456
-    )
-    '''
 
 
-    #pixel_size = (10, 10)
-    #pixel_size = (20, 20)
-    #pixel_size = (30, 30)
     pixel_size = (50,50)
-    #pixel_size = (100,100)
-    #pixel_size = (224,224)
     it = ImageTransformer( 
         pixels=pixel_size)
 
@@ -267,7 +254,7 @@ for fold_int in range(0,5):
 
 
 
-    max_epochs = 300
+    max_epochs = 1
             
     
     model = DeepInsight_Model()
