@@ -160,7 +160,7 @@ normalize = input("Would you like to normalize the data? (Options: True, False):
 '''  
 
 file_name = "erik10_hq_8_12"
-for fold_int in range(0,1):
+for fold_int in range(0,5):
     print(f'Fold Iteration: {fold_int}')
     training_set, validation_set, test_set = accessing_all_folds_csv(file_name, fold_int)
     hq, dose = set_bool_hqdose(file_name)

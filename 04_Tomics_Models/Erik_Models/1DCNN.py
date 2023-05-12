@@ -57,7 +57,6 @@ import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 from Erik_alll_helper_functions import (
     apply_class_weights_CL, 
-    accessing_correct_fold_csv_files, 
     create_splits, 
     choose_device,
     dict_splitting_into_tensor, 
@@ -129,7 +128,7 @@ device = choose_device(using_cuda)
 
 
 file_name = "erik10_hq_8_12"
-for fold_int in range(0,5):
+for fold_int in range(4, 5):
     print(f'Fold Iteration: {fold_int}')
     training_set, validation_set, test_set = accessing_all_folds_csv(file_name, fold_int)
     hq, dose = set_bool_hqdose(file_name)

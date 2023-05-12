@@ -19,7 +19,8 @@ import time
 from tabulate import tabulate
 import albumentations as A
 import random
-
+import warnings
+warnings.filterwarnings('ignore')
 # Torch
 import torch
 from torchvision import transforms
@@ -142,6 +143,8 @@ class CNN_Model(nn.Module):
         self.batch_norm_c2_2 = nn.BatchNorm1d(cha_2)
         self.dropout_c2_2 = nn.Dropout(0.3823529290021656)
         self.conv2_2 = nn.utils.weight_norm(nn.Conv1d(cha_2,cha_3, kernel_size = 5, stride = 1, padding=2, bias=True),dim=None)
+        #self.conv2_2 = nn.Conv1d(cha_2,cha_3, kernel_size = 5, stride = 1, padding=2, bias=True)
+        
         self.max_po_c2 = nn.MaxPool1d(kernel_size=4, stride=2, padding=1)
         self.flt = nn.Flatten()
         self.batch_norm3 = nn.BatchNorm1d(cha_po_2)
@@ -162,19 +165,30 @@ class CNN_Model(nn.Module):
         x = self.dropout_c2(x)
         x = F.relu(self.conv2(x))
         x_s = x
-        x = self.batch_norm_c2_1(x)
+        x = self.batch_norm_c2_1(x) 
         x = self.dropout_c2_1(x)
         x = F.relu(self.conv2_1(x))
-        x = self.batch_norm_c2_2(x)
+        x = self.batch_norm_c2_2(x) 
         x = self.dropout_c2_2(x)
         x = F.relu(self.conv2_2(x))
         x =  x * x_s
-        x = self.max_po_c2(x)
-        x = self.flt(x)
-        x = self.batch_norm3(x) 
-        x = self.dropout3(x)
-        x = self.dense3(x)
-        return x
+        # The bottom used in order to bypass incorrect error raising that
+        # should only be a warning
+        try: 
+            x = self.max_po_c2(x)
+            x = self.flt(x)
+            #x = self.batch_norm3(x) 
+            x = self.dropout3(x)
+            x = self.dense3(x)
+            return x
+        except:
+            print("powering through")
+            x = self.max_po_c2(x)
+            x = self.flt(x)
+            #x = self.batch_norm3(x) 
+            x = self.dropout3(x)
+            x = self.dense3(x)
+            return x
 
 
 class SimpleNN_Model(nn.Module):
@@ -403,4 +417,18 @@ class Chemical_Structure_Model(nn.Module):
         x = self.output(x)
     
         
+        return x
+
+class Modified_GE_Model(nn.Module):
+    def __init__(self, original_model):
+        super(Modified_GE_Model, self).__init__()
+        self.SimpleNN = original_model.SimpleNN
+        self.cell_line = original_model.cell_line
+        self.combo = nn.Linear(in_features = 20, out_features= 20)
+    
+    def forward(self, x1in, x2in):
+        x1 = self.SimpleNN(x1in)
+        x2 = self.cell_line(x2in)
+        x = torch.cat((x1, x2), dim = 1)
+        x = self.combo(x)
         return x

@@ -122,7 +122,7 @@ paths_v1v2 = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/paths_
 
 file_name = "erik10_hq_8_12"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
-for fold_int in range(0,3):
+for fold_int in range(3,4):
     print(f'Fold Iteration: {fold_int}')
     training_set, validation_set, test_set = accessing_all_folds_csv(file_name, fold_int)
     hq, dose = set_bool_hqdose(file_name)

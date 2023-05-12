@@ -31,7 +31,8 @@ from torchvision import transforms
 import torchvision.models as models
 import torch.nn as nn
 import neptune.new as neptune
-
+import warnings
+warnings.filterwarnings('ignore')
 
 
 
@@ -103,7 +104,9 @@ from Erik_alll_helper_functions import (
     smiles_to_array,
     GE_driving_code,
     extracting_pretrained_single_models,
-    set_parameter_requires_grad
+    set_parameter_requires_grad,
+    returning_smile_string,
+    debbelcheck_dataset_length
 )
 
 from Helper_Models import (SimpleNN_Model, 
@@ -112,7 +115,8 @@ from Helper_Models import (SimpleNN_Model,
                            Tomics_and_Cell_Line_Model,
                            CNN_Model,
                            image_network,
-                           Chemical_Structure_Model)
+                           Chemical_Structure_Model,
+                           Modified_GE_Model)
 import torch
 import torchvision.transforms as transforms
 import torch.nn as nn
@@ -123,13 +127,16 @@ import warnings
 warnings.simplefilter('error')
 
 class CS_GE_Dataset(torch.utils.data.Dataset):
-    def __init__(self, compound_df, tprofiles_df, split_sets, dict_moa, dict_cell_line):
+    def __init__(self, compound_df, tprofiles_df, split_sets, dict_moa, dict_cell_line, checking_mechanism):
         self.compound_df = compound_df
         self.tprofiles_df = tprofiles_df
         self.split_sets = split_sets
         self.dict_moa = dict_moa
         self.dict_cell_line = dict_cell_line
+        self.check = checking_mechanism
     def __len__(self):
+        check_criteria = self.check
+        assert len(self.paths_df) == dubbelcheck_dataset_length(*check_criteria)
         return len(self.tprofiles_df)
     
     def __getitem__(self,idx):
@@ -143,51 +150,36 @@ class CS_GE_Dataset(torch.utils.data.Dataset):
         CID = CID.iloc[0]
         cell_line_key = cell_line_key.iloc[0]
         t_cell_line = torch.tensor(self.dict_cell_line[cell_line_key])
-        smile_string = self.compound_df["SMILES"][self.compound_df["Compound_ID"]== CID]      # returns smiles by using compound as keys
-        # assert smile_string.shape[0] == 1, "More than one compound found that matches Compound ID"
-        # problem with enantiomers
-        if smile_string.shape[0] > 1:
-            row_num = smile_string.shape[0]
-            selection = int(np.random.randint(0,row_num) - 1)
-            smile_string = smile_string.iloc[selection]
-            #print("We have an enantiomer")
-        if type(smile_string) == pd.Series:
-            smile_string = smile_string.values[0]
-        elif type(smile_string) == str:
-            smile_string = smile_string
-        else:
-            print("We have a problem")
+        smile_string = returning_smile_string(self.compound_df,CID)
         compound_array = smiles_to_array(smile_string)
         if compound_array.shape[0] != 2048:
             raise ValueError("Compound array is not the correct size")
         assert not torch.isnan(compound_array).any(), "NaN value found in compound array"
         label_tensor = torch.from_numpy(self.dict_moa[moa_key])                  # convert label to number
-        t_profile_features = torch.tensor(t_profile[1]) 
-        return compound_array.float(),(torch.squeeze(t_profile_features), t_cell_line.float()), label_tensor.float() # returns 
+        t_profile_features = torch.tensor(t_profile) 
+        return compound_array.float(), t_profile_features, t_cell_line.float(), label_tensor.float() # returns 
         
 class CS_GE_Model(nn.Module):
     def __init__(self, modelCS, modelGE):
         super(CS_GE_Model, self).__init__()
-        self.modelCS = modelCS
+        self.modelCS = torch.nn.Sequential(*list(modelCS.children())[:-1])
         self.modelGE = modelGE
         self.linear_layer1 = nn.Linear(int(103 + 20), 25)
         self.selu = nn.SELU()
         self.Dropout = nn.Dropout(p = 0.3)
         self.linear_layer2 = nn.Linear(25,10)
     
-    def forward(self, x1in, x2in):
+    def forward(self, x1in, x2in, x3in):
         #print(f' compound: {x1.size()}')
         #print(f' image: {x2.size()}')
         if x1in.shape[1] != 2048:
             raise ValueError("The input shape for the compound is not correct")
-        profiles, cell_line = x2in
         x1 = self.modelCS(x1in)
-        x2 = self.modelGE(profiles, cell_line)
+        x2 = self.modelGE(x2in, x3in)
         x  = torch.cat((x1, x2), dim = 1)
         x = self.Dropout(self.selu(self.linear_layer1(x)))
         output = self.linear_layer2(x)
         return output
-
 
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
@@ -250,36 +242,35 @@ modelGE = Tomics_and_Cell_Line_Model(cnn_model, cell_line_model, num_targets = 1
 modelGE.load_state_dict(torch.load(extracting_pretrained_single_models(single_model_str = "GE", fold_num = 0), map_location=torch.device('cpu'))['model_state_dict'])
 modelCS = Chemical_Structure_Model(num_features = 2048, num_targets = 10)
 modelCS.load_state_dict(torch.load(extracting_pretrained_single_models(single_model_str = "CS", fold_num = 0), map_location=torch.device('cpu'))['model_state_dict'])
-
-model = CS_GE_Model(modelCS, modelGE)
+modified_GE_model = Modified_GE_Model(modelGE)
+model = CS_GE_Model(modelCS, modified_GE_model)
     
 
 # -----------------------------------------Prepping Ensemble Model ---------------------#
 
 # Create datasets with relevant data and labels
-training_dataset_CSGE = CS_GE_Dataset(training_set_cmpds, train_np, L1000_training, dict_moa, dict_cell_lines)
-valid_dataset_CSGE = CS_GE_Dataset(validation_set_cmpds, valid_np, L1000_validation, dict_moa, dict_cell_lines)
-test_dataset_CSGE = CS_GE_Dataset(test_set_cmpds, test_np, L1000_test, dict_moa, dict_cell_lines)
+training_dataset_CSGE = CS_GE_Dataset(training_set_cmpds, train_np, L1000_training, dict_moa, dict_cell_lines, ["train" , "GE", fold_num])
+valid_dataset_CSGE = CS_GE_Dataset(validation_set_cmpds, valid_np, L1000_validation, dict_moa, dict_cell_lines, ["valid" , "GE", fold_num])
+test_dataset_CSGE = CS_GE_Dataset(test_set_cmpds, test_np, L1000_test, dict_moa, dict_cell_lines, ["test" , "GE", fold_num])
 
 # create generator that randomly takes indices from the training set
 training_generator = torch.utils.data.DataLoader(training_dataset_CSGE, **params)
 validation_generator = torch.utils.data.DataLoader(valid_dataset_CSGE, **params)
 test_generator = torch.utils.data.DataLoader(test_dataset_CSGE, **params)
 
-# create a model combining both models
 
 
+set_parameter_requires_grad(model, feature_extracting = True, added_layers = 2)
 
-set_parameter_requires_grad(model, feature_extracting = True, added_layers = 1)
-
-learning_rate = 1e-6
+learning_rate = 1e-2
 optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
 # loss_function
 yn_class_weights = True
-#class_weights = apply_class_weights_GE(train_np, L1000_training, dict_moa, device)
+class_weights = apply_class_weights_GE(train_np, L1000_training, dict_moa, device)
 # choosing loss_function 
 loss_fn_str = 'cross'
-loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str)
+loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str, 
+                                                  class_weights=class_weights)
 my_lr_scheduler = 'false'
 num_epochs_fe = 1
 #n_epochs, optimizer, model, loss_fn, loss_fn_str, train_loader, valid_loader, my_lr_scheduler, device, model_name, loss_fn_train = "false")
@@ -297,13 +288,13 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               val_str = 'fe',
               early_patience = 0)
 
-print('Fine Tuning in Progress')
+
 set_parameter_requires_grad(model, feature_extracting = False)
-learning_rate = 0.1e-6
+learning_rate = 1e-6
 optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
 # loss_function
 yn_class_weights = True
-#class_weights = apply_class_weights_GE(train_np, L1000_training, dict_moa, device)
+class_weights = apply_class_weights_GE(train_np, L1000_training, dict_moa, device)
 # choosing loss_function 
 loss_fn_str = 'cross'
 loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str, 
@@ -326,7 +317,7 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               val_str = 'f1',
               early_patience = 10)
 #----------------------------------------- Assessing model on test data -----------------------------------------#
-model_test = CS_CP_Model(modelCP, modelCS)
+model_test = CS_GE_Model(modelCS, modified_GE_model)
 model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + ".pt")['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = adapt_test_loop(model = model, 
                     test_loader = test_generator, 

@@ -69,7 +69,9 @@ from Erik_alll_helper_functions import (
     smiles_to_array,
     extracting_pretrained_single_models,
     accessing_all_folds_csv,
-    CP_driving_code
+    CP_driving_code,
+    returning_smile_string,
+    doublecheck_dataset_length
 )
 from Helper_Models import (image_network, MyRotationTransform, Chemical_Structure_Model)
 from efficientnet_pytorch import EfficientNet 
@@ -137,33 +139,25 @@ class CS_CP_Model(nn.Module):
     
 
 class CS_CP_Dataset(torch.utils.data.Dataset):
-    def __init__(self, compound_df, paths_df,  labels_CID, dict_moa, transform = None, im_norm = None):
+    def __init__(self, compound_df, paths_df,  checking_mechanism, dict_moa, transform = None, im_norm = None):
         self.compound_df = compound_df
         self.paths_df = paths_df
-        self.labels_CID = labels_CID
         self.dict_moa = dict_moa
         self.transform = transform
         self.im_norm = im_norm
+        self.check = checking_mechanism
     
     def __len__(self):
-        return len(self.labels_CID)
+        check_criteria = self.check
+        assert len(self.paths_df) == dubbelcheck_dataset_length(*check_criteria)
+        return len(self.paths_df)
     
     def __getitem__(self,idx):
         '''Retrieving the compound '''
-        CID, label  = self.labels_CID.iloc[idx] 
+        label = self.paths_df["moa"][idx]
+        cmpdID = self.paths_df["compound"][idx]
         image = channel_5_numpy(self.paths_df, idx, self.im_norm)
-        smile_string = self.compound_df["SMILES"][self.compound_df["Compound_ID"]== CID] 
-        if smile_string.shape[0] > 1:
-            row_num = smile_string.shape[0]
-            selection = int(np.random.randint(0,row_num) - 1)
-            smile_string = smile_string.iloc[selection]
-            #print("We have an enantiomer")
-        if type(smile_string) == pd.Series:
-            smile_string = smile_string.values[0]
-        elif type(smile_string) == str:
-            smile_string = smile_string
-        else:
-            print("We have a problem")
+        smile_string = returning_smile_string(self.compound_df, cmpdID)
         compound_array = smiles_to_array(smile_string) 
         label_tensor = torch.from_numpy(self.dict_moa[label])                  # convert label to number
         if self.transform:                         # uses Albumentations image pipeline to return an augmented image
@@ -203,9 +197,9 @@ train_transforms = transforms.Compose([
 
 # --------------------------------- Prepping Dataloaders and Datasets -------------------------------#
 # Create datasets with relevant data and labels
-training_dataset_CSCP = CS_CP_Dataset(training_set, training_df, df_train_labels, dict_moa,transform = train_transforms, im_norm= pd_image_norm)
-valid_dataset_CSCP = CS_CP_Dataset(validation_set, validation_df,  df_val_labels, dict_moa, im_norm= pd_image_norm)
-test_dataset_CSCP = CS_CP_Dataset(test_set, test_df,  df_test_labels, dict_moa, im_norm= pd_image_norm)
+training_dataset_CSCP = CS_CP_Dataset(training_set, training_df, ["train" , "CP", fold_int], dict_moa,transform = train_transforms, im_norm= pd_image_norm)
+valid_dataset_CSCP = CS_CP_Dataset(validation_set, validation_df,  ["valid" , "CP", fold_int], dict_moa, im_norm= pd_image_norm)
+test_dataset_CSCP = CS_CP_Dataset(test_set, test_df,  ["test" , "CP", fold_int], dict_moa, im_norm= pd_image_norm)
 
 # parameters for the dataloader
 batch_size = 12

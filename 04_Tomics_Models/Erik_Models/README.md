@@ -1,33 +1,29 @@
-'$JUPYTER_PATH'                     Erik_DWTM.py                       IGTD_functions.py
- DWTM                               Erik_DWTM_prediction.py            IGTD_prediction.py
- DeepInsight.ipynb                  Erik_DWTM_prediction_optuna.py     IGTD_prediction_optuna.py
- DeepInsight_Image_Transformer.py   Erik_DeepInsight.py                Index_matching_IGTD_DWTM.py
- DeepInsight_optuna.py              Erik_ML_battery.py                 ML_battery_L1000_optuna.py
- E_training_test_split.ipynb        Erik_SimpleNN_L1000.ipynb          README.md
- E_training_test_split.py           Erik_SimpleNN_L1000.py             __pycache__
- Erik_1DCNN.py                      Erik_SimpleNN_L1000_Cell_Line.py   db_txt_results
- Erik_1DCNN_Cell_Line.py            Erik_SimpleNN_L1000_optuna.py
- 
 # Machine Learning
-## ML Battery
+## ML Battery (Gradient Boosting, Bagging, KNN)
+ML_battery_L1000_optuna.py: Optuna model showing hyperparameters that were optimized for ML algorithms
+ML_battery_L1000.py: Optuna optimized ML algorithm.
 # Feed Forward
 ## SimpleNN
 ## 1D CNN
-1DCNN_Cell_Line.py: 
-1DCNN_optuna.py
-1DCNN.py: Optuna optimized DeepInsight Model
+1DCNN_Cell_Line.py: Optuna optimized CNN model + Cell Line
+1DCNN_optuna.py: Optuna model showing hyperparameters that were optimized for CNN model + Cell Line
+1DCNN.py: Optuna optimized CNN model
 ## Deep Insight
-DeepInsight_optuna.py
+DeepInsight_optuna.py: Optuna model showing hyperparameters that were optimized for DeepInsight
 DeepInsight.py: Optuna optimized DeepInsight Model
-DeepInsight_Image_Transformer.py
+DeepInsight_Image_Transformer.py: Script required to transform tabular data to image data.
 ## IGTD
-IGTD.py: 
-IGTD_functions.py
-IGTD_prediction.py: Optuna optimized DeepInsight ModelOptuna optimized DeepInsight Model
-IGTD_prediction_optuna.py
+IGTD.py: The conversion from tabular data to image data.
+IGTD_functions.py: Has all of the functions necessary to to run IGTD scripts
+IGTD_prediction.py: Optuna optimized IGTD model
+IGTD_prediction_optuna.py: Optuna model showing hyperparameters that were optimized for the IGTD model.
 ## DWTM: 
-DWTM.py: Optuna optimized DeepInsight Model
-DWTM_prediction.py
-DWTM_prediction_optuna.py
+DWTM.py: The conversion from tabular data to image data.
+DWTM_prediction.py: Optuna optimized DWTM model
+DWTM_prediction_optuna.py: Optuna model showing hyperparameters that were optimized for the DWTM model.
+## Simple NN
+SimpleNN_L1000.py: Optuna optimized SimpleNN Model
+SimpleNN_L1000_optuna.py: Optuna model showing hyperparameters that were optimized for the SimpleNN_L1000
+SimpleNN_L1000_Cell_Line.py: Optuna optimized SimpleNN Cell Line model
 # Other
 DWTM: directory containing all of the files necessary to run the DWTM algorithm.

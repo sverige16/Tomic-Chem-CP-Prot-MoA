@@ -314,7 +314,7 @@ def splitting(df):
 
 # --------------------------------- Fine Tuning -----------------------------------------#
 #----------------------------------------------------------------------------------------#
-def set_parameter_requires_grad(model, feature_extracting, added_layers):
+def set_parameter_requires_grad(model, feature_extracting, added_layers = 0):
     '''
     Sets the parameters of the model to require gradients or not.
     Input:
@@ -841,7 +841,27 @@ def dubbelchecking_image_normalization(pd_image_norm):
 def apply_albumentations(image_array, transform):
     augmented = transform(image=image_array)
     return augmented['image']
-    
+
+def extracting_Tprofiles_with_cmpdID(tprofiles_df, split_sets, cmpdID, dict_cell_line):
+    '''
+    Extracts transcriptomic profiles with the same compound ID
+    Input:
+        df: file which contains all rows of transcriptomic profiles with compound information (type = csv)
+        CID: compound ID (type = string)
+    Output:
+        df: file which contains all rows of transcriptomic profiles with compound information with the same compound ID (type = csv)
+    '''
+    matching_split_ids = split_sets["sig_id"][split_sets["Compound ID"] == cmpdID]
+    random_single_sig_id = matching_split_ids.sample(n = 1)
+    random_single_sig_id = random_single_sig_id.iloc[0]
+    tprofile_with_sigid  = tprofiles_df[tprofiles_df[tprofiles_df.columns[-1]] == random_single_sig_id]
+    tprofile = tprofile_with_sigid[tprofile_with_sigid.columns[0:-1]]
+    tprofile = tprofile.to_numpy()
+    cell_line_key = split_sets["cell_iname"][split_sets["sig_id"] == random_single_sig_id]
+    cell_line_key = cell_line_key.iloc[0]
+    t_cell_line = torch.tensor(dict_cell_line[cell_line_key])
+    return torch.tensor(tprofile), t_cell_line.float()
+
 def channel_5_numpy_CID(df, CID, pd_image_norm):
     '''
     Puts together all channels from CP imaging into a single 5 x 256 x 256 tensor (c x h x w) from all_data.csv.
@@ -2359,6 +2379,123 @@ def GE_driving_code(file_name, fold_int):
     num_cell_lines = len(dict_cell_lines)
     return train_np, valid_np, test_np, num_classes, dict_cell_lines, num_cell_lines, dict_moa, training_set, validation_set, test_set, L1000_training, L1000_validation, L1000_test
 
+def returning_smile_string(compound_df, CID):
+    '''
+    Necessary to return the smile string a vector and not as a pandas data frame.
+    This is to handle enantiomers that are present, though not many examples exist in the dataset.
+    '''
+    smile_string = compound_df["SMILES"][compound_df["Compound_ID"]== CID] 
+    if smile_string.shape[0] > 1:
+        smile_string= smile_string.sample(n=1, random_state=1)
+        smile_string = smile_string.iloc[0]
+    if type(smile_string) == pd.Series:
+        smile_string = smile_string.values[0]
+    elif type(smile_string) == str:
+        smile_string = smile_string
+    else:
+        print("We have a problem")
+    return smile_string
+
+def dubbelcheck_dataset_length(split, driver, fold_int):
+    """
+    This functions is used to check the length of the dataset for each fold and driver.
+    """
+    if split == "train":
+        if driver == "CP":
+            if fold_int == 0:
+                num_examples = 5337
+            elif fold_int == 1:
+                num_examples = 5454
+            elif fold_int == 2:
+                num_examples = 5400
+            elif fold_int == 3:
+                num_examples = 5499
+            elif fold_int == 4:
+                num_examples = 5499
+            else:
+                ValueError("Fold not recognized")
+            
+        elif driver == "GE":
+            if fold_int == 0:
+                num_examples = 1147
+            elif fold_int == 1:
+                num_examples = 1082
+            elif fold_int == 2:
+                num_examples = 1654
+            elif fold_int == 3:
+                num_examples = 1487
+            elif fold_int == 4:
+                num_examples = 1885
+            else:
+                ValueError("Fold not recognized")
+
+        else:
+            ValueError("Driver not recognized")
+    elif split == "valid":
+        if driver == "CP":
+            if fold_int == 0:
+                num_examples = 2376
+            elif fold_int == 1:
+                num_examples = 2313
+            elif fold_int == 2:
+                num_examples = 2322
+            elif fold_int == 3:
+                num_examples = 2322
+            elif fold_int == 4:
+                num_examples = 2322
+            else:
+                ValueError("Fold not recognized")
+            
+            
+        elif driver == "GE":
+            if fold_int == 0:
+                num_examples = 810
+            elif fold_int == 1:
+                num_examples = 509
+            elif fold_int == 2:
+                num_examples = 328
+            elif fold_int == 3:
+                num_examples = 407
+            elif fold_int == 4:
+                num_examples = 239
+            else:
+                ValueError("Fold not recognized")
+            
+        else:
+            ValueError("Driver not recognized")
+    elif split == "test":
+        if driver == "CP":
+            if fold_int == 0:
+                num_examples = 1998 
+            elif fold_int == 1:
+                num_examples = 1994
+            elif fold_int == 2:
+                num_examples = 1989
+            elif fold_int == 3:
+                num_examples = 1890
+            elif fold_int == 4:
+                num_examples = 1890
+            else:
+                ValueError("Fold not recognized")
+            
+        elif driver == "GE":
+            if fold_int == 0:
+                num_examples = 430
+            elif fold_int == 1:
+                num_examples = 796
+            elif fold_int == 2:
+                num_examples = 405
+            elif fold_int == 3:
+                num_examples = 493
+            elif fold_int == 4:
+                num_examples = 263
+            else:
+                ValueError("Fold not recognized")
+            
+            ValueError("Driver not recognized")
+    else:
+        ValueError("Split not recognized")
+    return num_examples
 
 '''
 def choose_cell_lines_to_include(df_set, clue_sig_in_SPECS, cell_lines):
