@@ -6,16 +6,24 @@ clue_siginfo_beta.txt: Metadata for each signature in the Level 5 matrix (metada
 	in the Level 5 data matrix)
 
 ## notebooks for looking at data
-gene_expression_data.ipynb: looking at which compounds/transcriptomic profiles that exist and if we have enough data 
-	to perform deep learning.
-testing_GCTX_extract.ipynb: testing the various methods to extract specific transcriptomic profiles from GCTX files
-
+Cell-Line_Correlation.ipynb: notebook used to assess correlation of transcriptomic profiles
+	within a single MoA. 
+## python scripts
+PCA_UMAP_Cmpd_ Clustering.py: Performing PCA and UMAP to see if transcriptomic profiles caused by
+	 a compounds cluster near each other within an MoA class
+Cmpds_Tprofiles_Given_CellType_Dosage: Finding the number of compounds per MoA class given
+	 restrictions put on cell type (prefer high correlation) and dosages (uniform dosages better)
+PCA_UMAP_Profile_Clustering.py: Assessing whether we can visualize separation of MoA classes using transcriptomic 
+	profiles by using using dimensionality reduction techniques 
+## subdirectories
+PNG_Cell_Line_Investigations: location where the .png files are placed when created 
+	from Erik_Cell-Line_Correlation.ipynb
 ## links on GCTX, GCT and clue.io data
 
 
 ### Using pandasGEXpress with .gct/x files
 https://github.com/cmap/cmapPy/blob/master/tutorials/cmapPy_pandasGEXpress_tutorial.ipynb
-### Documentation on pandasGEXpress
+### Documefrntation on pandasGEXpress
 https://clue.io/cmapPy/pandasGEXpress.html
 ### CMAPpy GitHub
 https://github.com/cmap/cmapPy

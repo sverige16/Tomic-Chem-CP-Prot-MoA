@@ -1,58 +1,38 @@
-from rdkit import Chem
-from rdkit.Chem import DataStructs, AllChem
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # Import Statements
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split # Functipn to split data into training, validation and test sets
-from sklearn.metrics import classification_report, confusion_matrix
-import pickle
-import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
-import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
-import random       
+import pickle  
 from tqdm import tqdm 
-from tqdm.notebook import tqdm_notebook
-import datetime
-import time
 from tabulate import tabulate
+import seaborn as sns
+import matplotlib.pyplot as plt
+import neptune.new as neptune
+import cv2 
+import re
+import heapq
+
+# rdkit
+from rdkit import Chem
+from rdkit.Chem import DataStructs, AllChem
 
 # Torch
 import torch
-from torchvision import transforms
-import torchvision.models as models
 import torch.nn as nn
-import neptune.new as neptune
 
-import torch.nn.functional as F
-
-
-from sklearn.preprocessing import StandardScaler, QuantileTransformer
-from sklearn.metrics import precision_recall_curve,log_loss,f1_score, accuracy_score
-from sklearn.metrics import average_precision_score,roc_auc_score
+# Sklearn
+from sklearn.preprocessing import QuantileTransformer
+from sklearn.metrics import f1_score, accuracy_score, classification_report, confusion_matrix
 from sklearn.preprocessing import OneHotEncoder
-import os
-import time
-from time import time
-import datetime
-import pandas as pd
-import numpy as np
-#from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
-from skmultilearn.adapt import MLkNN
 from sklearn.feature_selection import VarianceThreshold
 
 # CMAP (extracting relevant transcriptomic profiles)
 from cmapPy.pandasGEXpress.parse import parse
 import cmapPy.pandasGEXpress.subset_gctoo as sg
-import seaborn as sns
-import matplotlib.pyplot as plt
 
-import datetime
-import time
-import math
-import cv2 
-import re
-import heapq
 
 
 # ----------------------------------------- Visualization of Model Results ----------------------------------------------# 
@@ -827,18 +807,16 @@ def image_normalization(image, channel, plate, pd_image_norm):
     im_np =  (image - mean) / std
     return im_np
 
-def dubbelchecking_image_normalization(pd_image_norm):
-    # SPECS1
-    # Used by Tian et al. to normalize the images for his project
-    # SPECS2
-    # Used by me to normalize the images for my project
-    
-    # SPECS3
-    '''
-    For every plate in pandas norm, check if the mean and std are the same for all channels in the imnorm that I am using
-    '''
-    
+
 def apply_albumentations(image_array, transform):
+    '''
+    Applies albumentations to the image
+    Input:
+        image_array: a numpy array of the image
+        transform: a albumentations transform object
+    Output:
+        augmented['image']: a numpy array of the augmented image
+    '''
     augmented = transform(image=image_array)
     return augmented['image']
 
@@ -1431,9 +1409,7 @@ def adapt_training_loop(n_epochs,
                         early_patience = 0, 
                         loss_fn_train = "false",
                         my_lr_scheduler = "false"):
-    '''
-  
-    '''
+
     def best_val_metric(val_str):
         '''
         The initial validation metric number to compare and see if performance has improved
@@ -1494,6 +1470,14 @@ def adapt_training_loop(n_epochs,
             loss.backward()
             #torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
             optimizer.step()
+            if my_lr_scheduler != "false":
+                try:
+                    my_lr_scheduler.step()
+                except:
+                    my_lr_scheduler.step()
+                    print("Optimizer_step was skipped")
+                    #outer_loop_done = True
+                    #break
             # Training Metrics
             loss_train += loss.item()
             train_predicted = torch.argmax(outputs, 1)
@@ -1520,15 +1504,16 @@ def adapt_training_loop(n_epochs,
         val_loss_per_epoch.append(val_loss)
         train_loss_per_epoch.append(loss_train/len(train_loader))
         val_acc_per_epoch.append(val_accuracy)
-        train_acc_per_epoch.append(train_correct/train_total)
+        if train_total == 0:
+            train_acc_per_epoch.append(0)
+        else:
+            train_acc_per_epoch.append(train_correct/train_total)
         val_f1_score_per_epoch.append(val_f1_score)
         if loss_fn_train != "false":
             loss_fn_train.next_epoch()
         if early_patience > 0:
             if early_stopper.early_stop(validation_loss = val_loss):             
                 break
-        if my_lr_scheduler != "false":
-            my_lr_scheduler.step()
     # return lists with loss, accuracy every epoch
     return train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, val_f1_score_per_epoch, epoch
 
@@ -1896,23 +1881,8 @@ def validation_saving(val_str,
         ValueError("No validation metric identified")
     return val_metric
 
-''''
-def best_val_metric(val_str):
-    
-    The initial validation metric number to compare and see if performance has improved
-    Input:
-        val_str: string, fe, f1, or loss
-    Output:
-        val_metric: float, 0 or np.inf depending on the validation metric
-    if val_str == "fe":
-        return 0
-    elif val_str == "f1":
-        return 0
-    elif val_str == "loss":
-        return np.inf
-    else:
-        ValueError("No validation metric identified")
-'''
+
+
 # ---------------------------------- Checking that the data is correct ---------------------------------- #
 
 def cmpd_id_overlap_check(train_data_lst, valid_data_lst, test_data_lst):
@@ -2122,153 +2092,13 @@ def extracting_pretrained_single_models(single_model_str, fold_num):
     else:
         ValueError("fold_num must be between 0 and 4")
 
-def optuna_combinations_feature_extraction(trial, num_feat, num_classes, training_generator, validation_generator, pretrained_model, model_name, device):
-    class Extended_Model(nn.Module):
-        def __init__(self, trial, num_features, pretrained_model, num_classes):
-            super(Extended_Model, self).__init__()
-            self.base_model = pretrained_model
-            self.num_features = num_features
-            self.num_classes = num_classes
-            n_layers = trial.suggest_int('n_layers', 1, 4)
-            layers = []
-            for i in range(n_layers):
-                out_features = trial.suggest_int('n_units_l{}'.format(i), 4, 250)
-                layers.append(nn.Linear(in_features, out_features))
-                layers.append(nn.LeakyReLU())
-                layers.append(nn.BatchNorm1d(out_features))
-                p = trial.suggest_float('dropout_l{}'.format(i), 0.2, 0.5)
-                layers.append(nn.Dropout(p))
-                in_features = out_features
-            layers.append(nn.Linear(out_features, num_classes))
-
-            # Additional layers for feature extraction
-            self.additional_layers = nn.Sequential(*layers)
-
-        def forward(self, x):
-            x = self.base_model(x)
-            x = self.additional_layers(x)
-            return x
-    
-
-    model = Extended_Model(trial, num_feat, pretrained_model, num_classes)
-# generate the optimizer
-    optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'RMSprop', 'SGD'])
-    lr = trial.suggest_float('lr', 1e-5, 1e-1, log=True)
-    optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
-    scheduler_name = trial.suggest_categorical("scheduler", ["StepLR", "ExponentialLR", "CosineAnnealingLR"])
-    if scheduler_name == "StepLR":
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_float("gamma", 0.1, 0.9))
-    elif scheduler_name == "ExponentialLR":
-        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=trial.suggest_float("gamma", 0.1, 0.9))
-    elif scheduler_name == "CosineAnnealingLR":
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=trial.suggest_int("T_max", 5, 30))
-
-
-    yn_class_weights = trial.suggest_categorical('yn_class_weights', [True, False])
-    if yn_class_weights:     # if we want to apply class weights
-        if model_name == 'CP': # we want CP first if possible, since that is our driver
-            class_weights = apply_class_weights_GE(train_np, L1000_training, dict_moa, device)
-        elif model_name == 'GE': # otherwise GE
-            class_weights = apply_class_weights_CP(train_np, L1000_training, dict_moa, device)
-        class_weights = apply_class_weights_GE(train_np, L1000_training, dict_moa, device)
-    else:
-        class_weights = None
-    loss_fn_str = trial.suggest_categorical('loss_fn', ['cross', 'focal', 'BCE'])
-    loss_fn_train_str = trial.suggest_categorical('loss_train_fn', ['false','ols'])
-    loss_fn_train, loss_fn = different_loss_functions(
-                                                      loss_fn_str= loss_fn_str,
-                                                      loss_fn_train_str = loss_fn_train_str,
-                                                      class_weights = class_weights)
-
-    
-    if loss_fn_train_str == 'ols':
-        from ols import OnlineLabelSmoothing
-        loss_fn_train = OnlineLabelSmoothing(alpha = trial.suggest_float('alpha', 0.1, 0.9),
-                                          n_classes=num_classes, 
-                                          smoothing = trial.suggest_float('smoothing', 0.001, 0.3))
-        
-
-    max_epochs = 150
-
-    
-#------------------------------   Calling functions --------------------------- #
-    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, val_f1_score_per_epoch, num_epochs = adapt_training_loop(n_epochs = max_epochs,
-                optimizer = optimizer,
-                model = model,
-                loss_fn = loss_fn,
-                loss_fn_train = loss_fn_train,
-                loss_fn_str = loss_fn_str,
-                train_loader=training_generator, 
-                valid_loader=validation_generator,
-                my_lr_scheduler = scheduler,
-                model_name=model_name,
-                device = device,
-                val_str = 'fe',
-                early_patience = 0)
-
-
-    #lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
-    return val_f1_score_per_epoch[-1]
-
-def optuna_combinations_feature_tuning(trial, num_classes, training_generator, validation_generator, model, model_name, device):
-    # generate the model
-# generate the optimizer
-    optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'RMSprop', 'SGD'])
-    lr = trial.suggest_float('lr', 1e-5, 1e-1, log=True)
-    optimizer = getattr(torch.optim, optimizer_name)(model.parameters(), lr=lr)
-    scheduler_name = trial.suggest_categorical("scheduler", ["StepLR", "ExponentialLR", "CosineAnnealingLR"])
-    if scheduler_name == "StepLR":
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=trial.suggest_int("step_size", 5, 30), gamma=trial.suggest_float("gamma", 0.1, 0.9))
-    elif scheduler_name == "ExponentialLR":
-        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=trial.suggest_float("gamma", 0.1, 0.9))
-    elif scheduler_name == "CosineAnnealingLR":
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=trial.suggest_int("T_max", 5, 30))
-
-
-    yn_class_weights = trial.suggest_categorical('yn_class_weights', [True, False])
-    if yn_class_weights:     # if we want to apply class weights
-        class_weights = apply_class_weights_GE(train_np, L1000_training, dict_moa, device)
-    else:
-        class_weights = None
-    loss_fn_str = trial.suggest_categorical('loss_fn', ['cross', 'focal', 'BCE'])
-    loss_fn_train_str = trial.suggest_categorical('loss_train_fn', ['false','ols'])
-    loss_fn_train, loss_fn = different_loss_functions(
-                                                      loss_fn_str= loss_fn_str,
-                                                      loss_fn_train_str = loss_fn_train_str,
-                                                      class_weights = class_weights)
-
-    
-    if loss_fn_train_str == 'ols':
-        from ols import OnlineLabelSmoothing
-        loss_fn_train = OnlineLabelSmoothing(alpha = trial.suggest_float('alpha', 0.1, 0.9),
-                                          n_classes=num_classes, 
-                                          smoothing = trial.suggest_float('smoothing', 0.001, 0.3))
-        
-
-    max_epochs = 150
-
-    
-#------------------------------   Calling functions --------------------------- #
-    train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch, val_f1_score_per_epoch, num_epochs = adapt_training_loop(n_epochs = max_epochs,
-                optimizer = optimizer,
-                model = model,
-                loss_fn = loss_fn,
-                loss_fn_train = loss_fn_train,
-                loss_fn_str = loss_fn_str,
-                train_loader=training_generator, 
-                valid_loader=validation_generator,
-                my_lr_scheduler = scheduler,
-                model_name=model_name,
-                device = device,
-                val_str = 'f1',
-                early_patience = 15)
-
-
-    #lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
-    return max(val_f1_score_per_epoch)
-
 def CP_driving_code(file_name, fold_int):
-    # clue row metadata with rows representing transcription levels of specific genes
+    '''Driving code for training, validating and testing on CP data
+    Input:
+        file_name: string, name of the file to train, validate and test on
+        fold_int: int, fold number
+
+    '''
     clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
 
 
@@ -2340,6 +2170,12 @@ def CP_driving_code(file_name, fold_int):
     return training_df, validation_df, test_df, paths_v1v2, df_train_labels, dict_moa, pd_image_norm, df_val_labels, df_test_labels, num_classes, training_set, validation_set, test_set
 
 def GE_driving_code(file_name, fold_int):
+    '''
+    Driving code for training, validating and testing on GE data
+    Input:
+        file_name: string, name of file to investigate
+        fold_int: int, fold iteration
+    '''
     # clue row metadata with rows representing transcription levels of specific genes
     clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
 
@@ -2383,6 +2219,11 @@ def returning_smile_string(compound_df, CID):
     '''
     Necessary to return the smile string a vector and not as a pandas data frame.
     This is to handle enantiomers that are present, though not many examples exist in the dataset.
+    Input:
+        compound_df: pandas dataframe, dataframe containing the compound ID and the smile string
+        CID: string, compound ID
+    Output:
+        smile_string: string, smile string of the compound
     '''
     smile_string = compound_df["SMILES"][compound_df["Compound_ID"]== CID] 
     if smile_string.shape[0] > 1:
@@ -2398,7 +2239,13 @@ def returning_smile_string(compound_df, CID):
 
 def dubbelcheck_dataset_length(split, driver, fold_int):
     """
-    This functions is used to check the length of the dataset for each fold and driver.
+        This functions is used to check the length of the dataset for each fold and driver.
+    Input:
+        split: string, either train or valid
+        driver: string, either CP or GE
+        fold_int: int, the fold number
+    Output:
+        num_examples: int, the number of examples in the dataset
     """
     if split == "train":
         if driver == "CP":
@@ -2497,174 +2344,3 @@ def dubbelcheck_dataset_length(split, driver, fold_int):
         ValueError("Split not recognized")
     return num_examples
 
-'''
-def choose_cell_lines_to_include(df_set, clue_sig_in_SPECS, cell_lines):
-    Returns training/validation/test set with only the cell lines specified by the user
-    Input:
-        df_set: a dataframe with the training/validation/test data
-        cell_lines: a dictionary, where the key is the name of the moa and value is a list with the names of cell lines to be included.
-            Default is empty. Ex. "{"cyclooxygenase inhibitor": ["A375", "HA1E"], "adrenergic receptor antagonist" : ["A375", "HA1E"] }"
-    Output:
-        df_set: a dataframe with the training/validation/test data with only the cell lines specified by the user
-    profile_ids = clue_sig_in_SPECS[["Compound ID", "sig_id", "moa", 'cell_iname']][clue_sig_in_SPECS["Compound ID"].isin(df_set["Compound_ID"].unique())]
-    return profile_ids[profile_ids["cell_iname"].isin(cell_lines)]
-'''
-'''
-
-def accessing_correct_fold_csv_files(file):
-    
-  #  This function returns the correct, fold-0 train, valid and test split data csvs given a file name
-   # Input:
-  #      file: the name of the file (type = string)
-   # Output:
-  #      training_set: the training set (type = pandas dataframe)
- #       validation_set: the validation set (type = pandas dataframe)
-  #      test_set: the test set (type = pandas dataframe)
-
- # download csvs with all the data pre split''
-    if file == 'tian10':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
-        train_filename = 'tian10_clue_train_fold_0.csv'
-        val_filename = 'tian10_clue_val_fold_0.csv'
-        test_filename = 'tian10_clue_test_fold_0.csv'
-    elif file == 'tian10_all':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/tian10/'
-        train_filename = 'tian10_all_train_fold_1.csv'
-        val_filename = 'tian10_all_val_fold_1.csv'
-        test_filename = 'tian10_all_test_fold_1.csv'
-    elif file == 'erik10':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_clue_train_fold_0.csv'
-        val_filename = 'erik10_clue_val_fold_0.csv'
-        test_filename = 'erik10_clue_test_fold_0.csv'
-    elif file == 'erik10_all':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_all_train_fold_1.csv'
-        val_filename = 'erik10_all_val_fold_1.csv'
-        test_filename = 'erik10_all_test_fold_1.csv'
-    elif file == 'erik10_hq':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_clue_hq_train_fold_0.csv'
-        val_filename = 'erik10_clue_hq_val_fold_0.csv'
-        test_filename = 'erik10_clue_hq_test_fold_0.csv'
-    elif file == 'erik10_8_12':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_clue_8_12__train_fold_1.csv'
-        val_filename = 'erik10_clue_8_12__val_fold_1.csv'
-        test_filename = 'erik10_clue_8_12__test_fold_1.csv'
-    elif file == 'erik10_hq_8_12':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/erik10/'
-        train_filename = 'erik10_clue_hq_8_12__train_fold_0.csv'
-        val_filename = 'erik10_clue_hq_8_12__val_fold_0.csv'
-        test_filename = 'erik10_clue_hq_8_12__test_fold_0.csv'
-    elif file == 'cyc_adr':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_adr/'
-        train_filename = 'cyc_adr_clue_train_fold_0.csv'
-        val_filename = 'cyc_adr_clue_val_fold_0.csv'
-        test_filename = 'cyc_adr_clue_test_fold_0.csv'
-    elif file == 'cyc_dop':
-        dir_path = '/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/5_fold_data_sets/cyc_dop/'
-        train_filename = 'cyc_dop_clue_train_fold_0.csv'
-        val_filename = 'cyc_dop_clue_val_fold_0.csv'
-        test_filename = 'cyc_dop_clue_test_fold_0.csv'
-    else:
-        raise ValueError('Please enter a valid file name')
-
-    training_set, validation_set, test_set =  load_train_valid_data(dir_path, train_filename, val_filename, test_filename)
-    return training_set, validation_set, test_set
-'''
-
-# ---------------------------------------------- data loading ----------------------------------------------#
-# ----------------------------------------------------------------------------------------------------------#
-'''
-def load_train_valid_data(path, train_data, valid_data, test_data = None):
-    
-    Functions loads the data frames that will be used to train classifier and assess its accuracy in predicting.
-    input:
-        train_data: filename of training csv file
-        valid_data: filename of validation csv file
-        (optional) test_data: filename of test csv file (if test_data is not None
-        path: path to the folder where the data is stored
-    ouput:
-       L1000 training: pandas dataframe with training data
-       L1000 validation: pandas dataframe with validation data
-       (optional) L1000 test: pandas dataframe with test data (if test_data is not None)
-    
-    if test_data:
-        L1000_training = pd.read_csv(path + train_data, delimiter = ",")
-        L1000_validation = pd.read_csv(path + valid_data, delimiter = ",")
-        L1000_test = pd.read_csv(path + test_data, delimiter = ",")
-        return L1000_training, L1000_validation, L1000_test
-    else:
-        L1000_training = pd.read_csv(path + train_data, delimiter = ",")
-        L1000_validation = pd.read_csv(path + valid_data, delimiter = ",")
-    return L1000_training, L1000_validation
-'''
- 
-# ---------------------------------------------- data preprocessing ----------------------------------------------#
-'''
-def normalize_data(trn, val, test = pd.DataFrame()):
-    """
-    Performs quantile normalization on the train, test and validation data. The QuantileTransformer
-    is fitted on the train data, and transformed on test and validation data.
-    
-    Args:
-            trn: train data - pandas dataframe.
-            val: validation data - pandas dataframe.
-            test: test data - pandas dataframe.
-    
-    Returns:
-            trn_norm: normalized train data - pandas dataframe.
-            val_norm: normalized validation - pandas dataframe.
-            test_norm: normalized test data - pandas dataframe.
-    inspired by  https://github.com/broadinstitute/lincs-profiling-complementarity/tree/master/2.MOA-prediction
-    """
-    norm_model = QuantileTransformer(n_quantiles=100,random_state=0, output_distribution="normal")
-    #norm_model = StandardScaler()
-    if test.shape[0] == 0:
-        trn_norm = pd.DataFrame(norm_model.fit_transform(trn),index = trn.index,columns = trn.columns)
-        tst_norm = pd.DataFrame(norm_model.transform(test),index = test.index,columns = test.columns)
-        return trn_norm, tst_norm, str(norm_model) 
-    else:
-        trn_norm = pd.DataFrame(norm_model.fit_transform(trn),index = trn.index,columns = trn.columns)
-        val_norm = pd.DataFrame(norm_model.transform(val),index = val.index,columns = val.columns)
-        test_norm = pd.DataFrame(norm_model.transform(test),index = test.index,columns = test.columns)
-        return trn_norm, val_norm, test_norm, str(norm_model)
-
-def variance_threshold(x_train, x_val, var_threshold, x_test = pd.DataFrame() ):
-    """
-    This function perform feature selection on the data, i.e. removes all low-variance features below the
-    given 'threshold' parameter.
-    
-    Input:
-        x_train: training data - pandas dataframe.
-        x_val: validation data - pandas dataframe.
-        var_threshold: variance threshold - float. (e.g. 0.8). All features with variance below this threshold will be removed.
-        (optional) x_test: test data - pandas dataframe.
-    
-    Output:
-        x_train: training data - pandas dataframe.
-        x_val: validation data - pandas dataframe.
-        (optional) x_test: test data - pandas dataframe.
-
-    inspired by https://github.com/broadinstitute/lincs-profiling-complementarity/tree/master/2.MOA-prediction
-    
-    """
-    var_thresh = VarianceThreshold(threshold = var_threshold) # sets a variance threshold
-    var_thresh.fit(x_train) # learn empirical variances from X
-    if x_test.shape[0] == 0:
-        x_train_var = x_train.loc[:,var_thresh.variances_ > var_threshold] # locate all variance thresholds above 0.8, keep those columns
-        x_val_var = x_val.loc[:,var_thresh.variances_ > var_threshold]
-        if x_train_var.shape[1] < x_train.shape[1]:
-            print("Number of features removed due to Variance Threshold: ", x_train.shape[1] - x_train_var.shape[1])
-        return x_train_var, x_val_var
-    else:
-        x_test_var = x_test.loc[:,var_thresh.variances_ > var_threshold]
-        x_train_var = x_train.loc[:,var_thresh.variances_ > var_threshold] # locate all variance thresholds above 0.8, keep those columns
-        x_val_var = x_val.loc[:,var_thresh.variances_ > var_threshold]
-        if x_train_var.shape[1] < x_train.shape[1]:
-            print("Number of features removed due to Variance Threshold: ", x_train.shape[1] - x_train_var.shape[1])
-
-        return x_train_var, x_val_var, x_test_var
-    
-'''

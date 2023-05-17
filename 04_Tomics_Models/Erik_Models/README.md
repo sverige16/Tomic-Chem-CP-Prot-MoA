@@ -3,7 +3,11 @@
 ML_battery_L1000_optuna.py: Optuna model showing hyperparameters that were optimized for ML algorithms
 ML_battery_L1000.py: Optuna optimized ML algorithm.
 # Feed Forward
-## SimpleNN
+## Simple NN
+SimpleNN_L1000.py: Optuna optimized SimpleNN Model
+SimpleNN_L1000_optuna.py: Optuna model showing hyperparameters that were optimized for the SimpleNN_L1000
+SimpleNN_L1000_Cell_Line.py: Optuna optimized SimpleNN Cell Line model
+## Conversion from Tabular Data to Image Data
 ## 1D CNN
 1DCNN_Cell_Line.py: Optuna optimized CNN model + Cell Line
 1DCNN_optuna.py: Optuna model showing hyperparameters that were optimized for CNN model + Cell Line
@@ -21,9 +25,6 @@ IGTD_prediction_optuna.py: Optuna model showing hyperparameters that were optimi
 DWTM.py: The conversion from tabular data to image data.
 DWTM_prediction.py: Optuna optimized DWTM model
 DWTM_prediction_optuna.py: Optuna model showing hyperparameters that were optimized for the DWTM model.
-## Simple NN
-SimpleNN_L1000.py: Optuna optimized SimpleNN Model
-SimpleNN_L1000_optuna.py: Optuna model showing hyperparameters that were optimized for the SimpleNN_L1000
-SimpleNN_L1000_Cell_Line.py: Optuna optimized SimpleNN Cell Line model
 # Other
 DWTM: directory containing all of the files necessary to run the DWTM algorithm.
+

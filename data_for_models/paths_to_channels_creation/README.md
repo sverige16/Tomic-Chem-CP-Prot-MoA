@@ -3,7 +3,6 @@ Erik_SQL_Paths.ipynb: notebook that shows step for step the building of the func
 combining_paths_channels.ipynb: notebook that combines treated and potentially dmso csvs to do analyses on all sites with images
 Erik_make_dmso_stats.ipynb: Erik python notebook used to find mean and standard deviation for each plate. 
 ## .py files
-make_dmso_stats.py: Phil's python file to create stats for image normalization.
 paths_to_channels.py: the function version of Erik_SQL_paths, taking in a compound csv returning csv with all the 5 channel images. Some problems with column names across specs 1 and 2. Need to adjust.
 ## CSV Files
 specs1k_v2_paths_dmso: has paths to the images for all 5 channels of certain site with only dmso

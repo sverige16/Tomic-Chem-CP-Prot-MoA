@@ -32,13 +32,12 @@ import torchvision.models as models
 import torch.nn as nn
 import neptune.new as neptune
 import sys
-sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 
+sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 from Erik_alll_helper_functions import (
     apply_class_weights_CL, 
     create_splits, 
     choose_device,
-    checking_veracity_of_data, 
     dict_splitting_into_tensor, 
     extract_tprofile, 
     EarlyStopper, 
@@ -60,20 +59,29 @@ from Erik_alll_helper_functions import (
     adapt_training_loop, 
     adapt_validation_loop, 
     adapt_test_loop,
-    channel_5_numpy,
-    splitting,
-    cmpd_id_overlap_check, 
-    inputs_equalto_labels_check,
-    pre_processing,
-    set_parameter_requires_grad,
-    smiles_to_array,
-    extracting_pretrained_single_models,
+    checking_veracity_of_data,
+    check_overlap_sigid,
+    extract_all_cell_lines,
     accessing_all_folds_csv,
+    smiles_to_array,
+    GE_driving_code,
+    extracting_pretrained_single_models,
     CP_driving_code,
-    returning_smile_string,
-    doublecheck_dataset_length
+    set_parameter_requires_grad,
+    extracting_Tprofiles_with_cmpdID,
+    channel_5_numpy
 )
+
+from Helper_Models import (SimpleNN_Model, 
+                           Transcriptomic_Profiles_Cell_Lines, 
+                           Cell_Line_Model,
+                           Tomics_and_Cell_Line_Model,
+                           CNN_Model,
+                           Chemical_Structure_Model,
+                           Modified_GE_Model)
+
 from Helper_Models import (image_network, MyRotationTransform, Chemical_Structure_Model)
+
 from efficientnet_pytorch import EfficientNet 
 
 
@@ -101,6 +109,7 @@ from tqdm.notebook import tqdm_notebook
 import datetime
 import time
 from tabulate import tabulate
+import re
 
 # Torch
 import torch
@@ -108,9 +117,6 @@ from torchvision import transforms
 import torchvision.models as models
 import torch.nn as nn
 import neptune.new as neptune
-import re
-
-
 
 import torch
 import torchvision.transforms as transforms
@@ -118,34 +124,82 @@ import torch.nn as nn
 import torch.optim as optim
 
 from sklearn.metrics import accuracy_score
+import sys
 
-class CS_CP_Model(nn.Module):
-    def __init__(self, modelCP, modelCS):
-        super(CS_CP_Model, self).__init__()
-        self.modelCP = torch.nn.Sequential(*list(modelCP.children())[:-1])
-        self.modelCS = torch.nn.Sequential(*list(modelCS.children())[:-1])
-        self.linear_layer1 = nn.Linear(int(1280 + 103), 128)
-        self.selu = nn.SELU()
-        self.Dropout = nn.Dropout(p = 0.3)
-        self.linear_layer2 = nn.Linear(128,10)
-       
-    def forward(self, x1, x2):
-        x1 = self.modelCP(x1)
-        x2 = self.modelCS(x2)
-        x  = torch.cat((torch.squeeze(x1), x2), dim = 1)
-        x = self.Dropout(self.selu(self.linear_layer1(x)))
-        output = self.linear_layer2(x)
-        return output
+
+sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
+from Erik_alll_helper_functions import (
+    apply_class_weights_CL, 
+    create_splits, 
+    choose_device,
+    dict_splitting_into_tensor, 
+    extract_tprofile, 
+    EarlyStopper, 
+    val_vs_train_loss,
+    val_vs_train_accuracy, 
+    program_elapsed_time, 
+    conf_matrix_and_class_report,
+    tprofiles_gc_too_func, 
+    create_terminal_table, 
+    upload_to_neptune, 
+    different_loss_functions, 
+    Transcriptomic_Profiles_gc_too, 
+    Transcriptomic_Profiles_numpy,
+    set_bool_hqdose, 
+    set_bool_npy, 
+    FocalLoss, 
+    np_array_transform,
+    apply_class_weights_GE, 
+    adapt_training_loop, 
+    adapt_validation_loop, 
+    adapt_test_loop,
+    checking_veracity_of_data,
+    check_overlap_sigid,
+    extract_all_cell_lines,
+    accessing_all_folds_csv,
+    smiles_to_array,
+    GE_driving_code,
+    extracting_pretrained_single_models,
+    CP_driving_code,
+    returning_smile_string,
+    channel_5_numpy,
+    extracting_Tprofiles_with_cmpdID,
+    dubbelcheck_dataset_length
     
+)
+from Helper_Models import (SimpleNN_Model, 
+                           Transcriptomic_Profiles_Cell_Lines, 
+                           Cell_Line_Model,
+                           Tomics_and_Cell_Line_Model,
+                           CNN_Model,
+                           Chemical_Structure_Model,
+                           Modified_GE_Model)
 
-class CS_CP_Dataset(torch.utils.data.Dataset):
-    def __init__(self, compound_df, paths_df,  checking_mechanism, dict_moa, transform = None, im_norm = None):
+from Helper_Models import (image_network, MyRotationTransform, Chemical_Structure_Model)
+from efficientnet_pytorch import EfficientNet 
+
+
+# ----------------------------------------- hyperparameters ---------------------------------------#
+# Hyperparameters
+testing = False # decides if we take a subset of the data
+max_epochs = 1000 # number of epochs we are going to run 
+incl_class_weights = True # weight the classes based on number of compounds
+using_cuda = True # to use available GPUs
+world_size = torch.cuda.device_count()
+model_name = "CP_CS_GE"
+
+class CS_CP_GE_Dataset(torch.utils.data.Dataset):
+    def __init__(self, compound_df, paths_df,  checking_mechanism, dict_moa, tprofiles_df, split_sets, dict_cell_line, transform = None, im_norm = None):
         self.compound_df = compound_df
         self.paths_df = paths_df
         self.dict_moa = dict_moa
         self.transform = transform
         self.im_norm = im_norm
+        self.tprofiles_df = tprofiles_df
+        self.split_sets = split_sets
+        self.dict_cell_line = dict_cell_line
         self.check = checking_mechanism
+        
     
     def __len__(self):
         check_criteria = self.check
@@ -155,52 +209,52 @@ class CS_CP_Dataset(torch.utils.data.Dataset):
     def __getitem__(self,idx):
         '''Retrieving the compound '''
         label = self.paths_df["moa"][idx]
-        cmpdID = self.paths_df["compound"][idx]
-        image = channel_5_numpy(self.paths_df, idx, self.im_norm)
+        cmpdID = self.paths_df["compound"][idx] 
         smile_string = returning_smile_string(self.compound_df, cmpdID)
-        compound_array = smiles_to_array(smile_string) 
+        compound_array = smiles_to_array(smile_string)
+        if compound_array.shape[0] != 2048:
+            raise ValueError("Compound array is not the correct size")
+        assert not torch.isnan(compound_array).any(), "NaN value found in compound array"
+        image = channel_5_numpy(self.paths_df, idx, self.im_norm)
+        t_profile, t_cell_line = extracting_Tprofiles_with_cmpdID(self.tprofiles_df, self.split_sets, cmpdID, self.dict_cell_line)
         label_tensor = torch.from_numpy(self.dict_moa[label])                  # convert label to number
         if self.transform:                         # uses Albumentations image pipeline to return an augmented image
             image = self.transform(image)
-        return image.float(), compound_array.float(), label_tensor.float() # returns 
-
-# ----------------------------------------- hyperparameters ---------------------------------------#
-# Hyperparameters
-testing = False # decides if we take a subset of the data
-max_epochs = 1000 # number of epochs we are going to run 
-incl_class_weights = True # weight the classes based on number of compounds
-using_cuda = True # to use available GPUs
-world_size = torch.cuda.device_count()
+        return compound_array.float(), image.float(), t_profile, t_cell_line, label_tensor.float() # returns 
+    
+     
+# create a model combining both models
+class CS_CP_GE_Model(nn.Module):
+    def __init__(self, modelCS, modelCP, modelGE):
+        super(CS_CP_GE_Model, self).__init__()
+        self.modelCP = torch.nn.Sequential(*list(modelCP.children())[:-1])
+        self.modelGE = modelGE
+        self.modelCS = torch.nn.Sequential(*list(modelCS.children())[:-1])
+        self.linear_layer1 = nn.Linear(int(103 + 20 + 1280), 25)
+        self.selu = nn.SELU()
+        self.Dropout = nn.Dropout(p = 0.3)
+        self.linear_layer2 = nn.Linear(25,10)
+       
+    def forward(self, x1in, x2in, x3in, x4in):
+        #print(f' compound: {x1.size()}')
+        #print(f' image: {x2.size()}')
+        x1 = self.modelCS(x1in)
+        
+        x2 = self.modelCP(x2in)
+        x3 = self.modelGE(x3in, x4in)
+        x  = torch.cat((x1, torch.squeeze(x2), x3), dim = 1)
+        x = self.Dropout(self.selu(self.linear_layer1(x)))
+        output = self.linear_layer2(x)
+        return output
 
 #----------------------------------------- pre-processing -----------------------------------------#
 start = time.time()
 now = datetime.datetime.now()
 now = now.strftime("%d_%m_%Y-%H:%M:%S")
 print("Begin Training")
-model_name = 'CP_CS'
-#---------------------------------------------------------------------------------------------------------------------------------------#---------------------------------------------------------------------------------------------------#
+#---------------------------------------------------------------------------------------------------------------------------------------#
 
-now = datetime.datetime.now()
-now = now.strftime("%d_%m_%Y-%H:%M:%S")
-
-file_name = 'erik10_hq_8_12'
-fold_int = 0
-training_df, validation_df, test_df, paths_v1v2, df_train_labels, dict_moa, pd_image_norm, df_val_labels, df_test_labels, num_classes, training_set, validation_set, test_set = CP_driving_code(file_name, fold_int)
-
-rotation_transform = MyRotationTransform([0,90,180,270])
-
-# on the fly data augmentation for CP Images
-train_transforms = transforms.Compose([
-    transforms.RandomHorizontalFlip(0.3), 
-    rotation_transform,
-    transforms.RandomVerticalFlip(0.3)])
-
-# --------------------------------- Prepping Dataloaders and Datasets -------------------------------#
-# Create datasets with relevant data and labels
-training_dataset_CSCP = CS_CP_Dataset(training_set, training_df, ["train" , "CP", fold_int], dict_moa,transform = train_transforms, im_norm= pd_image_norm)
-valid_dataset_CSCP = CS_CP_Dataset(validation_set, validation_df,  ["valid" , "CP", fold_int], dict_moa, im_norm= pd_image_norm)
-test_dataset_CSCP = CS_CP_Dataset(test_set, test_df,  ["test" , "CP", fold_int], dict_moa, im_norm= pd_image_norm)
-
+# -----------------------------------------Prepping Individual Models ---------------------#
 # parameters for the dataloader
 batch_size = 12
 params = {'batch_size' : batch_size,
@@ -214,32 +268,79 @@ device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('c
 print(f'Training on device {device}. ' )
 
 
-# create generator that randomly takes indices from the training set
-training_generator = torch.utils.data.DataLoader(training_dataset_CSCP, **params)
-validation_generator = torch.utils.data.DataLoader(valid_dataset_CSCP, **params)
-test_generator = torch.utils.data.DataLoader(test_dataset_CSCP, **params)
+
+# -----------------------------------------Prepping Ensemble Model ---------------------#
+
+
+file_name = "erik10_hq_8_12"
+fold_num = 0
+train_np_GE, valid_np_GE, test_np_GE, num_classes, dict_cell_lines, num_cell_lines, dict_moa, training_set_cmpds, validation_set_cmpds, test_set_cmpds, L1000_training_GE, L1000_validation_GE, L1000_test_GE = GE_driving_code(file_name, fold_num)
+
+training_df_CP, validation_df_CP, test_df_CP, paths_v1v2_CP, df_train_labels_CP, dict_moa, pd_image_norm_CP, df_val_labels_CP, df_test_labels_CP, num_classes, cmpd_training_set, cmpd_validation_set, cmpd_test_set = CP_driving_code(file_name, fold_num)
+
+# download csvs with all the data pre split
+
+# -----------------------------------------Prepping Individual Models ---------------------#
+# parameters for the dataloader
+batch_size = 10
+params = {'batch_size' : batch_size,
+         'num_workers' : 3,
+         'shuffle' : True,
+         'prefetch_factor' : 1} 
+
+
+device = (torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu'))
+#device = torch.device('cpu')
+print(f'Training on device {device}. ' )
+
+
 
 # load individual models
 print("Loading Pretrained Models...")
-modelCS = Chemical_Structure_Model(num_features = 2048, num_targets=   num_classes)
-modelCS.load_state_dict(torch.load(extracting_pretrained_single_models(single_model_str = "CS", fold_num = 0), map_location=torch.device('cpu'))['model_state_dict'])
-modelCP = image_network()
-modelCP.load_state_dict(torch.load(extracting_pretrained_single_models(single_model_str = "CP", fold_num = 0), map_location=torch.device('cpu'))['model_state_dict'])
+
+# ---------------------------------------- Prepping Cell Painting Dataset ---------------------#
+rotation_transform = MyRotationTransform([0,90,180,270])
+
+# on the fly data augmentation for CP Images
+train_transforms = transforms.Compose([
+    transforms.RandomHorizontalFlip(0.3), 
+    rotation_transform,
+    transforms.RandomVerticalFlip(0.3)])
+
+# --------------------------------- Prepping Dataloaders and Datasets -------------------------------#
+# Create datasets with relevant data and labels
+training_dataset_CP_GE = CS_CP_GE_Dataset(cmpd_training_set, training_df_CP, ["train" , "CP", fold_num], dict_moa, train_np_GE, L1000_training_GE, dict_cell_lines, transform = train_transforms, im_norm= pd_image_norm_CP)
+valid_dataset_CP_GE = CS_CP_GE_Dataset(cmpd_validation_set, validation_df_CP, ["valid" , "CP", fold_num], dict_moa, valid_np_GE, L1000_validation_GE, dict_cell_lines, im_norm= pd_image_norm_CP)
+test_dataset_CP_GE = CS_CP_GE_Dataset(cmpd_test_set, test_df_CP, ["test" , "CP", fold_num], dict_moa, test_np_GE, L1000_test_GE, dict_cell_lines, im_norm= pd_image_norm_CP)
+
+# create generator that randomly takes indices from the training set
+training_generator = torch.utils.data.DataLoader(training_dataset_CP_GE, **params)
+validation_generator = torch.utils.data.DataLoader(valid_dataset_CP_GE, **params)
+test_generator = torch.utils.data.DataLoader(test_dataset_CP_GE, **params)
 
 # create a model combining both models
-model = CS_CP_Model(modelCP, modelCS)
+cell_line_model = Cell_Line_Model(num_features = num_cell_lines, num_targets = 5).to(device)
+cnn_model = CNN_Model(num_features = 978, num_targets = 15, hidden_size= 4096).to(device)
+modelGE = Tomics_and_Cell_Line_Model(cnn_model, cell_line_model, num_targets = 10)
+modelGE.load_state_dict(torch.load(extracting_pretrained_single_models(single_model_str = "GE", fold_num = 0), map_location=torch.device('cpu'))['model_state_dict'])
+modelCP = image_network()
+modelCP.load_state_dict(torch.load(extracting_pretrained_single_models(single_model_str = "CP", fold_num = 0), map_location=torch.device('cpu'))['model_state_dict'])
+modelCS = Chemical_Structure_Model(num_features = 2048, num_targets = 10)
+modelCS.load_state_dict(torch.load(extracting_pretrained_single_models(single_model_str = "CS", fold_num = 0), map_location=torch.device('cpu'))['model_state_dict'])
 
-# --------------------------------- Training, Test, Validation, Loops --------------------------------#
+modified_GE_model = Modified_GE_Model(modelGE)
+model = CS_CP_GE_Model(modelCS, modelCP, modified_GE_model)
+
 
 
 
 set_parameter_requires_grad(model, feature_extracting = True, added_layers = 1)
 
-learning_rate = 1e-6
+learning_rate = 0.1
 optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
 # loss_function
 yn_class_weights = True
-class_weights = apply_class_weights_CL(df_train_labels, dict_moa, device)
+class_weights = apply_class_weights_CL(df_train_labels_CP, dict_moa, device)
 # choosing loss_function 
 loss_fn_str = 'cross'
 loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str, 
@@ -256,18 +357,18 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               train_loader=training_generator, 
               valid_loader=validation_generator,
               my_lr_scheduler = my_lr_scheduler,
-              model_name=model_name,
+              model_name= model_name,
               device = device,
               val_str = 'fe',
               early_patience = 0)
 
 print('Fine Tuning in Progress')
 set_parameter_requires_grad(model, feature_extracting = False)
-learning_rate = 0.1e-6
+learning_rate = 1e-5
 optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
 # loss_function
 yn_class_weights = True
-class_weights = apply_class_weights_CL(df_train_labels, dict_moa, device)
+class_weights = apply_class_weights_CL(df_train_labels_CP, dict_moa, device)
 # choosing loss_function 
 loss_fn_str = 'cross'
 loss_fn_train, loss_fn = different_loss_functions(loss_fn_str= loss_fn_str, 
@@ -290,7 +391,7 @@ train_loss_per_epoch, train_acc_per_epoch, val_loss_per_epoch, val_acc_per_epoch
               val_str = 'f1',
               early_patience = 10)
 #----------------------------------------- Assessing model on test data -----------------------------------------#
-model_test = CS_CP_Model(modelCP, modelCS)
+model_test = CP_GE_Model(modelCP, modelGE)
 model_test.load_state_dict(torch.load('/home/jovyan/Tomics-CP-Chem-MoA/saved_models/' + model_name + ".pt")['model_state_dict'])
 correct, total, avg_test_loss, all_predictions, all_labels = adapt_test_loop(model = model, 
                     test_loader = test_generator, 

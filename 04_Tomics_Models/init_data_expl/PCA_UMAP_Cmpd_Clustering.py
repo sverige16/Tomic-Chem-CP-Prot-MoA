@@ -93,7 +93,6 @@ def cmpd_clustering(df_train_features, df_train_labels, moa_subset):
     pca_comp = plt.figure()
     plt.bar([i for i in range(0,10)], pca_ten.explained_variance_ratio_)
     plt.title("Explained Variance Ratio of PCA Components")
-    run["images/pca_compoenents"].upload(pca_comp)
 
     pca = PCA(n_components=2)
     principalComponents = pca.fit_transform(df_singleMoA_train_features)
@@ -104,7 +103,7 @@ def cmpd_clustering(df_train_features, df_train_labels, moa_subset):
                      title=f'Principal Component Analysis of {moa_subset} Dataset',
                      labels={
                          'PC1': 'Principal Component - 1',
-                         'PC2': 'Principal Component - 2}'
+                         'PC2': 'Principal Component - 2'
                      },
                      color_discrete_sequence=px.colors.qualitative.Plotly)
     fig.update_traces(marker=dict(size=12,
@@ -211,4 +210,4 @@ df_train_features, df_val_features, df_train_labels, df_val_labels, df_test_feat
         save_npy = save_npy,
         data_subset = file_name)
 checking_veracity_of_data(file_name, df_train_labels, df_val_labels, df_test_labels)
-cmpd_clustering(df_train_features, df_train_labels, "cyclooxygenase inhibitor")
+cmpd_clustering(df_train_features, df_train_labels, "HDAC inhibitor")

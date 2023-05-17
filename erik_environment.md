@@ -12,8 +12,12 @@ pip install statsmodels
 pip install optuna
 
 # importing algorithms
- 
+
+### tabnet
 pip install pytorch-tabnet-4.0
+### DWTM
 git clone https://github.com/AnonymousCIKM1/DWTM.git
+### online label smoothing
 pip install -U git+https://github.com/ankandrew/online-label-smoothing-pt.git
+### DeepInishgt
 python3 -m pip -q install git+https://github.com/alok-ai-lab/pyDeepInsight.git#egg=pyDeepInsight

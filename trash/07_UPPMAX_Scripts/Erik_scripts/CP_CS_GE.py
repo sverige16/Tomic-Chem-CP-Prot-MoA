@@ -208,7 +208,8 @@ class CS_CP_GE_Dataset(torch.utils.data.Dataset):
     
     def __getitem__(self,idx):
         '''Retrieving the compound '''
-        cmpdID, label  = self.labels_CID.iloc[idx] 
+        label = self.paths_df["moa"][idx]
+        cmpdID = self.paths_df["compound"][idx] 
         smile_string = returning_smile_string(self.compound_df, cmpdID)
         compound_array = smiles_to_array(smile_string)
         if compound_array.shape[0] != 2048:
