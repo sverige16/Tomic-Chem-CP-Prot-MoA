@@ -1,5 +1,5 @@
-<mxfile host="app.diagrams.net" modified="2023-05-29T09:58:06.120Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0" etag="4_RnBisH_f358yLUOih0" version="21.3.3" type="github" pages="2">
-  <diagram name="Page-1" id="tE6ixngOt_Q8rVskvVIQ">
+<mxfile host="app.diagrams.net" modified="2023-05-29T11:49:56.910Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0" etag="S6GGUFTe_gn89MebvumT" version="21.3.3" type="github" pages="3">
+  <diagram name="End-to-End_Soft-Voting" id="tE6ixngOt_Q8rVskvVIQ">
     <mxGraphModel dx="2918" dy="862" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
       <root>
         <mxCell id="0" />
@@ -1128,7 +1128,7 @@
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram id="XD0EaPkWIll8M-co6O5r" name="Page-2">
+  <diagram id="XD0EaPkWIll8M-co6O5r" name="End-to-End">
     <mxGraphModel dx="2068" dy="862" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
       <root>
         <mxCell id="0" />
@@ -2070,6 +2070,14 @@
         <mxCell id="_mERlDcobbBcIICisRQv-301" style="edgeStyle=none;shape=connector;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;exitPerimeter=0;labelBackgroundColor=default;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=11;fontColor=default;endArrow=none;endFill=0;fillColor=#dae8fc;" edge="1" parent="1" source="_mERlDcobbBcIICisRQv-294" target="_mERlDcobbBcIICisRQv-294">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="xKsOX2xH02NV4E4enP-P" name="Data-Pairing">
+    <mxGraphModel dx="2068" dy="862" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
       </root>
     </mxGraphModel>
   </diagram>
