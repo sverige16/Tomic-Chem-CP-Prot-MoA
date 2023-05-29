@@ -1,4 +1,4 @@
-<mxfile host="app.diagrams.net" modified="2023-05-29T21:07:32.931Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0" etag="rSTBekUItgAvVWAsFrJG" version="21.3.3" type="github" pages="7">
+<mxfile host="app.diagrams.net" modified="2023-05-29T21:08:23.994Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0" etag="6wZmtuUYCbd1_USVuXjm" version="21.3.3" type="github" pages="7">
   <diagram name="End-to-End_Soft-Voting" id="tE6ixngOt_Q8rVskvVIQ">
     <mxGraphModel dx="2918" dy="862" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
       <root>
@@ -2544,8 +2544,8 @@
         <mxCell id="y1BBaIeTOBq48ELVEtC0-41" style="edgeStyle=orthogonalEdgeStyle;shape=connector;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;labelBackgroundColor=default;strokeColor=#000000;strokeWidth=2;fontFamily=Helvetica;fontSize=11;fontColor=default;startArrow=classic;startFill=1;endArrow=none;endFill=0;fillColor=#dae8fc;" edge="1" parent="1" source="y1BBaIeTOBq48ELVEtC0-36" target="y1BBaIeTOBq48ELVEtC0-25">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="y1BBaIeTOBq48ELVEtC0-36" value="Pre-Performance Testing" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Helvetica;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
-          <mxGeometry x="330" y="460" width="120" height="60" as="geometry" />
+        <mxCell id="y1BBaIeTOBq48ELVEtC0-36" value="Three Best Performing Algorithms Chosen" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Helvetica;fontSize=11;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="311" y="460" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="y1BBaIeTOBq48ELVEtC0-54" style="edgeStyle=orthogonalEdgeStyle;shape=connector;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;labelBackgroundColor=default;strokeColor=#000000;strokeWidth=2;fontFamily=Helvetica;fontSize=11;fontColor=default;startArrow=classic;startFill=1;endArrow=none;endFill=0;fillColor=#dae8fc;" edge="1" parent="1" source="y1BBaIeTOBq48ELVEtC0-42" target="y1BBaIeTOBq48ELVEtC0-36">
           <mxGeometry relative="1" as="geometry" />
