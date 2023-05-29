@@ -1,4 +1,4 @@
-<mxfile host="app.diagrams.net" modified="2023-05-29T19:51:32.580Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0" etag="IG3TGk8fZQ03j1xHGvQr" version="21.3.3" type="github" pages="6">
+<mxfile host="app.diagrams.net" modified="2023-05-29T19:52:11.373Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0" etag="_49ZteOrge-aRHtUVaee" version="21.3.3" type="github" pages="6">
   <diagram name="End-to-End_Soft-Voting" id="tE6ixngOt_Q8rVskvVIQ">
     <mxGraphModel dx="2918" dy="862" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
       <root>
@@ -2217,7 +2217,7 @@
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram id="K0GsUFdIcHZUGotewF-S" name="Page-6">
+  <diagram id="K0GsUFdIcHZUGotewF-S" name="AutoEncoder">
     <mxGraphModel dx="104" dy="557" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
       <root>
         <mxCell id="0" />
