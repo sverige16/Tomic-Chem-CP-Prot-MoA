@@ -1,4 +1,4 @@
-<mxfile host="app.diagrams.net" modified="2023-05-29T21:08:23.994Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0" etag="6wZmtuUYCbd1_USVuXjm" version="21.3.3" type="github" pages="7">
+<mxfile host="app.diagrams.net" modified="2023-05-30T09:44:08.466Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0" etag="EMoGVxw-1BcbxlYk2uFh" version="21.3.3" type="github" pages="7">
   <diagram name="End-to-End_Soft-Voting" id="tE6ixngOt_Q8rVskvVIQ">
     <mxGraphModel dx="2918" dy="862" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
       <root>
@@ -2074,7 +2074,7 @@
     </mxGraphModel>
   </diagram>
   <diagram id="xKsOX2xH02NV4E4enP-P" name="Data-Pairing">
-    <mxGraphModel dx="954" dy="557" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
+    <mxGraphModel dx="1685" dy="778" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -2087,7 +2087,7 @@
         <mxCell id="UEEwUG7VFN3jz4JauVoC-3" value="&lt;font style=&quot;font-size: 15px;&quot;&gt;GE Profile 1&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Helvetica;fontSize=11;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
           <mxGeometry x="202" y="310" width="120" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="UEEwUG7VFN3jz4JauVoC-4" value="&lt;font style=&quot;font-size: 15px;&quot;&gt;Chemical Structure 2&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Helvetica;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+        <mxCell id="UEEwUG7VFN3jz4JauVoC-4" value="&lt;font style=&quot;font-size: 15px;&quot;&gt;Chemical Structure 1&lt;br&gt;&lt;/font&gt;" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Helvetica;fontSize=11;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
           <mxGeometry x="462" y="310" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="UEEwUG7VFN3jz4JauVoC-5" value="" style="shape=flexArrow;endArrow=classic;startArrow=classic;html=1;rounded=0;labelBackgroundColor=default;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=11;fontColor=default;fillColor=#dae8fc;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1">
@@ -2124,7 +2124,7 @@
     </mxGraphModel>
   </diagram>
   <diagram id="8EtrLlCB1nS1VrOsVXqK" name="Page-4">
-    <mxGraphModel dx="954" dy="557" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
+    <mxGraphModel dx="1685" dy="778" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -2468,7 +2468,7 @@
     </mxGraphModel>
   </diagram>
   <diagram id="uPp6QmL1P0CKdDgxPL-v" name="Page-7">
-    <mxGraphModel dx="1590" dy="928" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
+    <mxGraphModel dx="2808" dy="1297" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="1" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
