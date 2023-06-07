@@ -10,56 +10,14 @@ import time
 # Torch
 import torch
 from torchvision import transforms
-import torchvision.models as models
+from torch.utils.data import  DataLoader
 import torch.nn as nn
-# Neptune
 import neptune.new as neptune
-
-
-import torch
-import torchvision.transforms as transforms
-from torch.utils.data import TensorDataset, DataLoader
-import torch.nn as nn
-import torch.optim as optim
-
-from sklearn.metrics import accuracy_score
-
-import torchvision
-
-#from pyDeepInsight import ImageTransformer, Norm2Scaler
 from sklearn.manifold import TSNE
-import pandas as pd
-import numpy as np
-# Import Statements
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import pickle
-import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
-import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
-import random       
-import datetime
 import time
-
-# Torch
-import torch
-from torchvision import transforms
-import torchvision.models as models
-import torch.nn as nn
-# Neptune
-import neptune.new as neptune
-# CMAP (extracting relevant transcriptomic profiles)
-from cmapPy.pandasGEXpress.parse import parse
-import cmapPy.pandasGEXpress.subset_gctoo as sg
-import seaborn as sns
-import matplotlib.pyplot as plt
-import time
-import joblib
-import os
 import pandas as pd
 import numpy as np
 import torch
-import re
 from DeepInsight_Image_Transformer import ImageTransformer
 
 import sys
@@ -67,27 +25,15 @@ sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/
 from Erik_alll_helper_functions import (
     apply_class_weights_CL,  
     create_splits, 
-    choose_device,
-    dict_splitting_into_tensor, 
-    extract_tprofile, 
-    EarlyStopper, 
     val_vs_train_loss,
     val_vs_train_accuracy, 
     program_elapsed_time, 
-    conf_matrix_and_class_report,
-    tprofiles_gc_too_func, 
     create_terminal_table, 
     upload_to_neptune, 
     different_loss_functions, 
-    Transcriptomic_Profiles_gc_too, 
-    Transcriptomic_Profiles_numpy,
     set_bool_hqdose, 
     set_bool_npy, 
-    FocalLoss, 
-    np_array_transform,
-    apply_class_weights_GE, 
     adapt_training_loop, 
-    adapt_validation_loop, 
     adapt_test_loop,
     checking_veracity_of_data,
     LogScaler,
@@ -100,6 +46,9 @@ now = datetime.datetime.now()
 now = now.strftime("%d_%m_%Y-%H:%M:%S")
 print("Begin Training")
 model_name = "DeepInsight"
+max_epochs = 1
+            
+    
 
 # Downloading all relevant data frames and csv files ----------------------------------------------------------
 
@@ -254,9 +203,7 @@ for fold_int in range(0,5):
 
 
 
-    max_epochs = 1
-            
-    
+  
     model = DeepInsight_Model()
 
 
@@ -329,8 +276,7 @@ for fold_int in range(0,5):
                                                 file_name = file_name, 
                                                 acc_path_to_save ='/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/Best_Tomics_Model/saved_images')
 
-    # results_assessment(all_predictions, all_labels, moa_dict)
-
+   
     #-------------------------------- Writing interesting info into terminal ------------------------# 
 
     end = time.time()

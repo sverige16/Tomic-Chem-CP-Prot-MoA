@@ -1,92 +1,38 @@
 
-# Import Statements
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split # Functipn to split data into training, validation and test sets
-from sklearn.metrics import classification_report, confusion_matrix
-import pickle
-import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
-import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
-import random       
-from tqdm import tqdm 
-from tqdm.notebook import tqdm_notebook
-import datetime
-import time
-from tabulate import tabulate
+# Import Statements     
 
 # Torch
 import torch
-from torchvision import transforms
-import torchvision.models as models
 import torch.nn as nn
 import neptune.new as neptune
-
 import torch.nn.functional as F
 
-
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import precision_recall_curve,log_loss,f1_score, accuracy_score
-from sklearn.metrics import average_precision_score,roc_auc_score
-from sklearn.preprocessing import OneHotEncoder
-import os
 import time
 from time import time
 import datetime
 import pandas as pd
-import numpy as np
-#from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
-from skmultilearn.adapt import MLkNN
-from sklearn.feature_selection import VarianceThreshold
-
-# CMAP (extracting relevant transcriptomic profiles)
-from cmapPy.pandasGEXpress.parse import parse
-import cmapPy.pandasGEXpress.subset_gctoo as sg
-import seaborn as sns
-import matplotlib.pyplot as plt
-
 import datetime
 import time
 import math
-import re
 import optuna
-import heapq
 
 # In[37]:
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 from Erik_alll_helper_functions import (
-    apply_class_weights_CL, 
     apply_class_weights_GE,
-    accessing_correct_fold_csv_files, 
+    accessing_all_folds_csv,
     create_splits, 
     choose_device,
     dict_splitting_into_tensor, 
     extract_tprofile, 
-    EarlyStopper, 
-    val_vs_train_loss,
-    val_vs_train_accuracy, 
-    program_elapsed_time, 
-    conf_matrix_and_class_report,
     tprofiles_gc_too_func, 
-    create_terminal_table, 
-    upload_to_neptune, 
     different_loss_functions, 
-    Transcriptomic_Profiles_gc_too, 
     Transcriptomic_Profiles_numpy,
     set_bool_hqdose, 
-    set_bool_npy, 
-    FocalLoss, 
     np_array_transform,
     apply_class_weights_GE, 
     adapt_training_loop, 
-    adapt_validation_loop, 
-    adapt_test_loop,
-    channel_5_numpy,
-    splitting,
-    cmpd_id_overlap_check, 
-    inputs_equalto_labels_check,
-    checking_veracity_of_data,
     check_overlap_sigid
 )
 
@@ -155,7 +101,7 @@ device = choose_device(using_cuda)
 
 file_name = "erik10_hq_8_12"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
-training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
+training_set, validation_set, test_set =  accessing_all_folds_csv(file_name, 0)
 hq, dose = set_bool_hqdose(file_name)
 L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 
@@ -180,18 +126,18 @@ profiles_gc_too_test = tprofiles_gc_too_func(L1000_test, clue_gene)
 test_np = np_array_transform(profiles_gc_too_test)
 
 
-# In[47]:
-
-
 num_classes = len(L1000_training["moa"].unique())
 #class_weights = apply_class_weights_GE(pd.concat([train_np, valid_np, test_np]), pd.concat([L1000_training,L1000_validation, L1000_test]), device)
 class_weights = apply_class_weights_GE(train_np,L1000_training, dict_moa, device)
+
 '''
+# code to test random sampler
 sampler = WeightedRandomSampler(weights=class_weights, 
                                 num_samples=len(class_weights), 
                                 replacement=True)
                                 '''
 '''
+# using gc_too instead of np
 # create generator that randomly takes indices from the training set
 training_dataset = Transcriptomic_Profiles(profiles_gc_too_train, L1000_training, dict_moa)
 training_generator = torch.utils.data.DataLoader(training_dataset, **params, sampler = sampler)
@@ -298,11 +244,8 @@ class CNN_Model(nn.Module):
 
 # ----------------------------------------- hyperparameters ---------------------------------------#
 # Hyperparameters
-testing = False # decides if we take a subset of the data
 max_epochs = 250 # number of epochs we are going to run 
-# apply_class_weights = True # weight the classes based on number of compounds
 using_cuda = True # to use available GPUs
-world_size = torch.cuda.device_count()
 
 #----------------------------------------- pre-processing -----------------------------------------#
 start = time.time()

@@ -27,4 +27,4 @@ DWTM_prediction.py: Optuna optimized DWTM model
 DWTM_prediction_optuna.py: Optuna model showing hyperparameters that were optimized for the DWTM model.
 # Other
 DWTM: directory containing all of the files necessary to run the DWTM algorithm.
-
+example_pictures_tabdata_to_img.ipynb: Extracting example pictures to show the resulting image after the tabular data is transformed into image data.

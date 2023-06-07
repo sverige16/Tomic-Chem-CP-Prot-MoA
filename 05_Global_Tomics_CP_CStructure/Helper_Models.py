@@ -3,70 +3,23 @@
 # coding: utf-8
 
 # Import Statements
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split # Functipn to split data into training, validation and test sets
-from sklearn.metrics import classification_report, confusion_matrix, f1_score, accuracy_score, roc_auc_score, roc_curve, auc
-import pickle
-import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
-import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
 import random       
-from tqdm import tqdm 
-from tqdm.notebook import tqdm_notebook
-import datetime
-import time
-from tabulate import tabulate
-import albumentations as A
 import random
 import warnings
 warnings.filterwarnings('ignore')
-# Torch
 import torch
-from torchvision import transforms
 import torchvision.transforms.functional as TF
-import torchvision.models as models
 import torch.nn as nn
 import torch.nn.functional as F
-import seaborn as sns
-import neptune.new as neptune
-
-# Image analysis packages
-import albumentations as A 
-import cv2           
-#pip install --upgrade efficientnet-pytorch  
-from efficientnet_pytorch import EfficientNet
-import re     
+import neptune.new as neptune  
+from efficientnet_pytorch import EfficientNet 
 import math
-
-
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 
 from Erik_alll_helper_functions import (
      
     extract_tprofile, 
-    EarlyStopper, 
-    val_vs_train_loss,
-    val_vs_train_accuracy, 
-    program_elapsed_time, 
-    conf_matrix_and_class_report,
-    tprofiles_gc_too_func, 
-    create_terminal_table, 
-    upload_to_neptune, 
-    different_loss_functions, 
-    Transcriptomic_Profiles_gc_too, 
-    Transcriptomic_Profiles_numpy,
-    set_bool_hqdose, 
-    set_bool_npy, 
-    FocalLoss, 
-    np_array_transform,
-    apply_class_weights_GE, 
-    adapt_training_loop, 
-    adapt_validation_loop, 
-    adapt_test_loop,
-    channel_5_numpy,
-    splitting
 )
 #---------------------------------- Chemical Model ----------------------------------#
 '''
@@ -208,26 +161,7 @@ class SimpleNN_Model(nn.Module):
         # output layer
         self.output = nn.Linear(49, num_targets)
         #self.dense4 = nn.utils.weight_norm(nn.Linear(48, num_targets))
-        '''
-        #self.batch_norm1 = nn.BatchNorm1d(num_features)
-        #self.dropout1 = nn.Dropout(0.29323431985537163)
-        #layer 1
-        self.dense1 = nn.utils.weight_norm(nn.Linear(num_features, 64))
-        self.batch_norm1 = nn.BatchNorm1d(64)
-        self.dropout1 = nn.Dropout(0.24509543540660458)
-        #layer 2
-        self.dense2 = nn.utils.weight_norm(nn.Linear(64, 43))
-        self.batch_norm2 = nn.BatchNorm1d(43)
-        self.dropout2 = nn.Dropout(0.30761037332988056)
-        #layer 3
-        self.dense3 = nn.Linear(43, 103)
-        self.batch_norm3 = nn.BatchNorm1d(103)
-        self.dropout3 = nn.Dropout( 0.31140834347665325)
-
-        # output layer
-        self.output = nn.Linear(103, num_targets)
-        #self.dense4 = nn.utils.weight_norm(nn.Linear(48, num_targets))
-        '''
+        
     def forward(self, x):
         x = F.leaky_relu(self.dense1(x))
         x = self.batch_norm1(x)
@@ -235,23 +169,7 @@ class SimpleNN_Model(nn.Module):
 
 
         x = F.leaky_relu(self.output(x))
-        '''
-        #x = self.batch_norm1(x)
-        #x = self.dropout1(x)
-        x = F.leaky_relu(self.dense1(x))
-        x = self.batch_norm1(x)
-        x = self.dropout1(x)
-
-        x = F.leaky_relu(self.dense2(x))
-        x = self.batch_norm2(x)
-        x = self.dropout2(x)
-        
-        x = F.leaky_relu(self.dense3(x))
-        x = self.batch_norm3(x)
-        x = self.dropout3(x)
-        
-        x = F.leaky_relu(self.output(x))
-        '''
+       
         
         return x
 
@@ -356,6 +274,9 @@ class Transcriptomic_Profiles_numpy(torch.utils.data.Dataset):
         return t_profile_features, t_moa 
 
 class Cell_Line_Model(nn.Module):
+    '''
+    Small feed forward network to process cell line data
+    '''
     def __init__(self, num_features = None, num_targets = None):
         super(Cell_Line_Model, self).__init__()
         self.dense1 = nn.Linear(num_features, 20)
@@ -383,10 +304,7 @@ class Tomics_and_Cell_Line_Model(nn.Module):
 
 class Chemical_Structure_Model(nn.Module):
     """
-    Simple 3-Layer FeedForward Neural Network
-    
-    For more info: https://github.com/guitarmind/kaggle_moa_winner_hungry_for_gold\
-    /blob/main/final/Best%20LB/Training/3-stagenn-train.ipynb
+    Chemical Structure Model, feedforward network
     """
     def __init__(self, num_features = None, num_targets = None):
         super(Chemical_Structure_Model, self).__init__()
@@ -407,19 +325,19 @@ class Chemical_Structure_Model(nn.Module):
         x = F.leaky_relu(self.dense1(x))
         x = self.batch_norm1(x)
         x = self.dropout1(x)
-
         
         x = F.leaky_relu(self.dense2(x))
         x = self.batch_norm2(x)
         x = self.dropout2(x)
 
-
         x = self.output(x)
     
-        
         return x
 
 class Modified_GE_Model(nn.Module):
+    '''
+    Removes the last model and joins it so that the outfeatures are 20 instead of only 10
+    '''
     def __init__(self, original_model):
         super(Modified_GE_Model, self).__init__()
         self.SimpleNN = original_model.SimpleNN

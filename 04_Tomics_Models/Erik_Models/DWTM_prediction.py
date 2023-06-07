@@ -1,114 +1,43 @@
-import torch.nn as nn
-import pickle 
-import numpy as np
 
 
 #!/usr/bin/env python
 # coding: utf-8
 
 # Import Statements
-import pandas as pd
+
 import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split # Functipn to split data into training, validation and test sets
-from sklearn.metrics import classification_report, confusion_matrix
-import pickle
-import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
+import pandas as pd
+import pickle  # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
 import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
-import random       
-from tqdm import tqdm 
-from tqdm.notebook import tqdm_notebook
 import datetime
 import time
-from tabulate import tabulate
-
 # Torch
-import torch
+import torch 
 from torchvision import transforms
 import torchvision.models as models
 import torch.nn as nn
-# Neptune
 import neptune.new as neptune
-
-
-from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier, BaggingClassifier
-from sklearn.linear_model import RidgeClassifierCV
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis,  QuadraticDiscriminantAnalysis
-from sklearn.metrics import precision_recall_curve,log_loss, accuracy_score, f1_score, classification_report
-from sklearn.metrics import average_precision_score,roc_auc_score
-from sklearn.ensemble import VotingClassifier
 import os
 import time
-from time import time
-import datetime
-import pandas as pd
-import numpy as np
-#from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
-from skmultilearn.adapt import MLkNN
-
-# CMAP (extracting relevant transcriptomic profiles)
-from cmapPy.pandasGEXpress.parse import parse
-import cmapPy.pandasGEXpress.subset_gctoo as sg
-import seaborn as sns
-import matplotlib.pyplot as plt
-
 from datetime import datetime
-import time
-import joblib
-
-from sklearn.decomposition import PCA,FactorAnalysis
-from sklearn.preprocessing import StandardScaler,QuantileTransformer
-from sklearn.metrics import precision_recall_curve,log_loss
-from sklearn.metrics import average_precision_score,roc_auc_score
-from sklearn.feature_selection import VarianceThreshold
+import cv2
 import os
-import pandas as pd
-import numpy as np
-import torch
-import pytorch_tabnet
-from pytorch_tabnet.tab_model import TabNetClassifier
-from torchsummary import summary
-nn._estimator_type = "classifier"
 import sys
-import optuna
+
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 from Erik_alll_helper_functions import (
     apply_class_weights_CL, 
-    accessing_correct_fold_csv_files, 
-    create_splits, 
     choose_device,
-    dict_splitting_into_tensor, 
-    extract_tprofile, 
-    EarlyStopper, 
     val_vs_train_loss,
     val_vs_train_accuracy, 
     program_elapsed_time, 
-    conf_matrix_and_class_report,
-    tprofiles_gc_too_func, 
     create_terminal_table, 
     upload_to_neptune, 
     different_loss_functions, 
-    Transcriptomic_Profiles_gc_too, 
-    Transcriptomic_Profiles_numpy,
-    set_bool_hqdose, 
-    set_bool_npy, 
-    FocalLoss, 
-    np_array_transform,
-    apply_class_weights_GE, 
     adapt_training_loop, 
-    adapt_validation_loop, 
     adapt_test_loop,
-    channel_5_numpy,
-    splitting,
-    cmpd_id_overlap_check, 
     inputs_equalto_labels_check,
 )
-import numpy as np
-import cv2
-import os
 start = time.time()
 now = datetime.now()
 now = now.strftime("%d_%m_%Y-%H:%M:%S")

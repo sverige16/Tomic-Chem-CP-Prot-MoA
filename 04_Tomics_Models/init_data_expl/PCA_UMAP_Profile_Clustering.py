@@ -1,81 +1,15 @@
-import plotly as plotly
-from plotly import express as px
 
-from plotly import graph_objects as go
 #!/usr/bin/env python
 # coding: utf-8
 
 # Import Statements
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split # Functipn to split data into training, validation and test sets
-from sklearn.metrics import classification_report, confusion_matrix
-import pickle
-import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
-import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
-import random       
-from tqdm import tqdm 
-from tqdm.notebook import tqdm_notebook
-import datetime
-import time
-from tabulate import tabulate
-import math 
-
+import pandas as pd  
 import umap
-import math
-
-
-# Torch
-import torch
-from torchvision import transforms
-import torchvision.models as models
-import torch.nn as nn
-
-
-from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier, BaggingClassifier
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.decomposition import PCA
-from sklearn.metrics import precision_recall_curve,log_loss, accuracy_score, f1_score
-from sklearn.metrics import average_precision_score,roc_auc_score
-from sklearn.ensemble import VotingClassifier
-import os
-import time
-from time import time
-import datetime
-import pandas as pd
-import numpy as np
-#from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
-from skmultilearn.adapt import MLkNN
-import re
-
-# CMAP (extracting relevant transcriptomic profiles)
-from cmapPy.pandasGEXpress.parse import parse
-import cmapPy.pandasGEXpress.subset_gctoo as sg
-import seaborn as sns
-import matplotlib.pyplot as plt
-
-from datetime import datetime
-import time
-import joblib
-
-from sklearn.decomposition import PCA,FactorAnalysis
-from sklearn.preprocessing import StandardScaler,QuantileTransformer
-from sklearn.metrics import precision_recall_curve,log_loss
-from sklearn.metrics import average_precision_score,roc_auc_score
-from sklearn.feature_selection import VarianceThreshold
-import os
-import pandas as pd
-import numpy as np
-import torch
-import sys
-import pytorch_tabnet
-from pytorch_tabnet.tab_model import TabNetClassifier
-nn._estimator_type = "classifier"
 import neptune.new as neptune
-import seaborn as sns
+import sys
+import plotly as plotly
+from plotly import express as px
 
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
 from Erik_alll_helper_functions import checking_veracity_of_data, accessing_all_folds_csv

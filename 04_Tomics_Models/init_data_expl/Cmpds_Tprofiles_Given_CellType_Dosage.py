@@ -1,9 +1,5 @@
+# Imports
 import pandas as pd
-import numpy as np
-from cmapPy.pandasGEXpress.parse import parse
-import cmapPy.pandasGEXpress.subset_gctoo as sg
-import seaborn as sns
-import matplotlib.pyplot as plt
 from tabulate import tabulate
 
 

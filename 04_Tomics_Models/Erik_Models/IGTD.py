@@ -1,99 +1,29 @@
-import pandas as pd
-import os 
-from IGTD_functions import min_max_transform, table_to_image
-
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[16]:
-
-
-from pyDeepInsight import ImageTransformer, Norm2Scaler
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-from sklearn.manifold import TSNE
-import pandas as pd
-import numpy as np
-
-
-# In[42]:
-
 
 #!/usr/bin/env python
 # coding: utf-8
 
 # Import Statements
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split # Functipn to split data into training, validation and test sets
-from sklearn.metrics import classification_report, confusion_matrix
-import pickle
-import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
-import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
-import random       
-from tqdm import tqdm 
-from tqdm.notebook import tqdm_notebook
+import os 
+from IGTD_functions import min_max_transform, table_to_image
+  # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
 import datetime
 import time
-from tabulate import tabulate
-import pickle
-
-# Torch
-import torch
-from torchvision import transforms
-import torchvision.models as models
-import torch.nn as nn
-# Neptune
 import neptune.new as neptune
-
-
-from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier, BaggingClassifier
-from sklearn.linear_model import RidgeClassifierCV
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis,  QuadraticDiscriminantAnalysis
-from sklearn.metrics import precision_recall_curve,log_loss, accuracy_score, f1_score, classification_report
-from sklearn.metrics import average_precision_score,roc_auc_score
-from sklearn.ensemble import VotingClassifier
 import os
 import time
-from time import time
-import datetime
-import pandas as pd
-import numpy as np
-#from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
-from skmultilearn.adapt import MLkNN
-
-# CMAP (extracting relevant transcriptomic profiles)
-from cmapPy.pandasGEXpress.parse import parse
-import cmapPy.pandasGEXpress.subset_gctoo as sg
-import seaborn as sns
-import matplotlib.pyplot as plt
-
 from datetime import datetime
-import time
-import joblib
-
-from sklearn.decomposition import PCA,FactorAnalysis
-from sklearn.preprocessing import StandardScaler,QuantileTransformer
-from sklearn.metrics import precision_recall_curve,log_loss
-from sklearn.metrics import average_precision_score,roc_auc_score
-from sklearn.feature_selection import VarianceThreshold
-import os
 import pandas as pd
-import numpy as np
-import torch
-import pytorch_tabnet
-from pytorch_tabnet.tab_model import TabNetClassifier
-nn._estimator_type = "classifier"
-import re
 
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
-from Erik_alll_helper_functions import accessing_correct_fold_csv_files, create_splits, checking_veracity_of_data, pre_processing
-from Erik_alll_helper_functions import set_bool_npy, set_bool_hqdose, getting_correct_image_indices
+from Erik_alll_helper_functions import ( accessing_all_folds_csv,
+                                        create_splits, 
+                                        checking_veracity_of_data, 
+                                        pre_processing, 
+                                        set_bool_npy, 
+                                        set_bool_hqdose, 
+                                        getting_correct_image_indices)
 
 
 start = time.time()
@@ -112,7 +42,7 @@ clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_d
 
 file_name = "erik10_hq_8_12"
 #file_name = input("Enter file name to investigate: (Options: tian10, erik10, erik10_hq, erik10_8_12, erik10_hq_8_12, cyc_adr, cyc_dop): ")
-training_set, validation_set, test_set =  accessing_correct_fold_csv_files(file_name)
+training_set, validation_set, test_set =  accessing_all_folds_csv(file_name, 0)
 hq, dose = set_bool_hqdose(file_name)
 L1000_training, L1000_validation, L1000_test = create_splits(training_set, validation_set, test_set, hq = hq, dose = dose)
 checking_veracity_of_data(file_name, L1000_training, L1000_validation, L1000_test)
@@ -163,7 +93,7 @@ with open('/scratch2-shared/erikep/Results/labels_hq_moadict.pkl', 'wb') as f:
 # entire data set
 df_total = pd.concat([df_train_features, df_val_features, df_test_features], axis=0).reset_index(drop=True)
 getting_correct_image_indices(model_name, file_name, df_total)
-df_total.to_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/IGTD_erik10_hq_8_12_fold0')
+df_total.to_csv('/home/jovyan/Tomics-CP-Chem-MoA/data_for_models/IGTD_erik10_hq_8_12_fold0.pkl')
 # Import the example data and linearly scale each feature so that its minimum and maximum values are 0 and 1, respectively.
 #data = pd.read_csv('../Data/Example_Gene_Expression_Tabular_Data.txt', low_memory=False, sep='\t', engine='c',
 #                   na_values=['na', '-', ''], header=0, index_col=0)

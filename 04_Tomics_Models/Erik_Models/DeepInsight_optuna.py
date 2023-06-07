@@ -2,70 +2,22 @@
 # coding: utf-8
 
 # Import Statements
-import pandas as pd
-import numpy as np
-import datetime
-import time
-
 # Torch
 import torch
 from torchvision import transforms
-import torchvision.models as models
 import torch.nn as nn
 # Neptune
 import neptune.new as neptune
-
-
-import torch
-import torchvision.transforms as transforms
-from torch.utils.data import TensorDataset, DataLoader
-import torch.nn as nn
-import torch.optim as optim
-
-from sklearn.metrics import accuracy_score
-
-import warnings
-warnings.simplefilter('ignore')
-
-import torchvision
-
-#from pyDeepInsight import ImageTransformer, Norm2Scaler
+from torch.utils.data import  DataLoader
 from sklearn.manifold import TSNE
 import pandas as pd
-import numpy as np
-# Import Statements
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import pickle
-import glob   # The glob module finds all the pathnames matching a specified pattern according to the rules used by the Unix shell, although results are returned in arbitrary order. No tilde expansion is done, but *, ?, and character ranges expressed with [] will be correctly matched.
-import os   # miscellneous operating system interfaces. This module provides a portable way of using operating system dependent functionality. If you just want to read or write a file see open(), if you want to manipulate paths, see the os.path module, and if you want to read all the lines in all the files on the command line see the fileinput module.
-import random       
+import numpy as np  
 import datetime
 import time
-
-# Torch
-import torch
-from torchvision import transforms
-import torchvision.models as models
-import torch.nn as nn
-# Neptune
 import neptune.new as neptune
-# CMAP (extracting relevant transcriptomic profiles)
-from cmapPy.pandasGEXpress.parse import parse
-import cmapPy.pandasGEXpress.subset_gctoo as sg
-import seaborn as sns
-import matplotlib.pyplot as plt
-import time
-import joblib
-import os
-import pandas as pd
-import numpy as np
-import torch
-import re
 from DeepInsight_Image_Transformer import ImageTransformer
 import optuna
-import heapq
+
 
 import sys
 sys.path.append('/home/jovyan/Tomics-CP-Chem-MoA/05_Global_Tomics_CP_CStructure/')
@@ -73,28 +25,9 @@ from Erik_alll_helper_functions import (
     apply_class_weights_CL, 
     accessing_correct_fold_csv_files, 
     create_splits, 
-    choose_device,
-    dict_splitting_into_tensor, 
-    extract_tprofile, 
-    EarlyStopper, 
-    val_vs_train_loss,
-    val_vs_train_accuracy, 
-    program_elapsed_time, 
-    conf_matrix_and_class_report,
-    tprofiles_gc_too_func, 
-    create_terminal_table, 
-    upload_to_neptune, 
     different_loss_functions, 
-    Transcriptomic_Profiles_gc_too, 
-    Transcriptomic_Profiles_numpy,
     set_bool_hqdose, 
-    set_bool_npy, 
-    FocalLoss, 
-    np_array_transform,
-    apply_class_weights_GE, 
     adapt_training_loop, 
-    adapt_validation_loop, 
-    adapt_test_loop,
     checking_veracity_of_data,
     LogScaler,
     pre_processing
@@ -105,10 +38,50 @@ now = now.strftime("%d_%m_%Y-%H:%M:%S")
 model_name = "DeepInsight"
 print("Begin Training")
 
+class DeepInsight_Model(nn.Module):
+    def __init__(self, dropout_rate, num_features1, num_features2):
+        super(DeepInsight_Model, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.dropout = nn.Dropout(p= dropout_rate)
+        self.fc1 = nn.Linear(in_features=64*25*25, out_features=num_features1)
+        self.fc2 = nn.Linear(in_features=num_features1, out_features= num_features2)
+        self.fc3 = nn.Linear(in_features=num_features2, out_features=10)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = nn.functional.relu(x)
+        x = self.conv2(x)
+        x = nn.functional.relu(x)
+        x = self.pool(x)
+        x = self.dropout(x)
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = nn.functional.relu(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        x = nn.functional.relu(x)
+        x = self.dropout(x)
+        x = self.fc3(x)
+        return x
+
+
+class DI_Dataset(torch.utils.data.Dataset):
+    def __init__(self, X, y, dict_moa):
+        self.X = X
+        self.y = y
+        self.dict_moa = dict_moa
+
+    def __getitem__(self, index):
+        label = self.dict_moa[self.y[index]]
+        return self.X[index], torch.tensor(label, dtype=torch.float)
+
+    def __len__(self):
+        return len(self.X)
+
 # Downloading all relevant data frames and csv files ----------------------------------------------------------
 
-# clue column metadata with columns representing compounds in common with SPECs 1 & 2
-clue_sig_in_SPECS = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_sig_in_SPECS1&2.csv', delimiter = ",")
 
 # clue row metadata with rows representing transcription levels of specific genes
 clue_gene = pd.read_csv('/home/jovyan/Tomics-CP-Chem-MoA/04_Tomics_Models/init_data_expl/clue_geneinfo_beta.txt', delimiter = "\t")
@@ -173,16 +146,14 @@ reducer = TSNE(
 )
 
 
-#pixel_size = (10, 10)
-#pixel_size = (20, 20)
-#pixel_size = (30, 30)
+
 pixel_size = (50,50)
-#pixel_size = (100,100)
-#pixel_size = (224,224)
 it = ImageTransformer( 
     pixels=pixel_size)
 
 
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # In[53]:
 
@@ -194,11 +165,6 @@ X_train_img = it.transform(X_train_norm)
 X_val_img = it.transform(X_val_norm)
 X_test_img = it.transform(X_test_norm)
 
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
-import torchvision.models as models
 
 preprocess = transforms.Compose([
     transforms.ToTensor()
@@ -213,51 +179,6 @@ y_val_tensor = df_val_labels
 X_test_tensor = torch.stack([preprocess(img) for img in X_test_img]).float()
 y_test_tensor = df_test_labels
 
-# not deep   50x50
-class DeepInsight_Model(nn.Module):
-    def __init__(self, dropout_rate, num_features1, num_features2):
-        super(DeepInsight_Model, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.dropout = nn.Dropout(p= dropout_rate)
-        self.fc1 = nn.Linear(in_features=64*25*25, out_features=num_features1)
-        self.fc2 = nn.Linear(in_features=num_features1, out_features= num_features2)
-        self.fc3 = nn.Linear(in_features=num_features2, out_features=10)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = nn.functional.relu(x)
-        x = self.conv2(x)
-        x = nn.functional.relu(x)
-        x = self.pool(x)
-        x = self.dropout(x)
-        x = torch.flatten(x, 1)
-        x = self.fc1(x)
-        x = nn.functional.relu(x)
-        x = self.dropout(x)
-        x = self.fc2(x)
-        x = nn.functional.relu(x)
-        x = self.dropout(x)
-        x = self.fc3(x)
-        return x
-
-# instantiate the model
-
-
-
-class DI_Dataset(torch.utils.data.Dataset):
-    def __init__(self, X, y, dict_moa):
-        self.X = X
-        self.y = y
-        self.dict_moa = dict_moa
-
-    def __getitem__(self, index):
-        label = self.dict_moa[self.y[index]]
-        return self.X[index], torch.tensor(label, dtype=torch.float)
-
-    def __len__(self):
-        return len(self.X)
 
 batch_size = 50
 
@@ -336,8 +257,6 @@ def objectiv(trial, num_feat, num_classes, training_generator, validation_genera
                 val_str = 'f1',
                 early_patience = 20)
 
-
-    #lowest1, lowest2 = find_two_lowest_numbers(val_loss_per_epoch)
     return max(val_f1_score_per_epoch)
 
 storage = 'sqlite:///' + model_name + '.db'
