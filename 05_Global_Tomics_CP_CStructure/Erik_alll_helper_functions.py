@@ -1232,7 +1232,7 @@ def upload_to_neptune(neptune_project_name,
         pixel_size: int, pixel size used for DeepInsight or Cell Painting
         loss_fn_train: string, name of the loss function used for training, specifically for label smoothing
     '''
-    run = neptune.init_run(project= neptune_project_name, api_token='eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI2N2ZlZjczZi05NmRlLTQ1NjktODM5NS02Y2M4ZTZhYmM2OWQifQ==')
+    run = neptune.init_run(project= neptune_project_name, api_token='')
     run['model'] = model_name
     run["filename"] = file_name
     model_data_subset = model_name + '_' + file_name
