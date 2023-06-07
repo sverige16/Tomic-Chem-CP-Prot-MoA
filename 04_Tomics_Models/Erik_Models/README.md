@@ -7,7 +7,7 @@ ML_battery_L1000.py: Optuna optimized ML algorithm.
 SimpleNN_L1000.py: Optuna optimized SimpleNN Model
 SimpleNN_L1000_optuna.py: Optuna model showing hyperparameters that were optimized for the SimpleNN_L1000
 SimpleNN_L1000_Cell_Line.py: Optuna optimized SimpleNN Cell Line model
-## Conversion from Tabular Data to Image Data
+# Conversion from Tabular Data to Image Data
 ## 1D CNN
 1DCNN_Cell_Line.py: Optuna optimized CNN model + Cell Line
 1DCNN_optuna.py: Optuna model showing hyperparameters that were optimized for CNN model + Cell Line

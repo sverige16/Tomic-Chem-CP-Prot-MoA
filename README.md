@@ -9,3 +9,5 @@ This project aimed to examine whether incorporating gene expression data from LI
 
 The gene expression dataset was relatively low in quality, with many uncontrollable factors that complicated MoA prediction. The highest-performing gene expression model was a one-dimensional convolutional neural network, with an average macro F1 score of 40.877 and a standard deviation of 0.034. Approaches converting tabular data into image data did not significantly outperform other methods. Combining optimized single models resulted in a performance decline compared to the best single model in the combination. To take full advantage of algorithmic developments in drug development and high-throughput multi-omics data, my project underscores the need for standardizing data generation and optimizing data fusion methods.
 
+![Visual Summary of the project](Algorithm_Rep-Page-2.drawio.png)
+![Visualization of the different tabular-data-toimage-data algorithms used](Tabular_Image_to_Data-For Presentation.drawio.png)
