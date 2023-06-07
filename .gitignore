@@ -1,5 +1,7 @@
 # Ignore all pngs
 *.png
+!Algorithm_Rep-Page-2.drawio.png
+!Tabular_Image_to_Data-For Presentation.drawio.png
 # Ignore all npys
 *.npy
 # Ignore all csvs
