@@ -13,4 +13,4 @@ The gene expression dataset was relatively low in quality, with many uncontrolla
 ![Visual Summary of the project](Algorithm_Rep-Page-2.drawio.png)
 
 ## Tabular-to-Image Algorithm Flowchart
-![Data_Transformation_Visualization](Tabular_Image_to_Data-For Presentation.drawio.png)
+![Data_Transformation_Visualization](Tabular_Image_to_Data-For_Presentation.drawio.png)

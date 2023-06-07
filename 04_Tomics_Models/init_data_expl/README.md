@@ -22,7 +22,6 @@ PNG_Cell_Line_Investigations: location where the .png files are placed when crea
 ## drawio
 Initial_Data_Exploration.drawio: Drawio explaining what each script does and the analysis it produces in flowchart form.
 
-
 ### Using pandasGEXpress with .gct/x files
 https://github.com/cmap/cmapPy/blob/master/tutorials/cmapPy_pandasGEXpress_tutorial.ipynb
 ### Documefrntation on pandasGEXpress
