@@ -2,6 +2,8 @@
 ## Erik Everett Palm's 45 HP MSc Thesis
 ### Supervisors: Ola Spjuth, Phillip Harrison
 ### Subject Reader: Carolina Wählby
+### Link to Full Essay on DIVA
+https://urn.kb.se/resolve?urn=urn:nbn:se:uu:diva-504286
 ### Abstract
 The rapid progress in high-throughput omics methods and high-resolution morphological profiling, coupled with the significant advances in machine learning (ML) and deep learning (DL), has opened new avenues for tackling the notoriously difficult problem of predicting the Mechanism of Action (MoA) for a drug of clinical interest. Understanding a drug's MoA can enrich our knowledge of its biological activity, shed light on potential side effects, and serve as a predictor of clinical success.
 
